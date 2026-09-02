@@ -1,0 +1,9 @@
+# Tekan semua teks ke LF di repo & saat checkout (konsisten dengan .editorconfig)
+* text=auto eol=lf
+
+# Biner
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
