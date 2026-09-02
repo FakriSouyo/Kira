@@ -1,0 +1,8 @@
+export { openDb, resolveDataDir, type FinharnessDatabase } from './client';
+export { runMigrations } from './migrations/migrate';
+export * from './schema';
+export { EvidenceStoreSqlite } from './evidenceStoreSqlite';
+export { ConversationStoreSqlite } from './conversationStoreSqlite';
+export { ExecutionStoreSqlite } from './executionStoreSqlite';
+export { ClaimStoreSqlite } from './claimStoreSqlite';
+export { JudgmentStoreSqlite } from './judgmentStoreSqlite';

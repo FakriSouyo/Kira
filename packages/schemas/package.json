@@ -1,0 +1,12 @@
+{
+  "name": "@harness/schemas",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@harness/shared": "workspace:*",
+    "zod": "^3.25.0"
+  }
+}

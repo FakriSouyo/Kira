@@ -1,0 +1,201 @@
+import type { JudgeArtifacts } from '../workflows/judgeWorkflow';
+import type { ScreenArtifacts } from '../workflows/screenWorkflow';
+import type { UserFriendlyError } from '@harness/shared';
+
+/**
+ * Output conversational (addendum §19) — icon per agent + warna.
+ * Warna nonaktif bila stdout bukan TTY atau NO_COLOR di-set (aman untuk pipe/E2E).
+ */
+const useColor = Boolean(process.stdout.isTTY) && !('NO_COLOR' in process.env);
+
+const paint = (code: string) => (s: string): string => (useColor ? `\x1b[${code}m${s}\x1b[0m` : s);
+
+export const color = {
+  blue: paint('34'),
+  green: paint('32'),
+  yellow: paint('33'),
+  red: paint('31'),
+  cyan: paint('36'),
+  bold: paint('1'),
+  dim: paint('2'),
+  gray: paint('90'),
+};
+
+const HEAVY = '━'.repeat(58);
+const LIGHT = '─'.repeat(58);
+
+export function renderBanner(homeDir: string, mockSectors: boolean, mockLlm: boolean): string {
+  const lines = [
+    HEAVY,
+    `  ${color.cyan(color.bold('⚡ Financial Agent Harness v0.1.0'))}`,
+    `  Evidence-based stock research system`,
+    `  Type ${color.green('/help')} for available commands`,
+    `  Data dir: ${color.gray(homeDir)}`,
+  ];
+  if (mockSectors || mockLlm) {
+    const parts = [mockSectors && 'mock sectors', mockLlm && 'mock LLM'].filter(Boolean);
+    lines.push(`  ${color.yellow(`⚠ Mock mode active: ${parts.join(' + ')} (offline development)`)}`);
+  }
+  lines.push(HEAVY);
+  return lines.join('\n');
+}
+
+export function renderHelp(): string {
+  return [
+    color.bold('Financial Agent Harness Commands'),
+    '',
+    color.bold('Core:'),
+    `  ${color.green('/judge [TICKER]')}     Full analysis (Researcher → Bull → Judge)`,
+    `  ${color.green('/screen [CRITERIA]')}  Screen stocks (profitable, growing)`,
+    `  ${color.green('/help')}               Show this help`,
+    `  ${color.green('/exit')}               Exit harness`,
+    '',
+    color.bold('Roadmap (coming soon):'),
+    `  /challenge [CLAIM]   Test specific claim`,
+    `  /compare [TICKERS]   Compare multiple stocks`,
+    `  /research [TICKER]   Raw research without judgment`,
+    '',
+    color.bold('Natural Language:'),
+    `  You can also ask questions naturally:`,
+    `  > "Saham apa yang konsisten tumbuh?"`,
+    `  > "Apakah BBCA layak dibeli?"`,
+    '',
+    color.bold('Tips:'),
+    '  - Press Tab for slash-command autocomplete',
+    '  - Press Ctrl+C twice (or /exit) to quit',
+  ].join('\n');
+}
+
+export function renderStub(command: string): string {
+  return [
+    color.yellow(`⚠  /${command} is in active development.`),
+    '',
+    'For now, you can:',
+    '- Use /judge BBCA to see a full analysis',
+    '- Ask natural language: "Is BBCA overvalued?"',
+  ].join('\n');
+}
+
+export function renderUnknownCommand(command: string): string {
+  return color.red(`✗ Unknown command: /${command}`) + '\n' + color.gray(`Try ${'/help'} to list available commands.`);
+}
+
+let progressPhase: string | null = null;
+
+export function resetProgress(): void {
+  progressPhase = null;
+}
+
+const PHASE_HEADERS: Record<string, string> = {
+  researcher: color.blue(color.bold('🔍 RESEARCHER')),
+  bull: color.green(color.bold('🐂 BULL AGENT')),
+  judge: color.yellow(color.bold('⚖️ JUDGE')),
+};
+
+/** Progress per fase workflow (dipanggil judgeWorkflow saat berjalan). */
+export function writeProgress(output: NodeJS.WritableStream, phase: string, line: string): void {
+  if (phase !== progressPhase) {
+    output.write(`\n${PHASE_HEADERS[phase] ?? phase}\n`);
+    progressPhase = phase;
+  }
+  output.write(`  ${line}\n`);
+}
+
+/** Output penuh /judge — layout conversational addendum §19. */
+export function renderJudgeResult(artifacts: JudgeArtifacts): string {
+  const { run, evidence, bull, judgment } = artifacts;
+  const ev = (id: string) => color.gray(id);
+  const breakdown = judgment.breakdown;
+  const b = (v: number | null, label: string) =>
+    `    ${label.padEnd(20)} ${v === null ? color.gray('-- (not evaluated in Phase 0)') : `${v} / 100`}`;
+
+  return [
+    HEAVY,
+    `  ${color.bold('FINANCIAL AGENT HARNESS')}`,
+    `  ${run.ticker} · Multi-Agent Analysis`,
+    HEAVY,
+    '',
+    `🔍 RESEARCHER`,
+    `  Evidence: ${ev(evidence[0]?.id ?? '-')}, ${ev(evidence[1]?.id ?? '-')}`,
+    '',
+    LIGHT,
+    '',
+    `🐂 BULL AGENT`,
+    ...indent(bull.reasoning),
+    '',
+    ...bull.claims.flatMap((c, i) => [
+      `  ${color.green(`→ Claim #${i + 1} (${c.confidence})`)}`,
+      `    ${color.bold(`"${c.statement}"`)}`,
+      `    ${color.gray(`Evidence: ${c.evidenceIds.join(', ')}`)}`,
+      `    ${color.dim(c.reasoning)}`,
+      '',
+    ]),
+    LIGHT,
+    '',
+    `⚖️ JUDGE`,
+    ...indent(judgment.summary),
+    '',
+    `  ${color.bold(`→ Decision: ${judgment.stance.toUpperCase()}`)}`,
+    '',
+    LIGHT,
+    '',
+    `             ${color.bold(`${run.ticker} · FINAL JUDGMENT`)}`,
+    '',
+    `  ${'Score'.padEnd(14)} ${color.bold(`${judgment.score} / 100`)}`,
+    `  ${'Stance'.padEnd(14)} ${judgment.stance.toUpperCase()}`,
+    `  ${'Confidence'.padEnd(14)} ${judgment.confidence.toUpperCase()}`,
+    '',
+    `  Breakdown:`,
+    b(breakdown.financialHealth, 'Financial Health'),
+    b(breakdown.growth, 'Growth'),
+    b(breakdown.valuation, 'Valuation'),
+    b(breakdown.marketMomentum, 'Market Momentum'),
+    b(breakdown.risk, 'Risk'),
+    '',
+    `  ${'Run ID'.padEnd(14)} ${color.gray(run.id)}`,
+    `  ${'Time'.padEnd(14)} ${(run.executionTime ?? 0).toFixed(1)}s`,
+    '',
+    HEAVY,
+  ].join('\n');
+}
+
+/** Output /screen — ranking historis, bukan prediksi (addendum §18). */
+export function renderScreenResult(artifacts: ScreenArtifacts): string {
+  const { criteria, results } = artifacts;
+  if (results.length === 0) {
+    return [
+      `Screening stocks: ${criteria.join(' + ') || '(no criteria)'}`,
+      '',
+      color.yellow('No stocks matched the criteria.'),
+      color.gray('Historical pattern analysis only — not a prediction.'),
+    ].join('\n');
+  }
+  return [
+    `Screening stocks: ${criteria.join(' + ')}`,
+    '',
+    color.bold('Results:'),
+    ...results.map(
+      (r, i) =>
+        `  ${i + 1}. ${color.bold(r.ticker)} (${r.matchScore}/100)` +
+        (r.roe !== undefined ? color.dim(` — ROE ${r.roe}%`) : '') +
+        (r.revenueGrowthYoy !== undefined ? color.dim(`, Growth ${r.revenueGrowthYoy}%`) : ''),
+    ),
+    '',
+    color.gray('[View details: /judge TICKER] · Historical patterns, not predictions'),
+  ].join('\n');
+}
+
+/** Error ramah user (addendum §21). */
+export function renderError(error: UserFriendlyError): string {
+  return [
+    color.red(`✗ Error: ${color.bold(error.code)}`),
+    '',
+    error.message,
+    '',
+    color.gray(`Suggestion: ${error.suggestion}`),
+  ].join('\n');
+}
+
+function indent(text: string): string[] {
+  return text.split('\n').map((line) => (line === '' ? '' : `  ${line}`));
+}

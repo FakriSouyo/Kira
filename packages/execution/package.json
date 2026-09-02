@@ -1,0 +1,16 @@
+{
+  "name": "@harness/execution",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@harness/evidence": "workspace:*",
+    "@harness/schemas": "workspace:*",
+    "@harness/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@harness/database": "workspace:*"
+  }
+}

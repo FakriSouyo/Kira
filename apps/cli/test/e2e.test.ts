@@ -1,0 +1,210 @@
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterEach, describe, expect, it } from 'vitest';
+import { openDb, type FinharnessDatabase } from '@harness/database';
+
+const ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
+const CLI_ENTRY = join(ROOT, 'apps/cli/src/index.ts');
+const TSX_CLI = join(ROOT, 'node_modules/tsx/dist/cli.mjs');
+
+const CLI_TIMEOUT_MS = 90_000;
+const homes: string[] = [];
+
+function freshHome(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'finharness-e2e-'));
+  homes.push(dir);
+  return dir;
+}
+
+afterEach(() => {
+  while (homes.length > 0) {
+    const dir = homes.pop();
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+interface CliRun {
+  stdout: string;
+  stderr: string;
+  code: number | null;
+}
+
+function runCli(homeDir: string, input: string): Promise<CliRun> {
+  return new Promise((resolveRun, reject) => {
+    const child = spawn(process.execPath, [TSX_CLI, CLI_ENTRY, '--mock-sectors', '--mock-llm', '--home', homeDir], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`CLI timed out after ${CLI_TIMEOUT_MS}ms. stdout: ${stdout.slice(-500)}`));
+    }, CLI_TIMEOUT_MS);
+
+    child.stdout.on('data', (d: Buffer) => (stdout += d.toString('utf8')));
+    child.stderr.on('data', (d: Buffer) => (stderr += d.toString('utf8')));
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolveRun({ stdout, stderr, code });
+    });
+    child.stdin.write(input);
+    child.stdin.end();
+  });
+}
+
+function openHomeDb(homeDir: string): FinharnessDatabase {
+  return openDb({ homeDir });
+}
+
+describe('E2E — /judge offline (mock sectors + mock LLM)', () => {
+  it('menjalankan 3-agent flow penuh dan menyimpan state DB lengkap', async () => {
+    const home = freshHome();
+    const run = await runCli(home, '/judge BBCA\n/exit\n');
+
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain('FINANCIAL AGENT HARNESS');
+    expect(run.stdout).toContain('🔍 RESEARCHER');
+    expect(run.stdout).toContain('🐂 BULL AGENT');
+    expect(run.stdout).toContain('⚖️ JUDGE');
+    expect(run.stdout).toContain('BBCA · FINAL JUDGMENT');
+    expect(run.stdout).toMatch(/Score\s+\d+ \/ 100/);
+    expect(run.stdout).toMatch(/Run ID\s+run_/);
+    // Evidence ter-ground: ticker dalam output, bukan placeholder
+    expect(run.stdout).toContain('BBCA');
+
+    const db = openHomeDb(home);
+    try {
+      const executions = db.raw.prepare('SELECT * FROM executions').all() as Array<{
+        ticker: string;
+        command: string;
+        status: string;
+        execution_time: number | null;
+      }>;
+      expect(executions).toHaveLength(1);
+      expect(executions[0]).toMatchObject({ ticker: 'BBCA', command: 'judge', status: 'completed' });
+      expect(executions[0].execution_time).toBeGreaterThan(0);
+
+      const evidence = db.raw.prepare('SELECT id, source FROM evidence').all() as Array<{ id: string; source: string }>;
+      expect(evidence).toHaveLength(2);
+      const sources = evidence.map((e) => e.source).sort();
+      expect(sources).toEqual(['sectors.company_report', 'sectors.quarterly_financials']);
+
+      const messages = db.raw
+        .prepare('SELECT agent, message_type FROM agent_messages ORDER BY sequence_order')
+        .all() as Array<{ agent: string; message_type: string }>;
+      expect(messages).toEqual([
+        { agent: 'researcher', message_type: 'observation' },
+        { agent: 'bull', message_type: 'claim' },
+        { agent: 'judge', message_type: 'decision' },
+      ]);
+
+      // Integrity: evidenceIds claim ⊆ evidence milik run (anti-hallucination, addendum §16)
+      const evidenceIds = new Set(evidence.map((e) => e.id));
+      const claims = db.raw.prepare('SELECT evidence_ids FROM claims').all() as Array<{ evidence_ids: string }>;
+      expect(claims.length).toBeGreaterThanOrEqual(1);
+      for (const claim of claims) {
+        for (const id of JSON.parse(claim.evidence_ids) as string[]) {
+          expect(evidenceIds.has(id)).toBe(true);
+        }
+      }
+
+      const judgments = db.raw
+        .prepare('SELECT score, stance, breakdown FROM judgments')
+        .all() as Array<{ score: number; stance: string; breakdown: string }>;
+      expect(judgments).toHaveLength(1);
+      expect(judgments[0].score).toBeGreaterThanOrEqual(0);
+      expect(judgments[0].score).toBeLessThanOrEqual(100);
+      const breakdown = JSON.parse(judgments[0].breakdown) as Record<string, unknown>;
+      // Phase 0: momentum & risk = null
+      expect(breakdown.marketMomentum).toBeNull();
+      expect(breakdown.risk).toBeNull();
+      // Skor konsisten dengan breakdown (renormalisasi 25/20/20 atas 65)
+      const expected = Math.round(
+        ((breakdown.financialHealth as number) * 25 + (breakdown.growth as number) * 20 + (breakdown.valuation as number) * 20) / 65,
+      );
+      expect(judgments[0].score).toBe(expected);
+    } finally {
+      db.raw.close();
+    }
+  }, CLI_TIMEOUT_MS);
+
+  it('ticker tidak ditemukan → error ramah user + run gagal di DB', async () => {
+    const home = freshHome();
+    const run = await runCli(home, '/judge ZZZZ\n/exit\n');
+
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain('NOT_FOUND');
+    expect(run.stdout).toContain('Suggestion:');
+
+    const db = openHomeDb(home);
+    try {
+      const executions = db.raw.prepare('SELECT status, error FROM executions').all() as Array<{ status: string; error: string }>;
+      expect(executions).toHaveLength(1);
+      expect(executions[0].status).toBe('failed');
+      expect(executions[0].error).toContain('ZZZZ');
+      const evidenceCount = (db.raw.prepare('SELECT COUNT(*) c FROM evidence').get() as { c: number }).c;
+      expect(evidenceCount).toBe(0);
+    } finally {
+      db.raw.close();
+    }
+  }, CLI_TIMEOUT_MS);
+});
+
+describe('E2E — natural language → Intent Router', () => {
+  it('"Apakah BBRI layak dibeli?" dirute ke /judge BBRI', async () => {
+    const home = freshHome();
+    const run = await runCli(home, 'Apakah BBRI layak dibeli?\n/exit\n');
+
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain('Routing to /judge BBRI');
+    expect(run.stdout).toContain('BBRI · FINAL JUDGMENT');
+  }, CLI_TIMEOUT_MS);
+
+  it('input ambigu → clarification, tidak eksekusi command', async () => {
+    const home = freshHome();
+    const run = await runCli(home, 'hmm interesting\n/exit\n');
+
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain('Not sure what you mean');
+    expect(run.stdout).not.toContain('FINAL JUDGMENT');
+
+    const db = openHomeDb(home);
+    try {
+      const executions = (db.raw.prepare('SELECT COUNT(*) c FROM executions').get() as { c: number }).c;
+      expect(executions).toBe(0);
+    } finally {
+      db.raw.close();
+    }
+  }, CLI_TIMEOUT_MS);
+});
+
+describe('E2E — /screen dan command lainnya', () => {
+  it('/screen profitable growing meranking mock universe', async () => {
+    const home = freshHome();
+    const run = await runCli(home, '/screen profitable growing\n/exit\n');
+
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain('Screening stocks: profitable + growing');
+    expect(run.stdout).toContain('BBCA (100/100)');
+    expect(run.stdout).toContain('BBRI');
+    expect(run.stdout).toContain('Historical patterns, not predictions');
+  }, CLI_TIMEOUT_MS);
+
+  it('/help, stub roadmap, dan /exit', async () => {
+    const home = freshHome();
+    const run = await runCli(home, '/help\n/challenge BBCA overvalued?\n/unknown\n/exit\n');
+
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain('/judge [TICKER]');
+    expect(run.stdout).toContain('/challenge is in active development');
+    expect(run.stdout).toContain('Unknown command: /unknown');
+    expect(run.stdout).toContain('Goodbye');
+  }, CLI_TIMEOUT_MS);
+});

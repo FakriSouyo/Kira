@@ -1,0 +1,16 @@
+{
+  "name": "@harness/agent",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@harness/conversation": "workspace:*",
+    "@harness/evidence": "workspace:*",
+    "@harness/llm": "workspace:*",
+    "@harness/schemas": "workspace:*",
+    "@harness/shared": "workspace:*",
+    "zod": "^3.25.0"
+  }
+}

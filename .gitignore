@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+lib/
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# Secrets — hanya .env.example yang boleh masuk
+.env
+.env.local
+.env.*.local
+
+# Database (jika --home/FINHARNESS_HOME diarahkan ke dalam repo)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Checkout eksternal / referensi — BUKAN bagian dari repo ini
+deepseek-harness/
+
+# Working dir tool agent (plans, scratch)
+.zcode/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store

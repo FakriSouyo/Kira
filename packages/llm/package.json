@@ -1,0 +1,16 @@
+{
+  "name": "@harness/llm",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.0",
+    "@ai-sdk/openai": "^2.0.0",
+    "@harness/schemas": "workspace:*",
+    "@harness/shared": "workspace:*",
+    "ai": "^5.0.0",
+    "zod": "^3.25.0"
+  }
+}
