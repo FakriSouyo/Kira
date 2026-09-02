@@ -1,8 +1,9 @@
+import { createServer, type Server } from 'node:http';
 import { APICallError } from 'ai';
 import { MockLanguageModelV2 } from 'ai/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { DEFAULT_AGENT_CONFIG, LLMClient, classifyLLMError, toSystemPrompt } from '../src/index';
+import { DEFAULT_AGENT_CONFIG, LLMClient, classifyLLMError, createProvider, toSystemPrompt } from '../src/index';
 
 const OBJECT_SCHEMA = z.object({ answer: z.string(), score: z.number() });
 
@@ -139,6 +140,99 @@ describe('classifyLLMError', () => {
     expect(classifyLLMError(mk(400)).retryable).toBe(false);
     expect(classifyLLMError(new Error('boom')).retryable).toBe(false);
     expect(classifyLLMError(Object.assign(new Error('t'), { code: 'TIMEOUT' })).retryable).toBe(true);
+  });
+});
+
+describe('createProvider (custom endpoint, OpenAI-compatible)', () => {
+  const base = { provider: 'openai' as const, model: 'm', temperature: 0, maxTokens: 10 };
+
+  it('selects the OpenAI provider for provider=openai', () => {
+    const provider = createProvider(base);
+    expect('responses' in provider).toBe(true);
+    expect('chat' in provider).toBe(true);
+  });
+
+  it('selects the Anthropic provider for provider=anthropic', () => {
+    const provider = createProvider({ ...base, provider: 'anthropic' });
+    expect('tools' in provider).toBe(true);
+    expect('messages' in provider).toBe(true);
+  });
+});
+
+describe('custom endpoint round-trip (fake OpenAI-compatible server)', () => {
+  /** Fake server OpenAI-compatible — endpoint /chat/completions, respons JSON (non-stream). */
+  function startFakeOpenAI() {
+    const seen: Array<{ path?: string; authorization?: string; body?: unknown }> = [];
+    const server: Server = createServer((req, res) => {
+      let raw = '';
+      req.on('data', (c: Buffer) => (raw += c.toString('utf8')));
+      req.on('end', () => {
+        let body: unknown;
+        try {
+          body = JSON.parse(raw);
+        } catch {
+          body = undefined;
+        }
+        seen.push({ path: req.url, authorization: req.headers.authorization, body });
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            id: 'chatcmpl-1',
+            object: 'chat.completion',
+            created: 1,
+            model: 'fake-model',
+            choices: [
+              { index: 0, message: { role: 'assistant', content: 'halo dari fake provider' }, finish_reason: 'stop' },
+            ],
+            usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 },
+          }),
+        );
+      });
+    });
+    return new Promise<{ url: string; seen: typeof seen; close: () => Promise<void> }>((resolve) => {
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address();
+        const port = typeof address === 'object' && address !== null ? address.port : 0;
+        resolve({
+          url: `http://127.0.0.1:${port}/v1`,
+          seen,
+          close: () =>
+            new Promise<void>((done, fail) => {
+              server.closeAllConnections?.();
+              server.close((err) => (err ? fail(err) : done()));
+            }),
+        });
+      });
+    });
+  }
+
+  it('LLMClient benar-benar mengirim request ke baseURL kustom dan mem-parse SSE', async () => {
+    const fake = await startFakeOpenAI();
+    try {
+      const client = new LLMClient({
+        config: {
+          provider: 'openai',
+          model: 'fake-model',
+          temperature: 0,
+          maxTokens: 100,
+          baseURL: fake.url,
+          apiKey: 'test-key',
+        },
+      });
+      const text = await client.generateText({ prompt: 'hi' });
+      expect(text).toBe('halo dari fake provider');
+      expect(fake.seen).toHaveLength(1);
+      expect(fake.seen[0].path).toBe('/v1/chat/completions');
+      expect(fake.seen[0].authorization).toBe('Bearer test-key');
+      const body = fake.seen[0].body as {
+        model?: string;
+        messages?: Array<{ role?: string; content?: string }>;
+      };
+      expect(body.model).toBe('fake-model');
+      expect(body.messages?.some((m) => m.content === 'hi')).toBe(true);
+    } finally {
+      await fake.close();
+    }
   });
 });
 

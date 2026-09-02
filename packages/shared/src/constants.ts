@@ -10,6 +10,8 @@ export const ENV = {
   llmModel: 'LLM_MODEL',
   llmRouterProvider: 'LLM_ROUTER_PROVIDER',
   llmRouterModel: 'LLM_ROUTER_MODEL',
+  llmBaseUrl: 'LLM_BASE_URL',
+  llmApiKey: 'LLM_API_KEY',
 } as const;
 
 export const AGENTS = ['researcher', 'bull', 'bear', 'judge'] as const;

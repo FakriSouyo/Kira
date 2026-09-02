@@ -96,6 +96,42 @@ describe('loadConfig (addendum §12)', () => {
     }
   });
 
+  it('config.json per-tier base_url/api_key + env beats file', () => {
+    const home = mkdtempSync(join(tmpdir(), 'finharness-cfg-'));
+    try {
+      writeFileSync(
+        join(home, 'config.json'),
+        JSON.stringify({
+          llm: {
+            agent: {
+              provider: 'openai',
+              model: 'deepseek-chat',
+              base_url: 'https://api.deepseek.com/v1',
+              api_key: 'sk-agent',
+            },
+            router: { base_url: 'http://localhost:11434/v1', api_key: 'ollama' },
+          },
+        }),
+      );
+
+      const config = loadConfig({ homeDir: home });
+      expect(config.llm.agent.baseURL).toBe('https://api.deepseek.com/v1');
+      expect(config.llm.agent.apiKey).toBe('sk-agent');
+      expect(config.llm.router.baseURL).toBe('http://localhost:11434/v1');
+      expect(config.llm.router.apiKey).toBe('ollama');
+
+      setEnv('LLM_BASE_URL', 'https://env-wins.local/v1');
+      setEnv('LLM_API_KEY', 'env-key');
+      const overridden = loadConfig({ homeDir: home });
+      expect(overridden.llm.agent.baseURL).toBe('https://env-wins.local/v1');
+      expect(overridden.llm.agent.apiKey).toBe('env-key');
+      expect(overridden.llm.router.baseURL).toBe('https://env-wins.local/v1');
+      expect(overridden.llm.router.apiKey).toBe('env-key');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it('CLI overrides (mock flags) beat env', () => {
     setEnv('FINHARNESS_MOCK_SECTORS', 'false');
     const config = loadConfig({ homeDir: '/tmp/never-created', mockSectors: true, mockLlm: true });

@@ -11,6 +11,16 @@ export interface LLMModelConfig {
   temperature: number;
   /** Batas output per panggilan — kontrol biaya (addendum §17). */
   maxTokens: number;
+  /**
+   * Endpoint kustom (OpenAI-compatible: DeepSeek, OpenRouter, Groq,
+   * Ollama/LM Studio lokal, dll). `undefined` = endpoint default provider.
+   */
+  baseURL?: string;
+  /**
+   * API key eksplisit. `undefined` = env standar SDK
+   * (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`).
+   */
+  apiKey?: string;
 }
 
 /**

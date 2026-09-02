@@ -5,11 +5,22 @@ import { DATA_DIR_NAME, ENV } from '@harness/shared';
 import type { LLMModelConfig } from '@harness/llm';
 import { DEFAULT_AGENT_CONFIG, DEFAULT_ROUTER_CONFIG } from '@harness/llm';
 
+/** Bentuk model LLM di file konfigurasi (snake_case, konsisten dengan sectors_api). */
+interface LLMModelFile {
+  provider?: LLMModelConfig['provider'];
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  /** Endpoint kustom (DeepSeek/OpenRouter/Ollama...); kosong = default provider. */
+  base_url?: string;
+  api_key?: string;
+}
+
 /** Bentuk file konfigurasi user (addendum §12 · config.json). */
 interface ConfigFile {
   llm?: {
-    agent?: Partial<LLMModelConfig>;
-    router?: Partial<LLMModelConfig>;
+    agent?: LLMModelFile;
+    router?: LLMModelFile;
   };
   sectors_api?: {
     key?: string;
@@ -69,12 +80,16 @@ export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
   const envAgentModel = process.env[ENV.llmModel];
   const envRouterProvider = process.env[ENV.llmRouterProvider];
   const envRouterModel = process.env[ENV.llmRouterModel];
+  const envBaseUrl = process.env[ENV.llmBaseUrl];
+  const envApiKey = process.env[ENV.llmApiKey];
 
   const agent: LLMModelConfig = {
     provider: envAgentProvider !== undefined ? providerOr(envAgentProvider) : (fileAgent?.provider ?? DEFAULT_AGENT_CONFIG.provider),
     model: envAgentModel ?? fileAgent?.model ?? DEFAULT_AGENT_CONFIG.model,
     temperature: fileAgent?.temperature ?? DEFAULT_AGENT_CONFIG.temperature,
     maxTokens: fileAgent?.maxTokens ?? DEFAULT_AGENT_CONFIG.maxTokens,
+    baseURL: envBaseUrl ?? fileAgent?.base_url,
+    apiKey: envApiKey ?? fileAgent?.api_key,
   };
   const router: LLMModelConfig = {
     provider:
@@ -86,6 +101,8 @@ export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
     model: envRouterModel ?? fileRouter?.model ?? DEFAULT_ROUTER_CONFIG.model,
     temperature: fileRouter?.temperature ?? DEFAULT_ROUTER_CONFIG.temperature,
     maxTokens: fileRouter?.maxTokens ?? DEFAULT_ROUTER_CONFIG.maxTokens,
+    baseURL: envBaseUrl ?? fileRouter?.base_url,
+    apiKey: envApiKey ?? fileRouter?.api_key,
   };
 
   const envMockSectors = process.env[ENV.mockSectors];

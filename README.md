@@ -59,6 +59,22 @@ Atau via `~/.finharness/config.json`:
 
 Prioritas konfigurasi: **env → config.json → default** (env menang bila keduanya ada).
 
+### Custom API provider (DeepSeek, OpenRouter, Ollama lokal, dsb.)
+
+Endpoint OpenAI-compatible apa pun bisa dipakai lewat `base_url` + `api_key`
+(di `config.json`, per-tier) atau env `LLM_BASE_URL` + `LLM_API_KEY` (kedua tier):
+
+```bash
+# DeepSeek
+LLM_PROVIDER=openai LLM_BASE_URL=https://api.deepseek.com/v1 LLM_API_KEY=sk-... LLM_MODEL=deepseek-chat pnpm finharness
+
+# Ollama lokal (tanpa internet)
+LLM_PROVIDER=openai LLM_BASE_URL=http://localhost:11434/v1 LLM_API_KEY=ollama LLM_MODEL=qwen2.5:14b pnpm finharness
+```
+
+Router tier yang berbeda model/provider cukup diset di `config.json`
+(`llm.router.base_url` / `llm.router.api_key`).
+
 ## CLI Options
 
 | Flag | Fungsi |
@@ -69,8 +85,8 @@ Prioritas konfigurasi: **env → config.json → default** (env menang bila kedu
 | `-h, --help` | Tampilkan bantuan |
 
 Environment: lihat [`.env.example`](.env.example) — `SECTORS_API_KEY`, `LLM_PROVIDER`,
-`LLM_MODEL`, `LLM_ROUTER_*`, `FINHARNESS_HOME`, `FINHARNESS_MOCK_SECTORS`,
-`FINHARNESS_MOCK_LLM`, `FINHARNESS_DEBUG`.
+`LLM_MODEL`, `LLM_ROUTER_*`, `LLM_BASE_URL`, `LLM_API_KEY`, `FINHARNESS_HOME`,
+`FINHARNESS_MOCK_SECTORS`, `FINHARNESS_MOCK_LLM`, `FINHARNESS_DEBUG`.
 
 ## Commands
 

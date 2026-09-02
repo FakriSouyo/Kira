@@ -1,6 +1,6 @@
 import { APICallError, generateObject, generateText, type LanguageModel } from 'ai';
-import { anthropic } from '@ai-sdk/anthropic';
-import { openai } from '@ai-sdk/openai';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
 import { sleep } from '@harness/shared';
 import type { GenerateObjectParams, GenerateTextParams, LLMClientLike, LLMModelConfig, SystemZones } from './types';
 
@@ -14,10 +14,28 @@ export interface LLMClientOptions {
   modelFactory?: (config: LLMModelConfig) => LanguageModel;
 }
 
-/** Resolusi provider → model (addendum §17). */
+/**
+ * Buat instance provider dengan baseURL/apiKey eksplisit bila ada
+ * (custom endpoint OpenAI-compatible: DeepSeek, OpenRouter, Ollama, dll).
+ * Nilai undefined → SDK memakai default provider + env standar.
+ */
+export function createProvider(config: LLMModelConfig) {
+  const options = { baseURL: config.baseURL, apiKey: config.apiKey };
+  if (config.provider === 'anthropic') return createAnthropic(options);
+  return createOpenAI(options);
+}
+
+/**
+ * Resolusi provider → model (addendum §17).
+ *
+ * openai: memakai `.chat()` (chat completions) — protokol universal untuk
+ * SEMUA endpoint OpenAI-compatible: native OpenAI, DeepSeek, OpenRouter,
+ * Groq, Ollama/LM Studio, vLLM. (Call default provider memakai Responses API
+ * yang hanya ada di OpenAI asli — tidak bisa dipakai untuk endpoint kustom.)
+ * anthropic: `.chat()` = messages API (bentuk default Anthropic).
+ */
 export function resolveModel(config: LLMModelConfig): LanguageModel {
-  if (config.provider === 'anthropic') return anthropic(config.model);
-  return openai(config.model);
+  return createProvider(config).chat(config.model);
 }
 
 /**

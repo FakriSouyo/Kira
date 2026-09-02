@@ -23,7 +23,7 @@ packages/
   execution/    interface Execution/Claim/JudgmentStore + ClaimValidator
   database/     implementasi SQLite (Drizzle + better-sqlite3) + migrasi — satu-satunya yang menyentuh Drizzle
   sectors-api/  client Sectors API + file cache TTL 24h + mock
-  llm/          LLMClient (Vercel AI SDK) dua-tier + MockLLMClient deterministik
+  llm/          LLMClient (Vercel AI SDK) dua-tier + custom endpoint (baseURL/apiKey) + MockLLMClient
   agent/        Bull, Judge, Intent Router (pure) + stub Bear
 ```
 

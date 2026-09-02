@@ -33,4 +33,20 @@ describe('loadLLMConfig (dua-tier, addendum §17)', () => {
     expect(config.router.temperature).toBe(0.0);
     expect(config.router.maxTokens).toBe(256);
   });
+
+  it('applies global LLM_BASE_URL / LLM_API_KEY to both tiers', () => {
+    const config = loadLLMConfig({ LLM_BASE_URL: 'http://localhost:11434/v1', LLM_API_KEY: 'k' });
+    expect(config.agent.baseURL).toBe('http://localhost:11434/v1');
+    expect(config.agent.apiKey).toBe('k');
+    expect(config.router.baseURL).toBe('http://localhost:11434/v1');
+    expect(config.router.apiKey).toBe('k');
+  });
+
+  it('omits baseURL/apiKey when env is unset (SDK falls back to defaults + standard env)', () => {
+    const config = loadLLMConfig({});
+    expect(config.agent).not.toHaveProperty('baseURL');
+    expect(config.agent).not.toHaveProperty('apiKey');
+    expect(config.router).not.toHaveProperty('baseURL');
+    expect(config.router).not.toHaveProperty('apiKey');
+  });
 });
