@@ -3,6 +3,7 @@ import type { ExecutionRun } from '@harness/execution';
 import type { Claim, Evidence, Judgment } from '@harness/schemas';
 import { SectorsApiError, SECTORS_SOURCES } from '@harness/sectors-api';
 import { UserFriendlyError, ValidationError } from '@harness/shared';
+import type { AgentEvent, AgentToolName } from '../repl/events';
 import type { HarnessContext } from '../context';
 
 /** Hasil lengkap /judge — dipakai renderer output conversational. */
@@ -66,29 +67,44 @@ export async function judgeWorkflow(
   ctx: HarnessContext,
   ticker: string,
   progress: JudgeProgress = () => {},
+  events: (event: AgentEvent) => void = () => {},
 ): Promise<JudgeArtifacts> {
+  // Emit satu tool fetch (start + duration) — dipakai Agent-Events TUI (Task 2).
+  const tool = async <T>(name: AgentToolName, fetcher: () => Promise<T>): Promise<T> => {
+    events({ type: 'tool.start', tool: name, ticker });
+    const started = Date.now();
+    try {
+      return await fetcher();
+    } finally {
+      events({ type: 'tool.complete', tool: name, durationMs: Date.now() - started });
+    }
+  };
   const startedAt = Date.now();
   const run = await ctx.db.execution.createRun({ ticker, command: 'judge' });
+  events({ type: 'session.start', runId: run.id });
 
   try {
     // 1. Researcher fundamental: ambil & simpan evidence (ground truth)
+    events({ type: 'phase', phase: 'researcher', label: "I'm starting with Company Report and Quarterly Financials." });
     progress('researcher', `I'm starting with Company Report and Quarterly Financials for ${ticker}...`);
-    const report = await ctx.sectors.getCompanyReport(ticker);
+    const report = await tool('company_report', () => ctx.sectors.getCompanyReport(ticker));
     const evidenceReport = await ctx.db.evidence.save({
       runId: run.id,
       ticker,
       source: SECTORS_SOURCES.companyReport,
       data: report as unknown as Record<string, unknown>,
     });
+    events({ type: 'evidence.found', id: evidenceReport.id, source: SECTORS_SOURCES.companyReport });
     progress('researcher', '✓ Company Report retrieved');
 
-    const financials = await ctx.sectors.getQuarterlyFinancials(ticker);
+    const financials = await tool('quarterly_financials', () => ctx.sectors.getQuarterlyFinancials(ticker));
     const evidenceFinancials = await ctx.db.evidence.save({
       runId: run.id,
       ticker,
       source: SECTORS_SOURCES.quarterlyFinancials,
       data: financials as unknown as Record<string, unknown>,
     });
+    events({ type: 'evidence.found', id: evidenceFinancials.id, source: SECTORS_SOURCES.quarterlyFinancials });
     progress('researcher', '✓ Quarterly Financials retrieved');
 
     const evidenceIds = [evidenceReport.id, evidenceFinancials.id];
@@ -100,20 +116,22 @@ export async function judgeWorkflow(
     // 1b. Researcher Market — enrichment, degrade bila gagal (addendum §24-A.5).
     if (ctx.researchers.market) {
       try {
-        const daily = await ctx.sectors.getDailyTransaction(ticker);
+        const daily = await tool('daily_transaction', () => ctx.sectors.getDailyTransaction(ticker));
         const evDaily = await ctx.db.evidence.save({
           runId: run.id,
           ticker,
           source: SECTORS_SOURCES.dailyTransaction,
           data: daily as unknown as Record<string, unknown>,
         });
-        const foreign = await ctx.sectors.getForeignFlow(ticker);
+        events({ type: 'evidence.found', id: evDaily.id, source: SECTORS_SOURCES.dailyTransaction });
+        const foreign = await tool('foreign_flow', () => ctx.sectors.getForeignFlow(ticker));
         const evForeign = await ctx.db.evidence.save({
           runId: run.id,
           ticker,
           source: SECTORS_SOURCES.foreignFlow,
           data: foreign as unknown as Record<string, unknown>,
         });
+        events({ type: 'evidence.found', id: evForeign.id, source: SECTORS_SOURCES.foreignFlow });
         marketEvidence = [evDaily, evForeign];
         marketAvailable = true;
         evidenceIds.push(evDaily.id, evForeign.id);
@@ -126,27 +144,30 @@ export async function judgeWorkflow(
     // 1c. Researcher News — enrichment, degrade bila gagal (addendum §24-A.5).
     if (ctx.researchers.news) {
       try {
-        const news = await ctx.sectors.getNews(ticker);
+        const news = await tool('news', () => ctx.sectors.getNews(ticker));
         const evNews = await ctx.db.evidence.save({
           runId: run.id,
           ticker,
           source: SECTORS_SOURCES.news,
           data: news as unknown as Record<string, unknown>,
         });
-        const filings = await ctx.sectors.getFilings(ticker);
+        events({ type: 'evidence.found', id: evNews.id, source: SECTORS_SOURCES.news });
+        const filings = await tool('filings', () => ctx.sectors.getFilings(ticker));
         const evFilings = await ctx.db.evidence.save({
           runId: run.id,
           ticker,
           source: SECTORS_SOURCES.filings,
           data: filings as unknown as Record<string, unknown>,
         });
-        const sentiment = await ctx.sectors.getSentiment(ticker);
+        events({ type: 'evidence.found', id: evFilings.id, source: SECTORS_SOURCES.filings });
+        const sentiment = await tool('sentiment', () => ctx.sectors.getSentiment(ticker));
         const evSentiment = await ctx.db.evidence.save({
           runId: run.id,
           ticker,
           source: SECTORS_SOURCES.sentiment,
           data: sentiment as unknown as Record<string, unknown>,
         });
+        events({ type: 'evidence.found', id: evSentiment.id, source: SECTORS_SOURCES.sentiment });
         newsEvidence = [evNews, evFilings, evSentiment];
         newsAvailable = true;
         evidenceIds.push(evNews.id, evFilings.id, evSentiment.id);
@@ -168,6 +189,7 @@ export async function judgeWorkflow(
     });
 
     // 2. Bull: analisis → reasoning + klaim terstruktur (semua evidence dilihat)
+    events({ type: 'phase', phase: 'bull', label: 'Analyzing the evidence for a bullish thesis.' });
     progress('bull', 'Analyzing the evidence for a bullish thesis...');
     const bull = await ctx.bull.analyze({ ticker, evidenceIds });
     const bullClaims = await ctx.validator.validate(bull.claims, evidenceIds);
@@ -193,6 +215,7 @@ export async function judgeWorkflow(
     progress('bull', `✓ ${bullClaims.length} claim(s) validated and stored`);
 
     // 3. Bear: challenge terhadap klaim Bull (Debate ronde, addendum §15)
+    events({ type: 'phase', phase: 'bear', label: 'Challenging the bullish thesis.' });
     progress('bear', 'Challenging the bullish thesis...');
     const bear = await ctx.bear.challenge({ ticker, evidenceIds, bullClaims });
     ctx.validator.assertSeenEvidence(bear.evidenceIds, evidenceIds);
@@ -220,6 +243,7 @@ export async function judgeWorkflow(
     progress('bear', `✓ ${bear.counterpoints.length} challenge(s) validated`);
 
     // 4. Bull rebuttal: menjawab challenge Bear
+    events({ type: 'phase', phase: 'bull', label: 'Responding to the challenges.' });
     progress('bull', 'Responding to the challenges...');
     const rebuttal = await ctx.bull.rebuttal({
       ticker,
@@ -250,6 +274,7 @@ export async function judgeWorkflow(
     progress('bull', `✓ ${storedRebuttalClaims.length} rebuttal claim(s) stored`);
 
     // 5. Judge: menimbang semua argumen (klaim Bull + rebuttal) terhadap rubrik
+    events({ type: 'phase', phase: 'judge', label: 'Weighing the debate against the rubrik.' });
     progress('judge', 'Weighing the debate against the rubrik...');
     const allClaims = [...bullClaims, ...storedRebuttalClaims];
     const conversation = await ctx.db.conversation.getByRun(run.id);
@@ -267,6 +292,7 @@ export async function judgeWorkflow(
     });
 
     const completed = await ctx.db.execution.completeRun(run.id, (Date.now() - startedAt) / 1000);
+    events({ type: 'session.complete', runId: run.id, status: 'completed' });
     return {
       run: completed,
       evidence: [evidenceReport, evidenceFinancials],
@@ -280,6 +306,7 @@ export async function judgeWorkflow(
       judgment,
     };
   } catch (error) {
+    events({ type: 'session.complete', runId: run.id, status: 'failed' });
     await ctx.db.execution.failRun(run.id, errorMessage(error)).catch(() => undefined);
     throw toUserFriendly(error, run.id);
   }

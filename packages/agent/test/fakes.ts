@@ -60,6 +60,10 @@ class FakeLLM implements LLMClientLike {
   async generateText(): Promise<string> {
     return '';
   }
+
+  async *streamText(): AsyncIterable<string> {
+    // tidak dipakai di test agent — stub minimal agar FakeLLM memenuhi LLMClientLike
+  }
 }
 
 export function fakeLLM<T>(output: T): { llm: LLMClientLike; calls: GenerateObjectParams<unknown>[] } {

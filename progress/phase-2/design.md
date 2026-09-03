@@ -24,7 +24,7 @@ Menambah `Session save/resume`, `Streaming output`, `Export (json/md/html)` dan 
 
 - **Task 1 (done `ee3b2cd`, hijau 150/150):** `getExecutionWithArtifacts` memetakan baris evidence/messages/claims/judgment **manual inline** (bukan reuse `toEvidence` existing di `evidenceStoreSqlite.ts`) → dicatat ARCHITECTURE Deviasi **#19**. `listRuns` default `limit 100` (aman untuk CLI). Resume = fork baru (`content_hash` dedup) sesuai `rules.md` — belum ada consumer command `/resume` (addendum §27 list fitur), helper sudah siap untuk Task 2/3.
 - **Refactor #19 (done, diputuskan sebelum fitur baru):** `toEvidence`/`EvidenceRow` di-`export` dari `evidenceStoreSqlite.ts`; `getExecutionWithArtifacts` kini reuse `toEvidence` untuk evidence (bukti: `getExecutionWithArtifacts().evidence toEqual getByRun()` di `session.test.ts`). Deviasi #19 ditandai TERTUTUP di ARCHITECTURE. `pnpm check` hijau.
-- (langkah berikutnya diisi saat Task 2 streaming dieksekusi)
+- **Task 2 (done, 160/160):** `LLMClient.streamText` (Vercel `streamText → textStream`, tanpa `withRetry`) + `MockLLMClient.streamText` (3 chunk deterministik) + `FakeLLM` stub memenuhi `LLMClientLike`. `Agent-Events` JSONL `apps/cli/src/repl/events.ts` (`serializeAgentEvent`, `createEventSink`, `AgentEvent` union) — `judgeWorkflow(…, events)` default no-op, dipicu per tool/evidence/phase/session, **E2E tak berubah**. Dibuktikan `stream.test.ts` (3), `agent-events.test.ts` (4), `workflow-events.test.ts` (2). ARCHITECTURE Deviasi #21 (dua jalur). `pnpm check` 160/160.
 
 ## Cakupan / keluar-cakupan
 

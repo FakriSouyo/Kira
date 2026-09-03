@@ -11,8 +11,13 @@ Aturan global tetap di `AGENTS.md`; dokumen ini hanya delta.
 
 ## Streaming & cancellation
 
-- Streaming hanya via `LLMClient.streamText` (Vercel AI SDK) untuk REPL per-token; `claims`/`judgment` tetap `generateObject` Zod (dua jalur). `maxTokens` §17 tetap 2000/256 — streaming tidak menambah biaya token.
+- Streaming hanya via `LLMClient.streamText` (Vercel AI SDK `streamText → textStream`) untuk REPL per-token (`message.delta`); `claims`/`judgment` tetap `generateObject` Zod (dua jalur, Deviasi #21). `maxTokens` §17 tetap 2000/256 — streaming tidak menambah biaya token. Tanpa `withRetry` (stream tak bisa di-retry tengah jalan).
 - `Ctrl+C` best-effort di batas fase (researcher→bull→bear→judge). `worker-thread` cancellation deferred (referensi DSH `§24-B.4`), tidak dikerjakan Phase 2.
+
+## Agent-Events JSONL (Task 2)
+
+- `apps/cli/src/repl/events.ts`: `AgentEvent` union (`session.start/complete`, `phase`, `tool.start/complete`, `evidence.found`, `message.delta`) → `serializeAgentEvent` satu baris JSON, `createEventSink(output?)` (no-op bila tanpa output). Pintu Go TUI/web/CI.
+- `judgeWorkflow(ctx, ticker, progress, events)` — `events` default no-op; dipicu `tool` per `SECTORS_SOURCES`, `evidence` per save, `phase` per fase, `session` start/complete. Consumer: `for await (const c of client.streamText(...))` → `message.delta`.
 
 ## Skill-registry ringan
 

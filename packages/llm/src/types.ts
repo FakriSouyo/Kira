@@ -43,6 +43,12 @@ export interface GenerateTextParams {
   system?: SystemZones;
 }
 
+/** Parameter streaming jalur text (Phase 2 Task 2) — klaim/judgment tetap generateObject. */
+export interface StreamTextParams {
+  prompt: string;
+  system?: SystemZones;
+}
+
 /**
  * Permukaan umum client LLM — diimplementasikan LLMClient (provider nyata)
  * dan MockLLMClient (offline, deterministik). Agent hanya bergantung ke sini.
@@ -50,4 +56,11 @@ export interface GenerateTextParams {
 export interface LLMClientLike {
   generateObject<T>(params: GenerateObjectParams<T>): Promise<T>;
   generateText(params: GenerateTextParams): Promise<string>;
+  /**
+   * Streaming text token-per-token (jalur narasi/REPL). Bukan untuk klaim/
+   * judgment terstruktur — itu tetap `generateObject`. Return AsyncIterable
+   * sepenggal teks; konsumen harus iterasi sampai habis (stream tak bisa
+   * di-retry tengah jalan).
+   */
+  streamText(params: StreamTextParams): AsyncIterable<string>;
 }

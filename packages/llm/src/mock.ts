@@ -1,6 +1,6 @@
 import type { Claim, Intent } from '@harness/schemas';
 import { normalizeJudgmentScore, stanceForScore } from '@harness/shared';
-import type { GenerateObjectParams, GenerateTextParams, LLMClientLike } from './types';
+import type { GenerateObjectParams, GenerateTextParams, LLMClientLike, StreamTextParams } from './types';
 
 /**
  * Mock LLM deterministik untuk development offline & E2E test
@@ -438,6 +438,13 @@ export class MockLLMClient implements LLMClientLike {
 
   async generateText(params: GenerateTextParams): Promise<string> {
     return `[mock-llm] ${params.prompt.slice(0, 120)}`;
+  }
+
+  /** Streaming deterministik 3 chunk (tanpa delay) — konsumen menerima 3 yield. */
+  async *streamText(params: StreamTextParams): AsyncIterable<string> {
+    yield '[mock-llm] ';
+    yield params.prompt.slice(0, 40);
+    yield params.prompt.slice(40, 80);
   }
 
   private generate(system: string | string[] | undefined, prompt: string): unknown {

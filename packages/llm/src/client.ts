@@ -1,8 +1,8 @@
-import { APICallError, generateObject, generateText, type LanguageModel } from 'ai';
+import { APICallError, generateObject, generateText, streamText, type LanguageModel } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { sleep } from '@harness/shared';
-import type { GenerateObjectParams, GenerateTextParams, LLMClientLike, LLMModelConfig, SystemZones } from './types';
+import type { GenerateObjectParams, GenerateTextParams, LLMClientLike, LLMModelConfig, StreamTextParams, SystemZones } from './types';
 
 export interface LLMClientOptions {
   config: LLMModelConfig;
@@ -125,6 +125,26 @@ export class LLMClient implements LLMClientLike {
       }),
     );
     return text;
+  }
+
+  /**
+   * Streaming text token-per-token (Phase 2 Task 2). Memakai Vercel `streamText`
+   * dan mengembalikan `textStream` (AsyncIterable<string>). KONSUMEN harus
+   * mengiterasi sampai habis; konsumen boleh berhenti lebih awal (→ abort).
+   *
+   * Sengaja TIDAK dibungkus `withRetry`: stream tak bisa di-retry di tengah
+   * jalan; kalau error terjadi di tengah stream, error tersampaikan ke iterator.
+   * `maxTokens` tetap 2000/256 (tidak menambah biaya token).
+   */
+  streamText(params: StreamTextParams): AsyncIterable<string> {
+    const result = streamText({
+      model: this.model,
+      prompt: params.prompt,
+      system: toSystemPrompt(params.system, this.config.provider),
+      temperature: this.config.temperature,
+      maxOutputTokens: this.config.maxTokens,
+    });
+    return result.textStream;
   }
 
   /** Retry dengan backoff eksponensial hanya untuk error retryable (addendum §21). */
