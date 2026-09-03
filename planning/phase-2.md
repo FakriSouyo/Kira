@@ -47,9 +47,9 @@ Lihat `progress/phase-2/tasklist.md` — 6 task, masing-masing `test` → `imple
 
 1. Session store helpers (`listRuns`, `getExecutionWithArtifacts`) — **✓ done**
 2. Streaming + Agent-Events JSONL (`LLMClient.streamText` + `repl/events.ts` + `judgeWorkflow(…, events)`) — **✓ done** (160/160)
-3. Export JSON/Markdown/HTML (`commands/export.ts`)
-4. Skill-registry ringan (`packages/agent/registry.ts`, `--with` flag)
-5. E2E `record/replay` fixture keyless (§24-B.2) untuk Phase 2
+3. Export JSON/Markdown/HTML (`commands/export.ts` + `repl/renderer.ts`) — **✓ done** (177/177)
+4. Skill-registry ringan (`packages/agent/registry.ts` + `--with` flag) — **✓ done** (177/177)
+5. E2E `record/replay` fixture keyless (`repl/replay.ts` + `fixtures/bbca.jsonl`) — **✓ done** (177/177)
 6. Smoke Phase 2: `--mock-sectors --mock-llm` + bitdeer real (setelah top-up)
 
 ## 6. Verifikasi

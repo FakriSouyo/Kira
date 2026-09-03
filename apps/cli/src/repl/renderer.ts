@@ -1,5 +1,7 @@
 import type { JudgeArtifacts } from '../workflows/judgeWorkflow';
 import type { ScreenArtifacts } from '../workflows/screenWorkflow';
+import type { ExecutionArtifacts } from '@harness/execution';
+import { normalizeJudgmentScore } from '@harness/shared';
 import type { UserFriendlyError } from '@harness/shared';
 
 /**
@@ -225,6 +227,73 @@ export function renderError(error: UserFriendlyError): string {
     '',
     color.gray(`Suggestion: ${error.suggestion}`),
   ].join('\n');
+}
+
+/** Export JSON — DB rows verbatim (addendum §27 export). */
+export function renderExportJson(artifacts: ExecutionArtifacts): string {
+  return JSON.stringify(
+    {
+      run: artifacts.run,
+      evidence: artifacts.evidence,
+      messages: artifacts.messages,
+      claims: artifacts.claims,
+      judgment: artifacts.judgment,
+    },
+    null,
+    2,
+  );
+}
+
+/** Export Markdown — audit trail lengkap, dipakai /export --format md. */
+export function renderExportMarkdown(artifacts: ExecutionArtifacts): string {
+  const { run, evidence, messages, claims, judgment } = artifacts;
+  const j = judgment;
+  const score = j ? `${j.score} / 100` : '--';
+  const stance = j?.stance?.toUpperCase() ?? '--';
+  const breakdown = j?.breakdown;
+  const b = (v: number | null | undefined, label: string) =>
+    `| ${label} | ${v == null ? '-- (not evaluated)' : `${v} / 100`} |`;
+  return [
+    `# ${run.ticker} · FINAL JUDGMENT`,
+    '',
+    `Run: \`${run.id}\` · Ticker: ${run.ticker} · Status: ${run.status}`,
+    '',
+    `**Score:** ${score} · **Stance:** ${stance} · **Confidence:** ${j?.confidence?.toUpperCase() ?? '--'}`,
+    '',
+    '## Breakdown',
+    '',
+    '| Category | Score |',
+    '|---|---|',
+    b(breakdown?.financialHealth, 'Financial Health'),
+    b(breakdown?.growth, 'Growth'),
+    b(breakdown?.valuation, 'Valuation'),
+    b(breakdown?.marketMomentum, 'Market Momentum'),
+    b(breakdown?.risk, 'Risk'),
+    '',
+    '## Evidence',
+    '',
+    ...evidence.map((e) => `- \`${e.id}\` · ${e.source} · ${e.ticker}`),
+    ...(evidence.length === 0 ? ['- (none)'] : []),
+    '',
+    '## Conversation',
+    '',
+    ...messages.map((m) => `- [${m.sequenceOrder}] ${m.agent} (${m.messageType}): ${m.messageId}`),
+    ...(messages.length === 0 ? ['- (none)'] : []),
+    '',
+    '## Claims',
+    '',
+    ...claims.map((c) => `- \`${c.claimId}\` (${c.confidence}): ${c.statement}`),
+    ...(claims.length === 0 ? ['- (none)'] : []),
+    '',
+    j?.summary ? `> ${j.summary}` : '',
+  ].join('\n');
+}
+
+/** Export HTML — wrapper sederhana di atas data yang sama. */
+export function renderExportHtml(artifacts: ExecutionArtifacts): string {
+  const md = renderExportMarkdown(artifacts);
+  const escaped = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${artifacts.run.ticker} · FINAL JUDGMENT</title></head><body><pre>${escaped}</pre></body></html>`;
 }
 
 function indent(text: string): string[] {

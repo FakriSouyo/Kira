@@ -12,6 +12,7 @@ import {
 } from '../repl/renderer';
 import { judgeWorkflow } from '../workflows/judgeWorkflow';
 import { screenWorkflow } from '../workflows/screenWorkflow';
+import { makeExportCommand } from './export';
 import { UserFriendlyError } from '@harness/shared';
 import { SectorsApiError } from '@harness/sectors-api';
 
@@ -115,6 +116,7 @@ export function buildCommands(ctx: HarnessContext): Map<string, CommandHandler> 
   const commands: Map<string, CommandHandler> = new Map([
     ['judge', makeJudgeCommand(ctx)],
     ['screen', makeScreenCommand(ctx)],
+    ['export', makeExportCommand(ctx)],
     ['auth-set', makeAuthSetCommand(ctx)],
     ['help', async () => {
       process.stdout.write(`${renderHelp()}\n\n`);

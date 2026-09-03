@@ -3,6 +3,7 @@ export * from './bull';
 export * from './judge';
 export * from './router';
 export * from './bear';
+export * from './registry';
 export * from './prompts/common';
 export * from './prompts/bull';
 export * from './prompts/bear';
