@@ -1,4 +1,4 @@
-# ARCHITECTURE — Financial Agent Harness (Phase 0)
+# ARCHITECTURE — Financial Agent Harness (Phase 0 + Debate ronde Phase 1)
 
 Dokumen teknis: bagaimana sistem dibangun, keputusan desain yang diambil, dan
 deviasi terdokumentasi dari addendum v3.1.
@@ -8,7 +8,7 @@ deviasi terdokumentasi dari addendum v3.1.
 ```
 apps/cli (REPL + commands + workflows)          ← satu-satunya UI
         │
-packages/agent (Bull, Judge, Router)            ← pure functions, tanpa DB write
+packages/agent (Bull, Bear, Judge, Router)      ← pure functions, tanpa DB write
         │
 packages/llm (LLMClient / MockLLMClient)        ← LLMClientLike interface
         │
@@ -26,18 +26,25 @@ read-only, mengembalikan respons terstruktur; **workflow** (apps/cli) yang
 mem-persist ke DB. Konsekuensinya agent dapat diuji tanpa database sama sekali
 (lih. `packages/agent/test/fakes.ts`).
 
-## 2. Evidence-First Flow (/judge)
+## 2. Evidence-First Flow (/judge, termasuk Debate ronde Phase 1)
 
 1. **Researcher** (bukan LLM): fetch `company_report` + `quarterly_financials`
    → simpan ke Evidence Store dengan dedup content-hash (SHA-256 canonical JSON).
-2. **Bull**: system prompt 2 zona → `generateObject` (Zod) → reasoning + klaim.
+2. **Bull** (`claim`): system prompt 2 zona → `generateObject` (Zod) → reasoning + klaim.
 3. **Validasi 3 lapis** (`ClaimValidator`):
    - Layer 1: struktur (Zod — `evidenceIds` non-kosong, uuid valid)
    - Layer 2: evidence ID ada di DB (anti-hallucination)
    - Layer 3: evidence termasuk allowed set run ini (anti cross-run contamination)
-4. **Judge**: klaim + conversation → `generateObject` → judgment rubrik 5 kategori.
-5. Persist: `executions` (state machine running→completed/failed), `agent_messages`
-   (sequence_order), `claims`, `judgments` — audit trail penuh per `run_id`.
+4. **Bear** (`challenge`): klaim Bull + evidence → `generateObject` →
+   counterpoints (`targetClaimId` + `argument` + `strength`). Validasi
+   run-scoped (`validateChallenge`): `targetClaimId` harus klaim milik run ini
+   dan `evidenceIds` Bear harus ada di DB + dalam allowed set.
+5. **Bull rebuttal** (`response`): counterpoints Bear → `generateObject` →
+   reasoning + klaim pertahanan (klaim tervalidasi 3 lapis seperti pada langkah 3).
+6. **Judge**: semua klaim (Bull + rebuttal) + conversation penuh →
+   `generateObject` → judgment rubrik 5 kategori.
+7. Persist: `executions` (state machine running→completed/failed), `agent_messages`
+   (sequence_order 0–4), `claims`, `judgments` — audit trail penuh per `run_id`.
 
 ## 3. Prompt & Token/Cache Strategy (addendum §17)
 
@@ -60,7 +67,8 @@ oleh kode** (`normalizeJudgmentScore`, `packages/shared/src/rubric.ts`):
 
 ```
 score = round( Σ wᵢ·sᵢ / Σ wᵢ )   atas kategori non-null saja
-Phase 0: momentum & risk = null → bobot 25/20/20 direnormalisasi atas 65
+momentum & risk = null selama data market belum di-fetch
+→ bobot 25/20/20 direnormalisasi atas 65
 ```
 
 Stance juga dipaksa align: `>60 bullish, <40 bearish, selainnya neutral`.
@@ -74,8 +82,15 @@ Aritmetika LLM tidak dapat diaudit; rumus rubrik bersifat non-negotiable.
 - `--mock-llm`: `MockLLMClient` deterministik — **bukan template kosong**:
   - Router: regex intent (ticker IDX 4-huruf, kata kunci beli/tumbuh/overvalued/vs)
   - Bull: **membaca evidence block dari zona [1]** dan membangun klaim dari angka
-    riil (ROE, growth YoY) dengan confidence berbasis threshold
-  - Judge: menghitung jumlah klaim per confidence dari prompt, skor via rubrik
+    riil (ROE, growth YoY) dengan confidence berbasis threshold; bila prompt
+    berisi marker debat ("Bear Agent raised the following challenges") → mode
+    rebuttal dengan claim id `rebuttal_N`
+  - Bear: menarget klaim Bull yang tercantum di prompt (id dibaca dari baris
+    `(claim: <id>, Confidence: ...)`) dan membangun argumentasi dari angka
+    evidence dengan strength berbasis threshold
+  - Judge: menghitung jumlah klaim per confidence dari prompt, skor via rubrik;
+    bila conversation berisi `BEAR (challenge)` → summary menyebut debate ronde
+    dan confidence turun ke `moderate`
   - Output selalu divalidasi dengan Zod schema pemanggil — mock yang menyimpang
     membuat test gagal, bukan silent.
 
@@ -97,8 +112,11 @@ atomik (tmp + rename), key di-sanitize, file korup = cache miss.
 
 Semua error di-map ke `UserFriendlyError { code, message, suggestion }` sebelum
 mencapai terminal: `NOT_FOUND`, `UNAUTHORIZED`, `RATE_LIMIT`, `TIMEOUT`,
-`SERVER_ERROR`, `NETWORK` (Sectors), `EVIDENCE_HALLUCINATION` (validasi),
-`INVALID_TICKER`, `MISSING_TICKER`, `BEAR_NOT_AVAILABLE`, `UNKNOWN_ERROR`.
+`SERVER_ERROR`, `NETWORK` (Sectors), `EVIDENCE_HALLUCINATION` (validasi —
+termasuk challenge Bear yang menarget claim/evidence asing), `INVALID_TICKER`,
+`MISSING_TICKER`, `VALIDATION_UNAVAILABLE` (gagal **mengeksekusi** validasi → fail
+run, lihat §24-B.3), `NEWS_UNAVAILABLE` (kegagalan researcher news → enrichment
+degrade, lihat §24-A.5), `UNKNOWN_ERROR`.
 Run yang gagal tetap tercatat di `executions` dengan status `failed`.
 
 ## 8. Deviations dari Addendum (terdokumentasi)
@@ -114,6 +132,10 @@ Run yang gagal tetap tercatat di `executions` dengan status `failed`.
 | 7 | Hints `/evidence`, `/export` di contoh output §19 | Tidak ditampilkan (command belum ada di scope Phase 0) | Core commands Phase 0 = /judge, /screen, /help, /exit + stubs; hint ke command yang tidak ada menyesatkan. |
 | 8 | Ctrl+C saat executing = "cancel immediately" | Best-effort: notifikasi + berhenti di batas fase berikutnya | Node tidak dapat mem-batalkan fetch/AI SDK call yang sedang berjalan; batas fase (researcher→bull→judge) adalah titik cancel yang aman. |
 | 9 | §17 dua-tier LLM hanya menyebut provider OpenAI/Anthropic default | Ditambah `baseURL`/`apiKey` per tier (env `LLM_BASE_URL`/`LLM_API_KEY` global, atau `base_url`/`api_key` per-tier di config.json) — mendukung endpoint OpenAI-compatible apa pun (DeepSeek, OpenRouter, Ollama lokal) | Ekstensi, bukan konflik: default tetap OpenAI/Anthropic bila field kosong. **Keputusan krusial:** `resolveModel` selalu memakai `provider.chat(model)` (chat completions) — call default provider OpenAI memakai Responses API yang hanya ada di OpenAI asli dan akan gagal di endpoint kustom. Teruji dengan fake server OpenAI-compatible (wire-level) di `packages/llm/test/client.test.ts`. |
+| 10 | §15 prompt challenge Bear tidak menampilkan id klaim Bull | Prompt challenge mencantumkan id di tiap baris klaim: `(claim: <claimId>, Confidence: <c>)` | Skema Bear menuntut `targetClaimId` yang valid — id harus terlihat oleh LLM. Tervalidasi run-scoped oleh `ClaimValidator.validateChallenge`. |
+| 11 | §15 tidak mengatur id klaim pada rebuttal Bull | Klaim rebuttal dinormalisasi workflow menjadi `rebuttal_1..n` sebelum persist | `UNIQUE(run_id, claim_id)` — id LLM bebas bisa bentrok dengan klaim asli; normalisasi juga menandai asal claim di audit trail. |
+| 12 | §27 Roadmap: Phase 1 = "Bear Agent + Bull rebuttal, Market Researcher, News Researcher" | Debate ronde (Bear + rebuttal) selesai; **Market & News Researcher terspesifikasi** di addendum §24-A | Addendum v3.1 hanya memberi nama domain data (Daily Transaction, Foreign Flow / News, Filings, Sentiment). Kontrak endpoint, skema evidence, dan desain agent kini dikunci di `addendum_v3.0.md` §24-A — implementasi berjalan langsung di atas kode Phase 0 + Debate ronde tanpa migrasi schema DB. |
+| 13 | — (pola baru, bukan deviasi addendum) | **Tiga pola disiplin diadopsi** sebagai invariant: §24-B (1) "yang dilihat = yang dicatat" — `agent_messages.metadata.seenEvidenceIds` byte-identical dengan evidence block zona [1] + assertion `claim.evidenceIds ⊆ seenEvidenceIds` (bukan warning); (2) replay fixture keyless utk integration/E2E (Task 19) sbg pelengkap mock generatif; (3) **fail-closed** utk jaminan integritas (gagal *mengeksekusi* validasi → run `failed`, bukan silent-lolos), sedangkan enrichment Market/News tetap silent-degrade (§24-A.5) | Diadaptasi dari pola `deepseek-harness/` tanpa dependency baru; tidak menyalin kode DSH. Rincian di `addendum_v3.0.md` §24-B. |
 
 ## 9. Struktur Data (ringkas)
 
@@ -135,6 +157,8 @@ apps/cli/test     — parser, config, E2E (spawn CLI asli, mock mode,
                     verifikasi output & state DB)
 ```
 
-E2E memverifikasi: 3-agent flow penuh, integritas evidenceIds claim ⊆ evidence
-run, skor konsisten dengan breakdown (renormalisasi), ticker tidak ditemukan →
+E2E memverifikasi: flow penuh dengan Debate ronde (5 pesan berurutan:
+researcher → bull claim → bear challenge → bull response → judge decision),
+integritas evidenceIds claim ⊆ evidence run, klaim rebuttal tersimpan,
+skor konsisten dengan breakdown (renormalisasi), ticker tidak ditemukan →
 run `failed` + error ramah, routing natural language, screener, stub.

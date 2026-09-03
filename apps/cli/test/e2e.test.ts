@@ -64,7 +64,7 @@ function openHomeDb(homeDir: string): FinharnessDatabase {
 }
 
 describe('E2E — /judge offline (mock sectors + mock LLM)', () => {
-  it('menjalankan 3-agent flow penuh dan menyimpan state DB lengkap', async () => {
+  it('menjalankan flow penuh dengan Debate ronde dan menyimpan state DB lengkap', async () => {
     const home = freshHome();
     const run = await runCli(home, '/judge BBCA\n/exit\n');
 
@@ -72,6 +72,8 @@ describe('E2E — /judge offline (mock sectors + mock LLM)', () => {
     expect(run.stdout).toContain('FINANCIAL AGENT HARNESS');
     expect(run.stdout).toContain('🔍 RESEARCHER');
     expect(run.stdout).toContain('🐂 BULL AGENT');
+    expect(run.stdout).toContain('🐻 BEAR AGENT');
+    expect(run.stdout).toContain('🐂 BULL AGENT — REBUTTAL');
     expect(run.stdout).toContain('⚖️ JUDGE');
     expect(run.stdout).toContain('BBCA · FINAL JUDGMENT');
     expect(run.stdout).toMatch(/Score\s+\d+ \/ 100/);
@@ -102,13 +104,28 @@ describe('E2E — /judge offline (mock sectors + mock LLM)', () => {
       expect(messages).toEqual([
         { agent: 'researcher', message_type: 'observation' },
         { agent: 'bull', message_type: 'claim' },
+        { agent: 'bear', message_type: 'challenge' },
+        { agent: 'bull', message_type: 'response' },
         { agent: 'judge', message_type: 'decision' },
       ]);
 
+      // Bear challenge berisi counterpoint terstruktur yang menarget klaim Bull
+      const bearMessage = db.raw
+        .prepare("SELECT content FROM agent_messages WHERE agent = 'bear' AND message_type = 'challenge'")
+        .get() as { content: string };
+      expect(bearMessage.content).toContain('Challenge #1 (targets claim ');
+      expect(bearMessage.content).toContain('claim_1');
+
       // Integrity: evidenceIds claim ⊆ evidence milik run (anti-hallucination, addendum §16)
       const evidenceIds = new Set(evidence.map((e) => e.id));
-      const claims = db.raw.prepare('SELECT evidence_ids FROM claims').all() as Array<{ evidence_ids: string }>;
-      expect(claims.length).toBeGreaterThanOrEqual(1);
+      const claims = db.raw
+        .prepare('SELECT claim_id, evidence_ids FROM claims')
+        .all() as Array<{ claim_id: string; evidence_ids: string }>;
+      // 2 klaim Bull + klaim rebuttal (id dinormalisasi rebuttal_N)
+      expect(claims.length).toBeGreaterThanOrEqual(3);
+      const claimIds = new Set(claims.map((c) => c.claim_id));
+      expect(claimIds.has('claim_1')).toBe(true);
+      expect([...claimIds].some((id) => id.startsWith('rebuttal_'))).toBe(true);
       for (const claim of claims) {
         for (const id of JSON.parse(claim.evidence_ids) as string[]) {
           expect(evidenceIds.has(id)).toBe(true);
@@ -122,7 +139,7 @@ describe('E2E — /judge offline (mock sectors + mock LLM)', () => {
       expect(judgments[0].score).toBeGreaterThanOrEqual(0);
       expect(judgments[0].score).toBeLessThanOrEqual(100);
       const breakdown = JSON.parse(judgments[0].breakdown) as Record<string, unknown>;
-      // Phase 0: momentum & risk = null
+      // Momentum & risk = null (data market belum di-fetch)
       expect(breakdown.marketMomentum).toBeNull();
       expect(breakdown.risk).toBeNull();
       // Skor konsisten dengan breakdown (renormalisasi 25/20/20 atas 65)

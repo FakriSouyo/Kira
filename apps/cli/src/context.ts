@@ -1,5 +1,5 @@
 import type { FinharnessDatabase } from '@harness/database';
-import { BullAgent, IntentRouter, JudgeAgent } from '@harness/agent';
+import { BearAgent, BullAgent, IntentRouter, JudgeAgent } from '@harness/agent';
 import { ClaimValidator } from '@harness/execution';
 import { createLLMClient } from '@harness/llm';
 import { createSectorsApi, type SectorsApi } from '@harness/sectors-api';
@@ -13,6 +13,7 @@ export interface HarnessContext {
   db: FinharnessDatabase;
   sectors: SectorsApi;
   bull: BullAgent;
+  bear: BearAgent;
   judge: JudgeAgent;
   router: IntentRouter;
   validator: ClaimValidator;
@@ -33,6 +34,7 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
       homeDir: config.homeDir,
     }),
     bull: new BullAgent(agentLlm, db.evidence),
+    bear: new BearAgent(agentLlm, db.evidence),
     judge: new JudgeAgent(agentLlm),
     router: new IntentRouter(routerLlm),
     validator: new ClaimValidator(db.evidence),

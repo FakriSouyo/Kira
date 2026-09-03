@@ -59,6 +59,8 @@ v3.1 adalah revisi konsistensi untuk menjadikan dokumen **siap dieksekusi** — 
 - [22. Tech Stack (Final)](#22-tech-stack-final)
 - [23. Monorepo Structure](#23-monorepo-structure)
 - [24. Phase 0 Scope](#24-phase-0-scope)
+- [24-A. Phase 1 · Market & News Researcher — Kontrak Data & Desain](#24-a-phase-1--market--news-researcher--kontrak-data--desain)
+- [24-B. Pola Disiplin (Adaptasi DeepSeek Harness)](#24-b-pola-disiplin-adaptasi-deepseek-harness)
 - [25. Task Breakdown](#25-task-breakdown)
 - [26. Success Criteria](#26-success-criteria)
 
@@ -2521,8 +2523,8 @@ finharness-sectors.app/
 #### What's OUT of Scope (Post-MVP)
 
 ❌ **Bear Agent + Bull rebuttal** (Debate ronde) → Phase 1  
-❌ **Market Researcher** (Daily Transaction, Foreign Flow) → Phase 1  
-❌ **News Researcher** (News, Filings, Sentiment) → Phase 1  
+❌ **Market Researcher** (Daily Transaction, Foreign Flow) → Phase 1 *(spec §24-A)*  
+❌ **News Researcher** (News, Filings, Sentiment) → Phase 1 *(spec §24-A)*  
 ❌ **Debate ronde 2** (conditional continuation) → Phase 1  
 ❌ **GUI (Tauri)** → Phase 4  
 ❌ **Workflow abstraction** (LangGraph) → Phase 3  
@@ -2532,6 +2534,379 @@ finharness-sectors.app/
 ❌ **Session save/resume** → Phase 2  
 ❌ **Streaming output** (real-time messages) → Phase 2  
 ❌ **Export formats** (PDF, HTML) → Phase 2  
+
+---
+
+### 24-A. Phase 1 · Market & News Researcher — Kontrak Data & Desain
+
+> **Status:** Spesifikasi siap-eksekusi (lock-in kontrak data & desain). Bagian
+> ini adalah pelengkap Phase 1 yang mengonversi domain data yang hanya disebut
+> namanya di §27 menjadi keputusan desain yang dapat dieksekusi. Implementasinya
+> berjalan langsung di atas kode Phase 0 + Debate ronde — **tanpa migrasi schema
+> DB** (evidence memakai kolom `data` JSON yang sudah ada).
+
+#### 24-A.1 Tujuan & Batas
+
+Menambahkan dua kelompok **Researcher non-LLM** (pola sama dengan Researcher
+fundamental, §06) yang menyediakan **evidence** Market & News bagi agent LLM:
+
+- **Market Researcher** → evidence yang memungkinkan kategori rubrik **`marketMomentum`** (20%).
+- **News Researcher** → evidence yang memungkinkan kategori rubrik **`risk`** (15%).
+
+**Mekanisme jembatan (penting, lihat §24-A.5):** rubrik dinilai oleh Judge dari
+**klaim yang masuk debat**, bukan dari evidence mentah langsung (pola Phase 0:
+Judge hanya terima `claims` + `conversation`). Jadi evidence Market/News
+**mengaktifkan** momentum & risk **melalui klaim Bull/Bear yang merujuk evidence
+tersebut** — bukan dengan mengubah kontrak Judge.
+
+**Prinsip yang TIDAK berubah (non-negotiable):**
+
+- Bobot rubrik tetap `financialHealth 25 · growth 20 · valuation 20 ·
+  marketMomentum 20 · risk 15` (`packages/shared/src/rubric.ts`). Data Market/News
+  **hanya mengaktifkan** kategori `marketMomentum` & `risk` (sebelumnya selalu `null`
+  karena data belum di-fetch), sehingga renormalisasi `normalizeJudgmentScore`
+  bergeser dari "atas 65" (3 kategori) ke "atas 100" (5 kategori) — rumus tetap,
+  tidak ada perubahan kode rubric.
+- Researcher = **bukan LLM** (prinsip 6, §04): pure fetch → simpan evidence.
+  Agent LLM (Bull/Bear/Judge) tetap konsumen evidence via `evidenceIds`.
+- Evidence-first (§04.1): Bull/Bear/Judge hanya boleh menerima `evidenceIds[]`,
+  tidak pernah `data` mentah langsung.
+- Prompt cache zone §17 tetap: evidence block Market/News ikut zona [1] (byte-identical),
+  dipertahankan di span terpisah setelah evidence fundamental.
+
+#### 24-A.2 Kontrak Endpoint Sectors API
+
+Ditambahkan ke interface murni `SectorsApi` (`packages/sectors-api/src/types.ts`)
+dan implementasi `SectorsClient`/`MockSectorsApi` (`client.ts`, `mock.ts`). Kontrak
+HTTP riil (path, query, field) **diverifikasi terhadap dokumentasi API saat
+implementasi** — pola sama dengan Deviasi #3 (endpoint fundamental dikunci di
+client.ts, satu tempat yang disentuh bila API berubah). Nama & struktur di bawah
+adalah kontrak logis yang menjadi dasar tipe & mock.
+
+```ts
+interface SectorsApi {
+  // …existing…
+  getCompanyReport(ticker: string): Promise<CompanyReport>;
+  getQuarterlyFinancials(ticker: string): Promise<QuarterlyFinancials>;
+  screen(criteria: string[]): Promise<ScreenerResult[]>;
+
+  // —— Market Researcher (Phase 1) ——
+  getDailyTransaction(ticker: string): Promise<DailyTransaction>;
+  getForeignFlow(ticker: string): Promise<ForeignFlow>;
+
+  // —— News Researcher (Phase 1) ——
+  getNews(ticker: string): Promise<NewsArticle[]>;
+  getFilings(ticker: string): Promise<Filing[]>;
+  getSentiment(ticker: string): Promise<Sentiment>;
+}
+```
+
+Semua endpoint baru **di-cache file** (TTL 24 jam, §13) — kecuali **`getNews`** yang
+sifatnya semi-volatil dan diberi TTL lebih pendek (default **1 jam**) agar artikel
+tidak basi; TTL per-source diatur lewat `cache_ttl_hours` config (lihat 24-A.6).
+
+#### 24-A.3 Skema Evidence Market
+
+Definisi tipe di `packages/sectors-api/src/types.ts`. Nama `source` evidence =
+`sectors.daily_transaction` / `sectors.foreign_flow` (ditambah ke `SECTORS_SOURCES`).
+
+```ts
+/** Daily Transaction — likuiditas & aktivitas perdagangan (addendum §27 "Daily Transaction"). */
+export interface DailyTransaction {
+  ticker: string;
+  /** UTC ISO. */
+  asOf: string;
+  /** Rentang agregasi, mis. "30d". */
+  window: string;
+  /** Rata-rata nilai transaksi harian, dalam miliar (IDR). */
+  avgValueBillion?: number;
+  /** Volume relatif vs rata-rata 3 bulan (>1 = di atas normal), tanpa satuan. */
+  volumeRatio?: number;
+  /** Persentase hari tutup di atas harga pembukaan dalam window, 0–100. */
+  upDaysPct?: number;
+  /** Rata-rata pergerakan harga absolut harian, %. */
+  avgIntradayVolatilityPct?: number;
+  /** NULL bila tidak tersedia — menghindari ramalan kosong. */
+  liquidityBand?: 'high' | 'moderate' | 'low';
+}
+
+/** Foreign Flow — arah aliran dana asing (addendum §27 "Foreign Flow"). */
+export interface ForeignFlow {
+  ticker: string;
+  asOf: string;
+  window: string;
+  /** Flow kumulatif asing relatif terhadap kapitalisasi, %. */
+  netForeignPctOfCap?: number;
+  /** Sinyal bersih: net beli / net jual / netral. */
+  netFlow?: 'buy' | 'sell' | 'neutral';
+  /** Proporsi jumlah hari net buy asing dalam window, 0–100. */
+  netBuyDaysPct?: number;
+}
+```
+
+#### 24-A.4 Skema Evidence News
+
+Tipe di `packages/sectors-api/src/types.ts`. Sources: `sectors.news`,
+`sectors.filings`, `sectors.sentiment`.
+
+```ts
+/** Satu artikel/laporan berita. */
+export interface NewsArticle {
+  /** ID unik sumber (untuk dedup content-hash cross-run). */
+  id: string;
+  ticker: string;
+  headline: string;
+  /** URL sumber. */
+  url?: string;
+  publishedAt: string; // ISO
+  /** Ringkas — untuk zona [1], baca lanjutan di evidence `data`. */
+  snippet: string;
+  /** Klasifikasi sentimen isi berita. */
+  sentiment?: 'positive' | 'negative' | 'neutral';
+  /** Sumber berita (mis. "Reuters"). */
+  source?: string;
+}
+
+/** Filing regulator (annual report, disclosure dst.). */
+export interface Filing {
+  id: string;
+  ticker: string;
+  /** Jenis filing, mis. "annual_report", "disclosure", "related_party". */
+  type: string;
+  title: string;
+  filedAt: string; // ISO
+  url?: string;
+}
+
+/** Skor sentimen agregat suatu ticker pada periode tertentu. */
+export interface Sentiment {
+  ticker: string;
+  asOf: string;
+  window: string;
+  /** Skor agregat -1..1 (negatif = bearish, positif = bullish). */
+  aggregate?: number;
+  /** Proporsi artikel positif / negatif / netral, masing-masing 0..1. */
+  distribution?: { positive: number; negative: number; neutral: number };
+  /** Jumlah artikel yang diproses. */
+  articleCount?: number;
+}
+```
+
+Catatan dedup: `NewsArticle`/`Filing` diberi `id` sumber agar **content-hash
+(material dari `data` canonical JSON)** tetap unik per artikel — dua run yang
+menarik artikel sama akan men-dedup ke evidence yang sama (keunggulan content-
+addressed, §13).
+
+#### 24-A.5 Jembatan evidence → breakdown (keputusan terkunci)
+
+Rubrik hanya berbicara skor 0–100 per kategori; Judge menilai breakdown dari
+**`claims` + `conversation`** (kontrak Judge TIDAK berubah — Phase 0). Data
+Market/News masuk ke breakdown lewat rantai berikut:
+
+1. Workflow menambahkan evidence Market & News ke `allowedEvidenceIds` run.
+2. **Bull** melihat evidence Market (momentum) & News (sentimen/risk) di zona [1]
+   dan menyusun klaim yang mencakup momentum & risk (mis. "likuiditas tinggi +
+   `netFlow: buy` mendukung momentum"). **Bear** menantang tesis dengan data yang
+   sama (mis. "distribusi sentimen negatif tinggi merisiko"). Klaim ini **wajib
+   merujuk evidence Market/News** — ditegakkan `ClaimValidator` (allowed set kini
+   mencakup market/news; klaim tidak boleh merujuk evidence asing, §16).
+3. **Judge** menilai breakdown **5 kategori penuh** dari seluruh klaim (Bull +
+   rebuttal) + conversation debat. Saat klaim momentum/risk hadir & tervalidasi,
+   `marketMomentum` & `risk` bisa `non-null`. Kode tetap memaksa
+   `normalizeJudgmentScore` (renorm ke 100 bila kelima kategori non-null) dan
+   `stanceForScore` — deterministik di luar LLM (§4 ARCHITECTURE).
+
+**Degradasi bertingkat:** bila salah satu sumber Market/News gagal (timeout,
+`NOT_FOUND`) saat eksekusi, kategori yang bergantung padanya tetap `null` (renorm
+ke bobot tersisa), run **tetap `completed`** dengan catatan di summary Judge
+("market/news data unavailable") — bukan `failed` (selaras §21 graceful
+degradation). Hanya kegagalan **researcher fundamental** yang membuat run `failed`.
+
+#### 24-A.6 Konfigurasi
+
+`config.json` (dibaca `apps/cli/src/config.ts`) — ekstensi **baru** terhadap bentuk
+existing (§12): `sectors_api.cache_ttl_hours` sudah ada; `news_cache_ttl_hours`,
+`features.market_researcher`, dan `features.news_researcher` adalah field tambahan
+(hanya dibaca bila ada):
+
+```json
+{
+  "sectors_api": {
+    "cache_ttl_hours": 24,
+    "news_cache_ttl_hours": 1
+  },
+  "features": { "market_researcher": true, "news_researcher": false }
+}
+```
+
+Default: **keduanya aktif** untuk `/judge`. `news_researcher: false` mematikan
+News & Sentiment (hemat titik API untuk pengguna tanpa kuota news). TTL news
+(`news_cache_ttl_hours`) meneruskan ke `SectorsClient` sebagai TTL khusus
+endpoint `sectors.news`.
+
+#### 24-A.7 Task Breakdown (lanjutan Phase 1)
+
+> Memakai konvensi penomoran lanjutan (tidak menyentuh Task 1–20 yang selesai).
+
+**Task 21: Gate & Kontrak Endpoint**
+Setup interface `SectorsApi` + tipe Market/News (§24-A.2–4), `SECTORS_SOURCES`,
+perluasan `MockSectorsApi` dengan fixture deterministik (BBCA likuid & sentimen
+positif; BJTM likuiditas rendah — supaya rubrik momentum/risk bisa dibuktikan).
+Demo: fetch mock DailyTransaction/ForeignFlow/News/Sentiment untuk BBCA.
+
+**Task 22: Client HTTP + Cache**
+Implementasi endpoint di `SectorsClient` memakai `cached()` existing (TTL khusus
+news). Test: mock 404/rate-limit menyentuh alur error baru, cache hit mengurangi
+panggilan, news TTL lebih pendek.
+
+**Task 23: Flow /judge diperluas**
+Di `apps/cli/src/workflows/judgeWorkflow.ts`, setelah researcher fundamental:
+  1. Researcher market → simpan evidence (source `sectors.daily_transaction`,
+     `sectors.foreign_flow`).
+  2. Researcher news (bila aktif) → simpan evidence (`sectors.news`,
+     `sectors.filings`, `sectors.sentiment`).
+  3. `allowedEvidenceIds` = gabungan fundamental + market + news.
+  4. Bull → Bear → Bull rebuttal → Judge melihat seluruh evidence.
+Test: E2E memverifikasi breakdown momentum/risk non-null saat mock menyediakan
+kedua grup.
+
+**Task 24: Prompt Agent & Mock LLM**
+- `buildEvidenceZone` perlu menerima kelompok evidence (fundamental/market/news)
+  tetap dalam satu zona [1] byte-identical (span dipisah label, tanpa data volatil).
+- `MockLLMClient`: pembacaan evidence Market → breakdown momentum/risk riil dari
+  fixture (mis. netFlow buy → momentum tinggi; negative distribution besar → risk
+  tinggi), konsisten & Zod-valid. Update test mock LLM.
+
+**Task 25: Rubrik & degradasi**
+Pastikan `normalizeJudgmentScore` bekerja pada breakdown 5 kategori penuh (renorm
+atas 100) dan degradasi parsial (3/4 kategori). Test: breakdown penuh → skor =
+Σ wᵢsᵢ/100; satu sumber gagal → kategori tetap null, run completed.
+
+**Task 26: Renderer & error**
+`renderer.ts`: tampilkan baris momentum & risk (hapus label "not evaluated"),
+tambahkan catatan "market/news unavailable" bila null. `UserFriendlyError` untuk
+kegagalan news (code `NEWS_UNAVAILABLE`) vs fundamental (`NOT_FOUND`) agar pesan
+ramah & tepat.
+
+#### 24-A.8 Success Criteria (Phase 1 · Researcher)
+
+- `/judge BBCA` offline (mock) menghasilkan breakdown **5 kategori non-null**.
+- Evidence Market/News tersimpan di `evidence` dengan `source` benar & dedup
+  content-hash (dua run artikel sama → satu baris evidence).
+- TTL news (1 jam) ≠ TTL fundamental (24 jam), dibuktikan test cache.
+- Kegagalan News tidak menggagalkan run; hanya fundamental yang gagal → `failed`.
+- `pnpm check` lulus (typecheck + seluruh unit/E2E).
+
+---
+
+### 24-B. Pola Disiplin (Adaptasi DeepSeek Harness)
+
+> Asal: review pola `deepseek-harness/`. **Bukan** menyalin kode — diambil **tiga
+> pola disiplin** (invariant logging, replay fixture, fail-closed) dan diadaptasi
+> ke data model & filosofi FinHarness. Tanpa dependency baru. Bentuk DSH
+> (web bundle, Cordis, arsitektur plugin) tidak cocok diadopsi; skill-registry &
+> worker-thread hanya **dicatat sebagai referensi roadmap** (§24-B.4), bukan
+> fitur Phase 0/1 (belum ada consumer nyata — lihat prinsip "membuang doubt, bukan
+> fitur", AGENTS.md).
+
+#### 24-B.1 Invariant runtime "yang dilihat = yang dicatat" (§04.1 / §16)
+
+**Masalah yang ditutup:** di implementasi saat ini, `agent_messages.evidence_ids`
+mencatat **`bull.evidenceIds` / `bear.evidenceIds`** — yaitu ID yang *diklaim* LLM
+dipakai (keluaran `generateObject`). Yang **benar-benar dilihat** LLM adalah evidence
+block di zona [1], yang di-render dari **`params.evidenceIds`** (allowed set run).
+Dua hal itu **bukan** jaminan sama: LLM bisa mereferensikan subset evidence klaimnya,
+atau (bug) merender evidence yang tidak konsisten dengan yang dilihat. Audit trail
+kita mencatat "yang diklaim", bukan "yang dilihat" — celah terhadap klaim
+auditability kita sendiri (§07).
+
+**Keputusan terkunci (invariant runtime, bukan konvensi):**
+
+1. **`agent_messages.metadata.seenEvidenceIds`** = mutlak *byte-identical* dengan
+   evidence block yang dikirim ke LLM (yaitu `params.evidenceIds` yang di-fetch &
+   di-render untuk pesan itu), disimpan **oleh workflow** (bukan agent) saat persist
+   pesan Bull/Bear (sequence 1–3). Bukan `evidence_ids` (kolom yang merekam klaim
+   LLM) — keduanya dipertahankan, yang pertama untuk audit "dilihat", yang kedua
+   untuk "diklaim".
+2. **Assertion di `JudgeAgent`/`BullAgent`** (di lapisan workflow, setelah persist):
+   buktikan bahwa **setiap `claim.evidenceIds` ⊆ `seenEvidenceIds`** pesan yang
+   menghasilkan klaim itu, serta untuk Bear: **`bear.evidenceIds ⊆ seenEvidenceIds`**.
+   Bila melanggar → **lempar error** (`EVIDENCE_HALLUCINATION`, §21), **bukan** log
+   warning. `ClaimValidator` Layer 3 sudah memaksa klaim ⊆ allowed set run; assertion
+   ini memaksa klaim ⊆ *evidence yang benar-benar dikirim pesan itu* — lapisan lebih
+   ketat (allowed set bisa punya evidence yang tidak dirender untuk pesan tertentu).
+3. Catatan: assertion ini tidak menuntut `claim.evidenceIds == seenEvidenceIds`
+   (LLM boleh pakai subset); hanya menuntut **inklusi**. Kemudahan penyebaran ke
+   `MockLLMClient` (harus selalu subset-valid) agar mock tidak melanggar invariant.
+
+**Dampak implementasi:** `JudgeArtifacts`/workflow menambah simpan `seenEvidenceIds`;
+satu helper deterministik (mis. `assertSeenEvidence(claims, seen)` di
+`packages/execution`) yang dipakai validator & test. Tanpa migrasi DB (`metadata`
+sudah JSON TEXT).
+
+#### 24-B.2 Replay fixture "keyless" untuk integration/E2E (Task 19 · §24-A.7)
+
+**Prinsip:** satu fixture nyata dipakai **ganda** — sebagai input mock **dan** sebagai
+expected snapshot. Drift logika langsung terlihat sebagai diff, tanpa API key di CI.
+
+**Sinkron dengan desain kita:** `MockLLMClient` saat ini **generatif** (membangun
+klaim dari angka evidence riil zona [1]) — ini *lebih kuat* daripada replay naif
+karena menguji konten, bukan sekadar mereplay. Maka:
+
+- **Mock generatif dipertahankan** sebagai perilaku `MockLLMClient` (unit test).
+- **Replay fixture ditambahkan di lapisan integration/E2E** (Task 19): rekam **satu
+  run `/judge BBCA` offline** (evidence + conversation 5 pesan + judgment) menjadi
+  satu file fixture yang berperan ganda:
+  - *driver* mock (bila mode `--replay` dipakai), dan
+  - *expected snapshot* yang dibandingkan setelah run.
+  Drift apa pun (urutan pesan, evidenceIds, skor renormalisasi) muncul sebagai diff,
+  tanpa API key di CI.
+- **Mode `record` / `replay` / `refresh`** sebagai satu flag:
+  - `record` → jalankan dan tulis fixture;
+  - `replay` → jalankan mock dari fixture + bandingkan hasil ke snapshot fixture;
+  - `refresh` → tulis ulang snapshot (re-baseline sadar, bukan silent).
+  Default CI memakai `replay` sehingga deterministik.
+
+**Batasan (jangan over-engineer):** fixture ini **pelengkap**, bukan pengganti mock
+generatif maupun E2E mock-mode yang sudah ada. Menambahnya di scope Task 19 (Catatan
+Implementasi), tidak memerlukan tahap baru.
+
+#### 24-B.3 Fail-closed untuk jaminan integritas, silent-degrade untuk enrichment (§16 / §21)
+
+**Garis pemisah (keputusan terkunci):**
+
+- **Enrichment opsional** (Market/News Researcher, §24-A.5): bila sumber gagal →
+  kategori rubrik terkait `null`, run **tetap `completed`** dengan catatan. Ini
+  benar: data tsb memperkaya, bukan penjamin integritas.
+- **Jaminan integritas (fail-closed):** kalau **eksekusi** validasi gagal menjalankan
+  cek (bukan "data tidak lolos", tapi "pengecekan tidak bisa dilakukan" — mis. `Catch`
+  DB error / timeout saat `evidenceStore.getManyByIds` di Layer 2, atau pembacaan
+  status store gagal), maka **run harus `failed`** — **tidak pernah** lanjut tanpa
+  validasi, tidak pernah beralih ke "asumsikan lolos".
+
+**Catatan §16/§21 yang dipertegas:**
+
+- `ClaimValidator` Layer 2/3 **tidak menelan error eksekusi**: kegagalan DB/network
+  saat cek eksistensi/keanggotaan di-map ke `UserFriendlyError` (mis. code
+  `VALIDATION_UNAVAILABLE`) dan **membuat run `failed`** (via `failRun`, §21).
+- Bedakan dua makna "validasi" di seluruh kode & dokumentasi:
+  - **gagal validasi** (claim tidak lolos) → `EVIDENCE_HALLUCINATION`; dan
+  - **gagal mengeksekusi validasi** (infra/DB) → fail run, jangan diterjemahkan
+    diam-diam menjadi "lolos".
+- Aturan ini berlaku untuk `validate` dan `validateChallenge` (§24-A) pun.
+
+#### 24-B.4 Catatan roadmap (referensi pola DSH — bukan fitur sekarang)
+
+Dua pola DSH lain yang disebut pada review **tidak** diadopsi di Phase 0/1 karena
+belum ada consumer nyata (`AGENTS.md` · "membuang doubt, bukan fitur"):
+
+| Pola DSH | Untuk apa | Status |
+|---|---|---|
+| Skill-registry ringan (registri kemampuan agent, bukan plugin penuh) | **Agent Configurator** (Phase 2+, §27) — memilih & merekam kemampuan agent | Dicatat sebagai referensi desain Phase 2; tidak diadopsi sekarang |
+| Worker-thread untuk cancellation REPL | **Streaming / cancel-asli** (Phase 2, §27) — Node tidak bisa mem-batalkan fetch/AI call berjalan (Deviasi #8) | Dicatat sebagai referensi desain; fase saat ini memakai batas-fase best-effort |
+
+Keduanya hanya **referensi desain** yang ditarik saat fase tsb dimulai, bukan
+spesifikasi kontrak di dokumen ini.
 
 ---
 
@@ -2983,7 +3358,7 @@ Phase 0 is **COMPLETE** when:
 | Phase | Focus | Key Deliverables | Status |
 |-------|-------|------------------|--------|
 | **Phase 0** | Interactive REPL + Evidence-First | `/judge`, `/screen`, NL input, SQLite embedded | **READY** |
-| **Phase 1** | Expand Researchers + Debate | Bear Agent + Bull rebuttal, Market Researcher, News Researcher | Designed |
+| **Phase 1** | Expand Researchers + Debate | Bear Agent + Bull rebuttal (built), Market Researcher, News Researcher | Spec'd (§24-A) |
 | **Phase 2** | Advanced Features | Session save/resume, streaming output, export formats | Designed |
 | **Phase 3** | Orchestration Upgrade | Evaluate LangGraph, conditional workflows | TBD |
 | **Phase 4** | GUI (Tauri) | Desktop app with live reasoning arena | Designed |

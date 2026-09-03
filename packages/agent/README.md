@@ -4,12 +4,12 @@ Agent — **pure function**: membaca evidence read-only, mengembalikan respons t
 
 | Modul | Isi |
 |---|---|
-| `bull.ts` | `BullAgent.analyze` — system 2 zona (evidence + persona), `generateObject` → reasoning + klaim |
+| `bull.ts` | `BullAgent.analyze` + `rebuttal` (Phase 1) — system 2 zona (evidence + persona), `generateObject` → reasoning + klaim |
+| `bear.ts` | `BearAgent.challenge` (Phase 1) — klaim Bull + evidence → counterpoints `targetClaimId`/`argument`/`strength` |
 | `judge.ts` | `JudgeAgent.evaluate` — **menghitung ulang skor & stance** dari breakdown via rubrik `@harness/shared`; nilai LLM diabaikan |
 | `router.ts` | `IntentRouter.route` — klasifikasi intent + ticker/criteria; confidence < 0.7 → clarification |
-| `bear.ts` | Stub Phase 1 — melempar `BEAR_NOT_AVAILABLE` |
-| `prompts/*` | Zona prompt: `EVIDENCE_PREAMBLE`, `buildEvidenceZone`, persona Bull/Judge/Router |
-| `types.ts` | `BullAnalysisResponse`, `JudgeLLMOutputSchema`, `BullLLMOutputSchema` |
+| `prompts/*` | Zona prompt: `EVIDENCE_PREAMBLE`, `buildEvidenceZone`, persona Bull/Bear/Judge/Router, `buildBullRebuttalPrompt` |
+| `types.ts` | `BullAnalysisResponse`, `BearChallengeResponse`, `BearCounterpoint`, `JudgeLLMOutputSchema`, `BullLLMOutputSchema`, `BearLLMOutputSchema` |
 
 Catatan:
 - Zona [1] (preamble + evidence block) harus byte-identical antar agent dalam satu run — jangan sisipkan data volatil.

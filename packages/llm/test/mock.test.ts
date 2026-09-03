@@ -60,8 +60,44 @@ const EVIDENCE_BLOCK = renderEvidenceBlock([
 
 const BULL_ZONE1 = `You are part of the Financial Agent Harness.\nAvailable evidence for BBCA:\n${EVIDENCE_BLOCK}`;
 const BULL_ZONE2 = 'You are Bull Agent, an optimistic financial analyst.';
+const BEAR_ZONE2 = 'You are Bear Agent, a skeptical financial analyst.';
 const JUDGE_SYSTEM = 'You are Judge Agent, a neutral arbiter.';
 const ROUTER_SYSTEM = 'You are Intent Router for Financial Agent Harness.';
+
+const BEAR_OUTPUT_SCHEMA = z.object({
+  reasoning: z.string().min(10),
+  counterpoints: z
+    .array(
+      z.object({
+        targetClaimId: z.string().min(1),
+        argument: z.string().min(5),
+        strength: z.enum(['high', 'moderate', 'low']),
+      }),
+    )
+    .min(1),
+  evidenceIds: z.array(z.string().uuid()),
+});
+
+/** Format prompt challenge (buildBearPrompt di @harness/agent). */
+const BEAR_PROMPT = `You are a bearish analyst evaluating BBCA.
+
+Bull Agent made the following claims:
+1. Profitability remains strong. (claim: claim_1, Confidence: strong)
+   Evidence: ${E1}
+   Reasoning: ROE of 23.1% indicates strong profitability.
+2. Earnings growth remains positive. (claim: claim_2, Confidence: moderate)
+   Evidence: ${E2}
+   Reasoning: Net income growing 8.7% YoY.
+
+Challenge the bull thesis. The evidence is in the system context.`;
+
+const REBUTTAL_PROMPT = `You are a bullish analyst defending your thesis for BBCA.
+
+Bear Agent raised the following challenges:
+1. Targets claim claim_1 (strength: moderate): High ROE may reflect leverage.
+2. Targets claim claim_2 (strength: moderate): One quarter is not a trend.
+
+Respond with your rebuttal. The evidence is in the system context.`;
 
 describe('MockLLMClient — Intent Router', () => {
   const mock = new MockLLMClient();
@@ -127,6 +163,58 @@ describe('MockLLMClient — Bull', () => {
   });
 });
 
+describe('MockLLMClient — Bear (Phase 1)', () => {
+  const mock = new MockLLMClient();
+
+  it('targets the bull claim ids from the prompt, grounded in evidence numbers', async () => {
+    const result = await mock.generateObject({
+      schema: BEAR_OUTPUT_SCHEMA,
+      prompt: BEAR_PROMPT,
+      system: [BULL_ZONE1, BEAR_ZONE2],
+    });
+
+    expect(result.counterpoints).toHaveLength(2);
+    expect(result.counterpoints[0].targetClaimId).toBe('claim_1');
+    expect(result.counterpoints[1].targetClaimId).toBe('claim_2');
+    // ROE 23.1% (>= 15) → skeptisisme terukur, bukan alarm penuh
+    expect(result.counterpoints[0].argument).toContain('23.1');
+    expect(result.counterpoints[0].strength).toBe('moderate');
+    // Growth 8.7% (>= 7) → moderate
+    expect(result.counterpoints[1].argument).toContain('8.7');
+    expect(result.counterpoints[1].strength).toBe('moderate');
+    expect(result.evidenceIds).toEqual([E1, E2]);
+  });
+
+  it('is deterministic across calls', async () => {
+    const params = { schema: BEAR_OUTPUT_SCHEMA, prompt: BEAR_PROMPT, system: [BULL_ZONE1, BEAR_ZONE2] };
+    expect(await mock.generateObject(params)).toEqual(await mock.generateObject(params));
+  });
+});
+
+describe('MockLLMClient — Bull rebuttal (Phase 1)', () => {
+  const mock = new MockLLMClient();
+
+  it('switches to rebuttal mode on the debate marker and issues rebuttal_N claim ids', async () => {
+    const result = await mock.generateObject({
+      schema: BULL_OUTPUT_SCHEMA,
+      prompt: REBUTTAL_PROMPT,
+      system: [BULL_ZONE1, BULL_ZONE2],
+    });
+
+    expect(result.reasoning).toContain('address the challenges');
+    expect(result.claims.map((c) => c.claimId)).toEqual(['rebuttal_1', 'rebuttal_2']);
+  });
+
+  it('stays in analysis mode (claim_N ids) without the debate marker', async () => {
+    const result = await mock.generateObject({
+      schema: BULL_OUTPUT_SCHEMA,
+      prompt: 'You are a bullish analyst evaluating BBCA.',
+      system: [BULL_ZONE1, BULL_ZONE2],
+    });
+    expect(result.claims.map((c) => c.claimId)).toEqual(['claim_1', 'claim_2']);
+  });
+});
+
 describe('MockLLMClient — Judge', () => {
   const mock = new MockLLMClient();
 
@@ -142,14 +230,30 @@ describe('MockLLMClient — Judge', () => {
       system: JUDGE_SYSTEM,
     });
 
-    // Phase 0: momentum & risk = null
+    // Momentum & risk = null (data market belum di-fetch)
     expect(result.breakdown.marketMomentum).toBeNull();
     expect(result.breakdown.risk).toBeNull();
     // Skor = rata-rata berbobot 25/20/20 (renormalisasi 65)
     const expected = Math.round((result.breakdown.financialHealth * 25 + result.breakdown.growth * 20 + result.breakdown.valuation * 20) / 65);
     expect(result.score).toBe(expected);
     expect(result.stance).toBe(expected > 60 ? 'bullish' : expected < 40 ? 'bearish' : 'neutral');
-    expect(result.summary).toContain('Phase 0');
+    expect(result.summary).toContain('not yet evaluated');
+    expect(result.summary).toContain('No counterargument was presented');
+  });
+
+  it('recognizes the debate round when the conversation contains a Bear challenge', async () => {
+    const result = await mock.generateObject({
+      schema: JUDGE_OUTPUT_SCHEMA,
+      prompt:
+        'Ticker: BBCA\n\nFull conversation:\n' +
+        'BULL (claim): thesis\nBEAR (challenge): I challenge the durability of the cited figures.\n\n' +
+        'All claims:\n' +
+        ['1. Profitability remains strong. (strong)', '2. Earnings growth remains positive. (moderate)'].join('\n'),
+      system: JUDGE_SYSTEM,
+    });
+
+    expect(result.summary).toContain('debate round');
+    expect(result.confidence).toBe('moderate'); // skeptisisme teruji → bukan 'high'
   });
 
   it('scores more strong claims higher', async () => {

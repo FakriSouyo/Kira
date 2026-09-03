@@ -1,14 +1,20 @@
 # Financial Agent Harness
 
 Evidence-based stock research system — interactive REPL harness dengan multi-agent
-reasoning (Researcher → Bull → Judge), embedded SQLite, dan audit trail penuh.
+reasoning (Researcher → Bull → Bear → Bull rebuttal → Judge), embedded SQLite,
+dan audit trail penuh.
 
 Spesifikasi lengkap: [`planning/addendum_v3.0.md`](planning/addendum_v3.0.md) (v3.1) ·
 Dokumentasi teknis: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
-## Status: Phase 0 ✅
+## Status: Phase 0 ✅ · Phase 1 (sebagian) 🔶
 
-- 3-agent flow: **Researcher → Bull → Judge** (Bear/debate = Phase 1, skema DB sudah di-reserve)
+- **Phase 0** — 3-agent flow **Researcher → Bull → Judge** ✅
+- **Phase 1 · Debate ronde** ✅ — Bear Agent (challenge) + Bull rebuttal +
+  validasi run-scoped; Judge menimbang seluruh debat
+- **Phase 1 · Market & News Researcher** 📋 terspesifikasi — kontrak endpoint,
+  skema evidence, dan desain agent dikunci di addendum §24-A; implementasi belum
+  dimulai (lihat juga Deviasi #12 di `ARCHITECTURE.md`)
 - Sectors API client (type-safe, file cache TTL 24 jam, error mapping)
 - LLM dua-tier (agent + router) via Vercel AI SDK, retry backoff, `maxTokens` terkunci
 - 3 lapis validasi claim (struktur Zod → keberadaan evidence → keanggotaan run)
@@ -92,7 +98,7 @@ Environment: lihat [`.env.example`](.env.example) — `SECTORS_API_KEY`, `LLM_PR
 
 | Command | Fungsi |
 |---|---|
-| `/judge [TICKER]` | Analisis penuh: Researcher → Bull → Judge |
+| `/judge [TICKER]` | Analisis penuh + Debate ronde: Researcher → Bull → Bear → Bull rebuttal → Judge |
 | `/screen [CRITERIA]` | Screener (mis. `/screen profitable growing`) — pola historis, bukan prediksi |
 | `/help` | Bantuan |
 | `/exit` | Keluar |
@@ -126,7 +132,7 @@ packages/
   database/     implementasi SQLite (Drizzle + better-sqlite3) + migrasi
   sectors-api/  client Sectors API + file cache + mock
   llm/          LLMClient (Vercel AI SDK) dua-tier + MockLLMClient
-  agent/        Bull, Judge, Intent Router (pure functions) + stub Bear
+  agent/        Bull, Bear, Judge, Intent Router (pure functions)
 apps/
   cli/          REPL, command, workflow, config
 ```

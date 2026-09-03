@@ -31,3 +31,29 @@ Provide:
 1. reasoning — natural language explanation of the bullish case
 2. claims — structured claims, each citing the specific evidence IDs that support it`.trim();
 }
+
+/**
+ * Prompt rebuttal Bull terhadap challenge Bear (Phase 1, "Debate ronde").
+ * Kalimat "Bear Agent raised the following challenges" adalah marker yang
+ * dipertahankan — MockLLMClient membedakan rebuttal dari analisis awal.
+ */
+export function buildBullRebuttalPrompt(
+  ticker: string,
+  bearCounterpoints: Array<{ targetClaimId: string; argument: string; strength: string }>,
+): string {
+  const challenges = bearCounterpoints
+    .map((cp, i) => `${i + 1}. Targets claim ${cp.targetClaimId} (strength: ${cp.strength}): ${cp.argument}`)
+    .join('\n');
+
+  return `You are a bullish analyst defending your thesis for ${ticker}.
+
+Bear Agent raised the following challenges:
+${challenges}
+
+Respond with your rebuttal. The evidence is in the system context.
+
+Provide:
+1. reasoning — address each challenge directly, using the evidence
+2. claims — defending claims, each citing the specific evidence IDs that support it
+   (use fresh claim ids such as rebuttal_1, rebuttal_2 — do not reuse the original ids)`.trim();
+}

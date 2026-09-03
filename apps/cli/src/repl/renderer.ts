@@ -45,7 +45,7 @@ export function renderHelp(): string {
     color.bold('Financial Agent Harness Commands'),
     '',
     color.bold('Core:'),
-    `  ${color.green('/judge [TICKER]')}     Full analysis (Researcher → Bull → Judge)`,
+    `  ${color.green('/judge [TICKER]')}     Full analysis + Debate ronde (Researcher → Bull → Bear → Bull → Judge)`,
     `  ${color.green('/screen [CRITERIA]')}  Screen stocks (profitable, growing)`,
     `  ${color.green('/help')}               Show this help`,
     `  ${color.green('/exit')}               Exit harness`,
@@ -89,6 +89,7 @@ export function resetProgress(): void {
 const PHASE_HEADERS: Record<string, string> = {
   researcher: color.blue(color.bold('🔍 RESEARCHER')),
   bull: color.green(color.bold('🐂 BULL AGENT')),
+  bear: color.red(color.bold('🐻 BEAR AGENT')),
   judge: color.yellow(color.bold('⚖️ JUDGE')),
 };
 
@@ -101,13 +102,14 @@ export function writeProgress(output: NodeJS.WritableStream, phase: string, line
   output.write(`  ${line}\n`);
 }
 
-/** Output penuh /judge — layout conversational addendum §19. */
+/** Output penuh /judge — layout conversational addendum §19 + Debate ronde (Phase 1). */
 export function renderJudgeResult(artifacts: JudgeArtifacts): string {
-  const { run, evidence, bull, judgment } = artifacts;
+  const { run, evidence, bull, bear, rebuttal, judgment } = artifacts;
   const ev = (id: string) => color.gray(id);
   const breakdown = judgment.breakdown;
   const b = (v: number | null, label: string) =>
-    `    ${label.padEnd(20)} ${v === null ? color.gray('-- (not evaluated in Phase 0)') : `${v} / 100`}`;
+    `    ${label.padEnd(20)} ${v === null ? color.gray('-- (not evaluated: no market data yet)') : `${v} / 100`}`;
+  const claimIndex = new Map(bull.claims.map((c, i) => [c.claimId, i + 1]));
 
   return [
     HEAVY,
@@ -124,6 +126,28 @@ export function renderJudgeResult(artifacts: JudgeArtifacts): string {
     ...indent(bull.reasoning),
     '',
     ...bull.claims.flatMap((c, i) => [
+      `  ${color.green(`→ Claim #${i + 1} (${c.confidence})`)}`,
+      `    ${color.bold(`"${c.statement}"`)}`,
+      `    ${color.gray(`Evidence: ${c.evidenceIds.join(', ')}`)}`,
+      `    ${color.dim(c.reasoning)}`,
+      '',
+    ]),
+    LIGHT,
+    '',
+    `🐻 BEAR AGENT`,
+    ...indent(bear.reasoning),
+    '',
+    ...bear.counterpoints.flatMap((cp, i) => [
+      `  ${color.red(`→ Challenge #${i + 1} (${cp.strength})`)}${claimIndex.has(cp.targetClaimId) ? color.gray(` — targets Claim #${claimIndex.get(cp.targetClaimId)}`) : color.gray(` — targets ${cp.targetClaimId}`)}`,
+      `    ${color.bold(`"${cp.argument}"`)}`,
+      '',
+    ]),
+    LIGHT,
+    '',
+    `🐂 BULL AGENT — REBUTTAL`,
+    ...indent(rebuttal.reasoning),
+    '',
+    ...rebuttal.claims.flatMap((c, i) => [
       `  ${color.green(`→ Claim #${i + 1} (${c.confidence})`)}`,
       `    ${color.bold(`"${c.statement}"`)}`,
       `    ${color.gray(`Evidence: ${c.evidenceIds.join(', ')}`)}`,

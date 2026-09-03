@@ -11,6 +11,44 @@ import type { EvidenceStore } from '@harness/evidence';
 export class ClaimValidator {
   constructor(private readonly evidenceStore: EvidenceStore) {}
 
+  /**
+   * Validasi challenge Bear (Phase 1, addendum §16/§15) — run-scoped:
+   *   - setiap targetClaimId harus menunjuk klaim Bull milik run ini
+   *   - evidenceIds Bear harus ada di DB dan termasuk allowed set run
+   * (struktur `strength`/`argument` sudah ditegakkan Zod di BearLLMOutputSchema)
+   */
+  async validateChallenge(
+    counterpoints: Array<{ targetClaimId: string; argument: string; strength: string }>,
+    bearEvidenceIds: string[],
+    allowed: { claimIds: string[]; evidenceIds: string[] },
+  ): Promise<void> {
+    const allowedClaims = new Set(allowed.claimIds);
+    for (const cp of counterpoints) {
+      if (!allowedClaims.has(cp.targetClaimId)) {
+        throw new ValidationError(
+          `Challenge targets unknown claim ${cp.targetClaimId}. ` +
+            `Known claim ids: ${allowed.claimIds.join(', ') || '(none)'}`,
+        );
+      }
+    }
+
+    const uniqueIds = [...new Set(bearEvidenceIds)];
+    const existing = await this.evidenceStore.getManyByIds(uniqueIds);
+    const existingIds = new Set(existing.map((e) => e.id));
+    const allowedEvidence = new Set(allowed.evidenceIds);
+    for (const id of uniqueIds) {
+      if (!existingIds.has(id)) {
+        throw new ValidationError(`Evidence ${id} does not exist in database (bear challenge)`);
+      }
+      if (!allowedEvidence.has(id)) {
+        throw new ValidationError(
+          `Evidence ${id} not in allowed set for this run (bear challenge). ` +
+            `Allowed: ${allowed.evidenceIds.join(', ')}`,
+        );
+      }
+    }
+  }
+
   async validate(claims: Claim[], allowedEvidenceIds: string[]): Promise<Claim[]> {
     // Layer 1: Structural validation (Zod)
     const parsed = ClaimSchema.array().parse(claims);

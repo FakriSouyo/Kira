@@ -5,5 +5,6 @@ export * from './router';
 export * from './bear';
 export * from './prompts/common';
 export * from './prompts/bull';
+export * from './prompts/bear';
 export * from './prompts/judge';
 export * from './prompts/router';

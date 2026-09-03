@@ -7,7 +7,7 @@ REPL interaktif — satu-satunya UI harness. Jalankan: `pnpm finharness` (tambah
 | `index.ts` | Entry: parse arg → `loadConfig` → `openDb` → `buildContext` → REPL; handler natural language via `IntentRouter` |
 | `config.ts` | `loadConfig` — prioritas **env → `config.json` → default**; `FinharnessConfig`; custom provider via `base_url`/`api_key` per-tier (file) atau `LLM_BASE_URL`/`LLM_API_KEY` (env, kedua tier) |
 | `context.ts` | `buildContext` — wiring dua-tier LLM + Sectors API + store + validator |
-| `workflows/judgeWorkflow.ts` | Researcher → Bull → validasi → Judge; persist run/evidence/messages/claims/judgment; error → run `failed` + `UserFriendlyError` |
+| `workflows/judgeWorkflow.ts` | Researcher → Bull → validasi → **Bear (challenge) → Bull (rebuttal)** → Judge (Phase 1 Debate ronde); persist run/evidence/messages/claims/judgment; error → run `failed` + `UserFriendlyError` |
 | `workflows/screenWorkflow.ts` | `sectors.screen` → filter skor > 0 → top 10 |
 | `repl/` | `parser.ts` (slash vs natural language), `loop.ts` (tab completion, Ctrl+C, line queue), `renderer.ts` (layout §19, ANSI) |
 | `commands/` | `/judge`, `/screen`, `/help`, `/exit` + stub roadmap (challenge/compare/research/investigate) |

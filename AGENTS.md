@@ -24,7 +24,7 @@ packages/
   database/     implementasi SQLite (Drizzle + better-sqlite3) + migrasi — satu-satunya yang menyentuh Drizzle
   sectors-api/  client Sectors API + file cache TTL 24h + mock
   llm/          LLMClient (Vercel AI SDK) dua-tier + custom endpoint (baseURL/apiKey) + MockLLMClient
-  agent/        Bull, Judge, Intent Router (pure) + stub Bear
+  agent/        Bull, Bear, Judge, Intent Router (pure functions)
 ```
 
 ## Commands
@@ -51,13 +51,16 @@ pnpm db:migrate         # jalankan migrasi DB saja
   workflow di `apps/cli` yang persist. Test agent memakai fakes, bukan DB.
 - **Deterministik di luar LLM**: skor & stance judgment dihitung ulang oleh
   `JudgeAgent` dari breakdown via `@harness/shared` rubric.ts (bobot 25/20/20/20/15,
-  renormalisasi atas kategori non-null; Phase 0: momentum & risk = null).
+  renormalisasi atas kategori non-null; momentum & risk = null selama data
+  market belum di-fetch).
 - **Prompt cache zone**: zona [1] (preamble + `renderEvidenceBlock`) harus
   byte-identical antar agent dalam satu run — jangan masukkan data volatil
   (timestamp, UUID acak) ke zona ini. Zona [2] = persona agent.
 - **Mock LLM contract**: `MockLLMClient` mendeteksi string `"Intent Router"` /
-  `"Bull Agent"` / `"Judge Agent"` di system prompt + evidence block. Jangan
-  mengubah teks prompt tanpa memperbarui `MockLLMClient` dan test-nya.
+  `"Bull Agent"` / `"Bear Agent"` / `"Judge Agent"` di system prompt +
+  evidence block; rebuttal Bull dideteksi dari marker `"Bear Agent raised the
+  following challenges"` di prompt. Jangan mengubah teks prompt tanpa
+  memperbarui `MockLLMClient` dan test-nya.
 - **Errors**: selalu di-map ke `UserFriendlyError { code, message, suggestion }`
   sebelum mencapai terminal; run yang gagal tetap tercatat `failed` di DB.
 - **Konvensi nama**: snake_case di DB ↔ camelCase di TS — pemetaan eksplisit

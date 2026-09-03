@@ -7,7 +7,9 @@ import { JudgeLLMOutputSchema, type JudgeLLMOutput } from './types';
 
 /**
  * Judge Agent (addendum §15/Task 12) — pure function:
- * menilai klaim Bull terhadap rubrik 5 kategori. Phase 0: momentum & risk = null.
+ * menimbang seluruh argumen (klaim Bull, challenge Bear, rebuttal — masuk
+ * lewat `conversation`) terhadap rubrik 5 kategori.
+ * Momentum & risk = null selama data market belum di-fetch.
  *
  * Penegakan deterministik (di luar LLM):
  *   - `score` dihitung ulang dari breakdown (bobot renormalisasi) —

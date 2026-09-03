@@ -1,16 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import type { EvidenceStore } from '@harness/evidence';
 import type { LLMClientLike } from '@harness/llm';
-import { BULL_SYSTEM_PROMPT, buildBullPrompt } from './prompts/bull';
+import { BULL_SYSTEM_PROMPT, buildBullPrompt, buildBullRebuttalPrompt } from './prompts/bull';
 import { buildEvidenceZone } from './prompts/common';
-import { BullLLMOutputSchema, type BullAnalysisResponse } from './types';
+import {
+  BullLLMOutputSchema,
+  type BearCounterpoint,
+  type BullAnalysisResponse,
+} from './types';
 
 /**
  * Bull Agent (addendum §15/Task 10) — pure function:
  * membaca evidence (read-only) dan mengembalikan hasil terstruktur.
  * TIDAK menulis database — workflow menangani persistence (prinsip 6, §04).
- *
- * Rebuttal (respons terhadap Bear) masuk Phase 1 dengan pola yang sama.
  */
 export class BullAgent {
   constructor(
@@ -34,5 +36,27 @@ export class BullAgent {
 
     // 4. Respons murni — tanpa efek samping
     return { ...output, messageId: `bull_${randomUUID()}` };
+  }
+
+  /**
+   * Rebuttal terhadap challenge Bear (Phase 1, "Debate ronde" — addendum §15):
+   * pola identik dengan analyze — fetch evidence → build prompt → generate →
+   * return pure response.
+   */
+  async rebuttal(params: {
+    ticker: string;
+    evidenceIds: string[];
+    bearCounterpoints: BearCounterpoint[];
+  }): Promise<BullAnalysisResponse> {
+    const evidence = await this.evidenceStore.getManyByIds(params.evidenceIds);
+    const sharedZone = buildEvidenceZone(params.ticker, evidence);
+
+    const output = await this.llm.generateObject({
+      schema: BullLLMOutputSchema,
+      system: [sharedZone, BULL_SYSTEM_PROMPT],
+      prompt: buildBullRebuttalPrompt(params.ticker, params.bearCounterpoints),
+    });
+
+    return { ...output, messageId: `bull_rebuttal_${randomUUID()}` };
   }
 }

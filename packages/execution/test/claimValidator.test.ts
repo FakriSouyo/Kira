@@ -87,3 +87,55 @@ describe('ClaimValidator — 3 layer (addendum §16)', () => {
     );
   });
 });
+
+describe('ClaimValidator.validateChallenge — run-scoped untuk Bear (Phase 1)', () => {
+  it('challenge valid lolos (target claim id + evidence dalam run)', async () => {
+    await expect(
+      validator.validateChallenge(
+        [
+          { targetClaimId: 'claim_001', argument: 'ROE may partly reflect leverage.', strength: 'moderate' },
+          { targetClaimId: 'claim_002', argument: 'Growth rests on one quarter.', strength: 'high' },
+        ],
+        allowedIds,
+        { claimIds: ['claim_001', 'claim_002'], evidenceIds: allowedIds },
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it('targetClaimId di luar klaim run ditolak', async () => {
+    await expect(
+      validator.validateChallenge(
+        [{ targetClaimId: 'claim_unknown', argument: 'This claim does not exist in the run.', strength: 'low' }],
+        allowedIds,
+        { claimIds: ['claim_001'], evidenceIds: allowedIds },
+      ),
+    ).rejects.toThrow(/targets unknown claim claim_unknown/);
+  });
+
+  it('evidenceId Bear tidak ada di DB ditolak', async () => {
+    await expect(
+      validator.validateChallenge(
+        [{ targetClaimId: 'claim_001', argument: 'Challenge based on invented data.', strength: 'low' }],
+        ['3f2504e0-4f89-11d3-9a0c-0305e82c3301'],
+        { claimIds: ['claim_001'], evidenceIds: allowedIds },
+      ),
+    ).rejects.toThrow(/does not exist in database \(bear challenge\)/);
+  });
+
+  it('evidenceId Bear ada di DB tapi milik run lain ditolak', async () => {
+    const otherRun = await db.execution.createRun({ ticker: 'BBRI', command: 'judge' });
+    const outsider = await db.evidence.save({
+      runId: otherRun.id,
+      ticker: 'BBRI',
+      source: 'sectors.company_report',
+      data: { roe: 20.3 },
+    });
+    await expect(
+      validator.validateChallenge(
+        [{ targetClaimId: 'claim_001', argument: 'Challenge based on another run data.', strength: 'low' }],
+        [outsider.id],
+        { claimIds: ['claim_001'], evidenceIds: allowedIds },
+      ),
+    ).rejects.toThrow(/not in allowed set for this run \(bear challenge\)/);
+  });
+});
