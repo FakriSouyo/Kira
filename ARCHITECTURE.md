@@ -150,6 +150,7 @@ Run yang gagal tetap tercatat di `executions` dengan status `failed`.
 | 24 | Phase 3 Task 3 — Where SQL-native | `buildWhereClause` mapping `profitable→roe>0`, `growing→yoy_quarter_revenue_growth>0`, `screen` kirim `?where=` encode + fallback 400→tanpa where. | Menutup #14b/#18; `where.test.ts` 6 tests, `pnpm check` 191/191. |
 | 25 | Phase 4 — Session UX + Web preview | `/history [--limit]` (listRuns), `/session <runId>` (getExecutionWithArtifacts→markdown), `/resume` alias, `/web [--port]` tiny `node:http` server (GET / + /api/history + /api/run/:id), `JudgeArtifacts.conditionalUsed` badge di renderer. | `/web` tidak auto-start, default 3280 (hindari DSH 3080); `history.test.ts` (3) + `web.test.ts` (3), `pnpm check` 197/197. |
 | 26 | Phase 5 — Version + Metrics | `package.json` `0.1.0→0.2.0-rc`, `VERSION` dari `package.json` + `/version` command, `--version` CLI flag, `formatDuration` + `/history` `Time Xs`, `renderHelp` lengkap (history/session/resume/web/export/version). | Fallback `0.1.0` bila file tak ada; `version.test.ts` (3) + `metrics.test.ts` (3), `pnpm check` 203/203. |
+| 27 | Phase 6 — Final RC | `0.2.0-rc→0.2.0` + `eval.md` agregat 0→6 vs addendum §04–§29, gate final. **Stop di Phase 6** (Phase 7 pgvector/Tauri deferred Future). | `eval.md` + `pnpm check` 203/203, `--version` → `0.2.0`. |
 
 ## 9. Struktur Data (ringkas)
 

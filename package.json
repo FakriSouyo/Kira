@@ -1,7 +1,7 @@
 {
   "name": "finharness",
   "private": true,
-  "version": "0.2.0-rc",
+  "version": "0.2.0",
   "type": "module",
   "packageManager": "pnpm@11.7.0",
   "engines": {
