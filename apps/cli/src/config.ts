@@ -23,6 +23,10 @@ interface ConfigFile {
     router?: LLMModelFile;
   };
   sectors_api?: {
+    /**
+     * Legacy — preferensi dipindah ke `.credentials.json` (§12). Dipertahankan
+     * sebagai fallback backward-compat, prioritas di bawah env & credentials.
+     */
     key?: string;
     base_url?: string;
     cache_ttl_hours?: number;
@@ -38,7 +42,21 @@ interface ConfigFile {
   };
 }
 
-/** Konfigurasi runtime hasil merge: env (paling tinggi) → config.json → default. */
+/**
+ * Bentuk file kredensial terpisah (addendum §12 · .credentials.json) — hanya
+ * menyimpan nilai key mentah, bukan pengaturan. Dipisah dari `config.json`
+ * agar isi config selalu bersih (aman di-screenshot/di-share). Prioritas key:
+ * env → .credentials.json → config.json (legacy) → empty.
+ */
+interface CredentialsFile {
+  llm?: {
+    agent?: { api_key?: string };
+    router?: { api_key?: string };
+  };
+  sectors_api?: { key?: string };
+}
+
+/** Konfigurasi runtime hasil merge: env (tertinggi) → .credentials.json → config.json → default. */
 export interface FinharnessConfig {
   homeDir: string;
   llm: { agent: LLMModelConfig; router: LLMModelConfig };
@@ -72,6 +90,17 @@ function readConfigFile(homeDir: string): ConfigFile | null {
   }
 }
 
+/** Baca `.credentials.json` (opsional). Kalau absen/korup → diabaikan (fallback ke env/config). */
+function readCredentialsFile(homeDir: string): CredentialsFile | null {
+  const path = join(homeDir, '.credentials.json');
+  if (!existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as CredentialsFile;
+  } catch {
+    return null;
+  }
+}
+
 type Provider = LLMModelConfig['provider'];
 function providerOr(value: string | undefined): Provider {
   return value === 'anthropic' ? 'anthropic' : 'openai';
@@ -81,6 +110,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
   const homeDir =
     overrides.homeDir ?? process.env[ENV.home] ?? join(homedir(), DATA_DIR_NAME);
   const file = readConfigFile(homeDir);
+  const cred = readCredentialsFile(homeDir);
 
   const fileAgent = file?.llm?.agent;
   const fileRouter = file?.llm?.router;
@@ -97,7 +127,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
     temperature: fileAgent?.temperature ?? DEFAULT_AGENT_CONFIG.temperature,
     maxTokens: fileAgent?.maxTokens ?? DEFAULT_AGENT_CONFIG.maxTokens,
     baseURL: envBaseUrl ?? fileAgent?.base_url,
-    apiKey: envApiKey ?? fileAgent?.api_key,
+    apiKey: envApiKey ?? cred?.llm?.agent?.api_key ?? fileAgent?.api_key,
   };
   const router: LLMModelConfig = {
     provider:
@@ -110,7 +140,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
     temperature: fileRouter?.temperature ?? DEFAULT_ROUTER_CONFIG.temperature,
     maxTokens: fileRouter?.maxTokens ?? DEFAULT_ROUTER_CONFIG.maxTokens,
     baseURL: envBaseUrl ?? fileRouter?.base_url,
-    apiKey: envApiKey ?? fileRouter?.api_key,
+    apiKey: envApiKey ?? cred?.llm?.router?.api_key ?? fileRouter?.api_key,
   };
 
   const envMockSectors = process.env[ENV.mockSectors];
@@ -127,7 +157,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
     homeDir,
     llm: { agent, router },
     sectors: {
-      apiKey: process.env.SECTORS_API_KEY ?? file?.sectors_api?.key ?? '',
+      apiKey: process.env.SECTORS_API_KEY ?? cred?.sectors_api?.key ?? file?.sectors_api?.key ?? '',
       baseUrl: file?.sectors_api?.base_url ?? 'https://api.sectors.app/v1',
       cacheTtlHours: file?.sectors_api?.cache_ttl_hours ?? 24,
       newsCacheTtlHours: file?.sectors_api?.news_cache_ttl_hours ?? 1,

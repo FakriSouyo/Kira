@@ -1150,6 +1150,25 @@ export FINHARNESS_DEBUG=true
 }
 ```
 
+> **Pemisahan config vs kredensial (kebijakan — diwujudkan dari pola DSH).** Nilai key mentah
+> sedapat mungkin **tidak ditaruh di `config.json`**. Prioritas key: **env →
+> `~/.finharness/.credentials.json` → config.json (legacy) → default**.
+>
+> `~/.finharness/.credentials.json` *(opsional; mode file `0600` dianjurkan)* hanya menyimpan key:
+>
+> ```json
+> {
+>   "sectors_api": { "key": "sk-..." },
+>   "llm": { "agent": { "api_key": "sk-..." }, "router": { "api_key": "sk-..." } }
+> }
+> ```
+>
+> `config.json` kini difokuskan pada pengaturan non-secret (provider, model, `base_url`,
+> cache TTL). `sectors_api.key` / `llm.*.api_key` tetap dibaca sebagai **fallback legacy**
+> agar tidak breaking, tapi preferensi dipindah ke file credential; env (`SECTORS_API_KEY`,
+> `LLM_API_KEY`) menggantikan keduanya (CI/headless). Alasan: `config.json` yang bersih aman
+> di-screenshot/di-share untuk debug tanpa membawa key.
+
 #### Referensi DeepSeek Harness (Kebijakan)
 
 DSH dipakai sebagai **referensi pola, bukan kode yang disalin**: REPL loop, local-first data dir (`~/.dsh` → `~/.finharness`), append-only session log, content-addressed storage, credential handling (env + credential file, tidak pernah materialize ke proses). Jika nanti perlu membandingkan implementasi, salin hanya file terpilih (home-paths, session-persistence sqlite/jsonl, attachment-local) ke `reference/deepseek-harness/` untuk diselidiki — jangan seluruh monorepo DSH (web bundle, cordis, dll. tidak relevan untuk Phase 0).

@@ -139,3 +139,75 @@ describe('loadConfig (addendum §12)', () => {
     expect(config.mockLlm).toBe(true);
   });
 });
+
+describe('loadConfig — pemisahan credential `.credentials.json` (addendum §12)', () => {
+  const writeHome = (files: Record<string, unknown>): string => {
+    const home = mkdtempSync(join(tmpdir(), 'finharness-cred-'));
+    for (const [name, value] of Object.entries(files)) {
+      writeFileSync(join(home, name), typeof value === 'string' ? value : JSON.stringify(value));
+    }
+    return home;
+  };
+
+  it('.credentials.json mengisi apiKey (sectors, agent, router) saat env kosong', () => {
+    const home = writeHome({
+      '.credentials.json': {
+        sectors_api: { key: 'sk-cred-sectors' },
+        llm: { agent: { api_key: 'sk-cred-agent' }, router: { api_key: 'sk-cred-router' } },
+      },
+    });
+    try {
+      const config = loadConfig({ homeDir: home });
+      expect(config.sectors.apiKey).toBe('sk-cred-sectors');
+      expect(config.llm.agent.apiKey).toBe('sk-cred-agent');
+      expect(config.llm.router.apiKey).toBe('sk-cred-router');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('env tetap mengalahkan .credentials.json', () => {
+    const home = writeHome({
+      '.credentials.json': { sectors_api: { key: 'sk-cred-sectors' }, llm: { agent: { api_key: 'sk-cred-agent' } } },
+    });
+    try {
+      setEnv('SECTORS_API_KEY', 'sk-env');
+      setEnv('LLM_API_KEY', 'sk-env-llm');
+      const config = loadConfig({ homeDir: home });
+      expect(config.sectors.apiKey).toBe('sk-env');
+      expect(config.llm.agent.apiKey).toBe('sk-env-llm');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('.credentials.json mengalahkan key legacy di config.json (bukan breaking)', () => {
+    const home = writeHome({
+      'config.json': { sectors_api: { key: 'sk-config' }, llm: { agent: { api_key: 'sk-config-agent' } } },
+      '.credentials.json': {
+        sectors_api: { key: 'sk-cred-sectors' },
+        llm: { agent: { api_key: 'sk-cred-agent' } },
+      },
+    });
+    try {
+      const config = loadConfig({ homeDir: home });
+      expect(config.sectors.apiKey).toBe('sk-cred-sectors');
+      expect(config.llm.agent.apiKey).toBe('sk-cred-agent');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('.credentials.json korup diabaikan → tetap fallback ke config.json', () => {
+    const home = writeHome({
+      'config.json': { sectors_api: { key: 'sk-config' } },
+      '.credentials.json': '{not json',
+    });
+    try {
+      const config = loadConfig({ homeDir: home });
+      expect(config.sectors.apiKey).toBe('sk-config');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});

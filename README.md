@@ -63,7 +63,23 @@ Atau via `~/.finharness/config.json`:
 }
 ```
 
-Prioritas konfigurasi: **env → config.json → default** (env menang bila keduanya ada).
+> **Kredensial terpisah (`.credentials.json`, opsional).** Untuk menghindari key mentah
+> nangkring di `config.json` (aman dibagikan/screenshot untuk debug), preferensi key:
+> **env → `~/.finharness/.credentials.json` → config.json (legacy) → default**.
+>
+> ```json
+> // ~/.finharness/.credentials.json
+> {
+>   "sectors_api": { "key": "..." },
+>   "llm": { "agent": { "api_key": "..." }, "router": { "api_key": "..." } }
+> }
+> ```
+>
+> `sectors_api.key` / `llm.*.api_key` di `config.json` (baris `"key"` di atas) tetap dibaca
+> sebagai **fallback legacy** agar tidak breaking. Untuk CI/headless cukup pakai env
+> (`SECTORS_API_KEY`, `LLM_API_KEY`) yang menggantikan keduanya.
+
+Prioritas konfigurasi: **env → `.credentials.json` → config.json → default** (env menang bila ada).
 
 ### Custom API provider (DeepSeek, OpenRouter, Ollama lokal, dsb.)
 
