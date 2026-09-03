@@ -1140,7 +1140,7 @@ export FINHARNESS_DEBUG=true
   },
   "sectors_api": {
     "key": "your_api_key_here",
-    "base_url": "https://api.sectors.app/v1",
+    "base_url": "https://api.sectors.app/v2",
     "cache_ttl_hours": 24
   },
   "features": {
@@ -2568,6 +2568,17 @@ finharness-sectors.app/
 > namanya di §27 menjadi keputusan desain yang dapat dieksekusi. Implementasinya
 > berjalan langsung di atas kode Phase 0 + Debate ronde — **tanpa migrasi schema
 > DB** (evidence memakai kolom `data` JSON yang sudah ada).
+>
+> **Migrasi API v1→v2 (diverifikasi terhadap `docs.sectors.app` + live, 2026-05+).**
+> API Sectors v1 *discontinued* (HTTP 410) → client memakai **v2**: base URL
+> `/v2`, auth `Authorization: <key>` **tanpa** prefix Bearer. Jalur v2 →
+> canonical:
+> `/company/report/{s}/`, `/financials/quarterly/{s}/` (array), `/daily/{s}/`
+> (array), `/foreign-flow/{s}/` (`{data:[{net_foreign_inflow}]}`), `/news/?symbols=`
+> (`{results}`), `/filings/?symbol=` (`{results}`), `/companies/` (screener).
+> **Tidak ada endpoint sentimen v2** → `getSentiment` diturunkan dari tags berita
+> + sign foreign-flow. `quarterly` v2 hanya mengembalikan satu kuartal per
+> panggilan (butuh `report_date`) → `revenueGrowthYoy` kosong di real (deviasi #17).
 
 #### 24-A.1 Tujuan & Batas
 

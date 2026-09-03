@@ -50,3 +50,19 @@ Checklist hidup ber-status. Sumber task: `addendum_v3.0.md` §24-A.7. Status:
 - Path HTTP Market/News (`/daily-transaction`, `/foreign-flow`, `/news`, `/filings`, `/sentiment`)
   memakai bentuk logis yang **harus dikonfirmasi** terhadap dokumentasi Sectors API sebelum
   produksi (Deviasi #14).
+
+### Catatan migrasi Sectors API v1→v2 (sudah diverifikasi, 2026-05+)
+
+- v1 **discontinued** (HTTP 410) → client, mock, dan test dimigrasi ke **v2**:
+  base URL `/v2`, auth `Authorization: <key>` (tanpa Bearer), jalur
+  `/company/report/`, `/financials/quarterly/` (array), `/daily/` (array),
+  `/foreign-flow/` (`{data}`), `/news/?symbols=` (`{results}`), `/filings/?symbol=`
+  (`{results}`), `/companies/` (screener — `where` SQL).
+- **Sentiment**: tidak ada endpoint v2 → `getSentiment` **diturunkan** (tags berita
+  + sign foreign-flow). Sumber evidence `sectors.sentiment` tetap 7.
+- Transform v2→canonical terpusat di `packages/sectors-api/src/client.ts`: konsumen
+  (agent opaque / workflow / renderer) **tidak berubah**. Smoke test live `BBCA`
+  berhasil (report/daily/foreign/news/filings/sentiment) — Deviasi #14/#16/#17
+  tercatat di `ARCHITECTURE.md`.
+- Deviasi #17: `quarterly` v2 hanya 1 kuartal/panggilan → growth YoY kosong di real
+  (mock tetap mengisi). Peningkatan lanjutan: isi dari `yoy_quarter_*_growth` report.

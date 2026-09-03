@@ -187,7 +187,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
     llm: { agent, router },
     sectors: {
       apiKey: process.env.SECTORS_API_KEY ?? cred?.sectors_api?.key ?? file?.sectors_api?.key ?? '',
-      baseUrl: file?.sectors_api?.base_url ?? 'https://api.sectors.app/v1',
+      baseUrl: file?.sectors_api?.base_url ?? 'https://api.sectors.app/v2',
       cacheTtlHours: file?.sectors_api?.cache_ttl_hours ?? 24,
       newsCacheTtlHours: file?.sectors_api?.news_cache_ttl_hours ?? 1,
       mock: sectorsMock,

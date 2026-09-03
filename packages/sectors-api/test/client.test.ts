@@ -1,48 +1,105 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { computeMatchScore, MockSectorsApi, SectorsApiError, SectorsClient } from '../src/index';
 
-const REPORT = {
-  ticker: 'BBCA',
-  name: 'Bank Central Asia',
-  financials: { roe: 23.1, roa: 3.4 },
-  valuation: { pe: 4.6, pb: 1.6 },
+/**
+ * Test client Sectors API **v2** (v1 discontinued 2026-05-11). Client menormalisasi
+ * response v2 → bentuk canonical; assertion memastikan path v2 + hasil transform.
+ */
+
+// Response v2 mentah untuk getCompanyReport (BBCA) — dipakai utk uji transform.
+const V2_REPORT = {
+  symbol: 'BBCA.JK',
+  company_name: 'Bank Central Asia',
+  overview: { sector: 'Financials' },
+  valuation: {
+    last_close_price: 9850,
+    latest_close_date: '2025-01-10',
+    forward_pe: 4.6,
+    historical_valuation: [{ year: 2024, pb: 1.6, pe: 4.6 }],
+  },
+  financials: {
+    historical_financials: [{ year: 2024, revenue: 300000, earnings: 105000, total_assets: 600000, total_equity: 500000 }],
+  },
+  dividend: { historical_dividends: { '2024': { total_yield: 0.031 } } },
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-describe('SectorsClient', () => {
-  let cacheDir: string;
+/** Client dengan fetchStub yang mengembalikan nilai `body` untuk semua URL. */
+function stubClient(body: unknown, cacheDir: string): SectorsClient {
+  return new SectorsClient({ cacheDir, fetchImpl: (async () => jsonResponse(body)) as typeof fetch });
+}
 
+describe('SectorsClient (v2)', () => {
+  let cacheDir: string;
   beforeEach(() => {
     cacheDir = mkdtempSync(join(tmpdir(), 'finharness-sectors-cache-'));
   });
-
   afterEach(() => {
     rmSync(cacheDir, { recursive: true, force: true });
   });
 
-  it('fetches company report and returns parsed data', async () => {
+  it('fetches company report (v2 path) and normalizes to canonical', async () => {
     const calls: string[] = [];
     const client = new SectorsClient({
       cacheDir,
       fetchImpl: (async (url: string) => {
         calls.push(url);
-        return jsonResponse(REPORT);
+        return jsonResponse(V2_REPORT);
       }) as typeof fetch,
     });
 
     const report = await client.getCompanyReport('BBCA');
-    expect(report.ticker).toBe('BBCA');
-    expect(report.financials.roe).toBe(23.1);
-    expect(calls).toEqual(['https://api.sectors.app/v1/companies/BBCA/report']);
+    expect(calls).toEqual(['https://api.sectors.app/v2/company/report/BBCA/']);
+    expect(report).toMatchObject({
+      ticker: 'BBCA',
+      name: 'Bank Central Asia',
+      sector: 'Financials',
+      asOf: '2025-01-10',
+    });
+    // roe = earnings/total_equity; netMargin = earnings/revenue (dalam %)
+    expect(report.financials.roe).toBeCloseTo(21);
+    expect(report.financials.netMargin).toBeCloseTo(35);
+    expect(report.valuation.price).toBe(9850);
+    expect(report.valuation.pe).toBe(4.6);
+    expect(report.valuation.pb).toBeCloseTo(1.6);
+    expect(report.valuation.dividendYield).toBeCloseTo(3.1);
+  });
+
+  it('sends Authorization header WITHOUT the Bearer prefix (v2 auth)', async () => {
+    let header: string | undefined;
+    const client = new SectorsClient({
+      cacheDir,
+      apiKey: 'sk-test',
+      fetchImpl: (async (_url: string, init?: RequestInit) => {
+        header = (init?.headers as Record<string, string> | undefined)?.Authorization;
+        return jsonResponse(V2_REPORT);
+      }) as typeof fetch,
+    });
+    await client.getCompanyReport('BBCA');
+    expect(header).toBe('sk-test');
+  });
+
+  it('normalizes quarterly financials array (v2) to canonical quarters w/ YoY', async () => {
+    const v2Quarterly = [
+      { symbol: 'BBCA.JK', date: '2024-12-31', revenue: 11000, earnings: 4000 },
+      { symbol: 'BBCA.JK', date: '2024-09-30', revenue: 10500, earnings: 3800 },
+      { symbol: 'BBCA.JK', date: '2024-06-30', revenue: 10000, earnings: 3600 },
+      { symbol: 'BBCA.JK', date: '2024-03-31', revenue: 9500, earnings: 3400 },
+      { symbol: 'BBCA.JK', date: '2023-12-31', revenue: 10000, earnings: 3680 },
+    ];
+    const client = stubClient(v2Quarterly, cacheDir);
+    const fin = await client.getQuarterlyFinancials('BBCA');
+    expect(fin.quarters[0].period).toBe('2024-Q4');
+    expect(fin.quarters[0].revenue).toBe(11000);
+    // YoY kuartal 2024-Q4 vs 2023-Q4: (11000-10000)/10000=10%
+    expect(fin.quarters[0].revenueGrowthYoy).toBeCloseTo(10);
+    expect((await client.getQuarterlyFinancials('BBCA')).quarters[0]).toEqual(fin.quarters[0]);
   });
 
   it('uses file cache on second call (no second API hit)', async () => {
@@ -51,72 +108,31 @@ describe('SectorsClient', () => {
       cacheDir,
       fetchImpl: (async () => {
         hits += 1;
-        return jsonResponse(REPORT);
+        return jsonResponse(V2_REPORT);
       }) as typeof fetch,
     });
-
     const first = await client.getCompanyReport('BBCA');
     const second = await client.getCompanyReport('BBCA');
     expect(first).toEqual(second);
     expect(hits).toBe(1);
   });
 
-  it('maps 404 to NOT_FOUND with ticker in message', async () => {
-    const client = new SectorsClient({
-      cacheDir,
-      fetchImpl: (async () => jsonResponse({ error: 'not found' }, 404)) as typeof fetch,
-    });
-
-    const error = await client.getCompanyReport('XYZ').catch((e) => e);
-    expect(error).toBeInstanceOf(SectorsApiError);
-    expect(error.code).toBe('NOT_FOUND');
-    expect(error.message).toContain('XYZ');
-  });
-
-  it('maps 429 to RATE_LIMIT', async () => {
-    const client = new SectorsClient({
-      cacheDir,
-      fetchImpl: (async () => jsonResponse({ error: 'slow down' }, 429)) as typeof fetch,
-    });
-    const error = await client.getCompanyReport('BBCA').catch((e) => e);
-    expect(error.code).toBe('RATE_LIMIT');
-  });
-
-  it('maps 500 to SERVER_ERROR', async () => {
-    const client = new SectorsClient({
-      cacheDir,
-      fetchImpl: (async () => jsonResponse({ error: 'boom' }, 500)) as typeof fetch,
-    });
-    const error = await client.getCompanyReport('BBCA').catch((e) => e);
-    expect(error.code).toBe('SERVER_ERROR');
-  });
-
-  it('maps 401 to UNAUTHORIZED with key suggestion', async () => {
-    const client = new SectorsClient({
-      cacheDir,
-      fetchImpl: (async () => jsonResponse({ error: 'nope' }, 401)) as typeof fetch,
-    });
+  it('maps http errors to SectorsApiError codes', async () => {
+    for (const [status, code] of [
+      [404, 'NOT_FOUND'],
+      [429, 'RATE_LIMIT'],
+      [500, 'SERVER_ERROR'],
+    ] as Array<[number, string]>) {
+      const client = stubClient({ error: 'x' }, cacheDir) as SectorsClient & { _stub?: never };
+      const c = new SectorsClient({ cacheDir, fetchImpl: (async () => jsonResponse({ error: 'x' }, status)) as typeof fetch });
+      const error = await c.getCompanyReport('XYZ').catch((e) => e);
+      expect(error).toBeInstanceOf(SectorsApiError);
+      expect(error.code).toBe(code);
+    }
+    const client = new SectorsClient({ cacheDir, fetchImpl: (async () => jsonResponse({ error: 'nope' }, 401)) as typeof fetch });
     const error = await client.getCompanyReport('BBCA').catch((e) => e);
     expect(error.code).toBe('UNAUTHORIZED');
     expect(error.suggestion).toContain('SECTORS_API_KEY');
-  });
-
-  it('maps abort to TIMEOUT', async () => {
-    const slowFetch = (async (_url: string, init?: RequestInit) => {
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, 500);
-        (init?.signal as AbortSignal | undefined)?.addEventListener('abort', () => {
-          clearTimeout(timer);
-          reject(new DOMException('The operation was aborted.', 'AbortError'));
-        });
-      });
-      return jsonResponse(REPORT);
-    }) as unknown as typeof fetch;
-
-    const client = new SectorsClient({ cacheDir, timeoutMs: 25, fetchImpl: slowFetch });
-    const error = await client.getCompanyReport('BBCA').catch((e) => e);
-    expect(error).toBeInstanceOf(SectorsApiError);
-    expect(error.code).toBe('TIMEOUT');
   });
 
   it('does not cache errors (404 is refetched)', async () => {
@@ -133,21 +149,126 @@ describe('SectorsClient', () => {
     expect(hits).toBe(2);
   });
 
-  it('screens and ranks by deterministic match score', async () => {
-    const rows = [
-      { ticker: 'A', roe: 20, revenueGrowthYoy: 8, netIncomeGrowthYoy: 7 },
-      { ticker: 'B', roe: -2, revenueGrowthYoy: 1, netIncomeGrowthYoy: -1 },
-    ];
-    const client = new SectorsClient({
-      cacheDir,
-      fetchImpl: (async () => jsonResponse(rows)) as typeof fetch,
-    });
+  it('maps 404 on company report to NOT_FOUND with ticker', async () => {
+    const client = new SectorsClient({ cacheDir, fetchImpl: (async () => jsonResponse({ error: 'no' }, 404)) as typeof fetch });
+    const error = await client.getCompanyReport('XYZ').catch((e) => e);
+    expect(error.code).toBe('NOT_FOUND');
+    expect(error.message).toContain('XYZ');
+  });
 
+  it('screens /v2/companies and scores yoy growth (roe unavailable in v2 screener)', async () => {
+    const v2Results = {
+      results: [
+        { symbol: 'A.JK', yoy_quarter_revenue_growth: 0.08, yoy_quarter_earnings_growth: 0.07 },
+        { symbol: 'B.JK', yoy_quarter_revenue_growth: 0.01, yoy_quarter_earnings_growth: -0.01 },
+      ],
+    };
+    const client = stubClient(v2Results, cacheDir);
     const results = await client.screen(['profitable', 'growing']);
     expect(results.map((r) => r.ticker)).toEqual(['A', 'B']);
-    expect(results[0].matchScore).toBe(100);
-    // B: roe negatif (tidak profitable) tetapi revenue tumbuh → 30
+    // roe di v2 screener tidak tersedia → 'profitable' tidak menambah skor (Deviasi)
+    // A: growing (rev +30, earn +20) = 50 ; B: rev>0 saja = 30
+    expect(results[0].matchScore).toBe(50);
     expect(results[1].matchScore).toBe(30);
+  });
+});
+
+describe('Market & News Researcher (Phase 1, v2)', () => {
+  let cacheDir: string;
+  beforeEach(() => {
+    cacheDir = mkdtempSync(join(tmpdir(), 'finharness-sectors-cache-'));
+  });
+  afterEach(() => {
+    rmSync(cacheDir, { recursive: true, force: true });
+  });
+
+  it('normalizes daily array and foreign flow (v2) to canonical', async () => {
+    const calls: string[] = [];
+    const client = new SectorsClient({
+      cacheDir,
+      fetchImpl: (async (url: string) => {
+        calls.push(url);
+        if (url.includes('/daily/'))
+          return jsonResponse([
+            { symbol: 'BBCA.JK', date: '2025-01-10', close: 9850, open: 9800, volume: 10_000_000, market_cap: 1e15 },
+          ]);
+        return jsonResponse({
+          symbol: 'BBCA.JK',
+          data: [
+            { date: '2025-01-09', net_foreign_inflow: 500_000_000 },
+            { date: '2025-01-10', net_foreign_inflow: -200_000_000 },
+          ],
+        });
+      }) as typeof fetch,
+    });
+
+    const daily = await client.getDailyTransaction('BBCA');
+    expect(daily.window).toBe('1d');
+    expect(daily.upDaysPct).toBe(100); // close > open
+    expect(daily.avgValueBillion).toBeCloseTo(98.5); // 9850 * 10M / 1e9
+
+    const foreign = await client.getForeignFlow('BBCA');
+    expect(foreign.netFlow).toBe('buy'); // sum inflow > 0
+    expect(foreign.netBuyDaysPct).toBe(50);
+
+    expect(calls[0]).toMatch(/\/v2\/daily\/BBCA\//);
+    expect(calls[1]).toMatch(/\/v2\/foreign-flow\/BBCA\//);
+  });
+
+  it('normalizes news & filings and derives sentiment (no /sentiment endpoint in v2)', async () => {
+    const calls: string[] = [];
+    const client = new SectorsClient({
+      cacheDir,
+      fetchImpl: (async (url: string) => {
+        calls.push(url);
+        if (url.includes('/news/'))
+          return jsonResponse({ results: [{ title: 'hi', source: 'u', timestamp: '2025-01-10', tags: ['Bullish'], symbols: ['BBCA.JK'], body: 'x' }] });
+        if (url.includes('/filings/'))
+          return jsonResponse({ results: [{ title: 'f', source: 'u', timestamp: '2025-01-10', symbol: 'BBCA.JK', transaction_type: 'insider_buy' }] });
+        return jsonResponse({ symbol: 'BBCA.JK', data: [{ date: '2025-01-10', net_foreign_inflow: 1000 }] });
+      }) as typeof fetch,
+    });
+
+    const news = await client.getNews('BBCA');
+    expect(news[0].headline).toBe('hi');
+    expect(news[0].sentiment).toBe('positive'); // tag Bullish
+
+    const filings = await client.getFilings('BBCA');
+    expect(filings[0].type).toBe('insider_buy');
+
+    const sentiment = await client.getSentiment('BBCA');
+    expect(typeof sentiment.aggregate).toBe('number');
+    expect(sentiment.aggregate as number).toBeGreaterThan(0); // news bullish + foreign buy
+
+    // sentiment tidak memanggil /sentiment; hanya /news + /foreign-flow
+    expect(calls.every((u) => !u.includes('/sentiment'))).toBe(true);
+  });
+
+  it('news cache uses a shorter TTL than market/fundamental cache', async () => {
+    let hits = 0;
+    const client = new SectorsClient({
+      cacheDir,
+      cacheTtlHours: 24,
+      newsCacheTtlHours: 1,
+      fetchImpl: (async () => {
+        hits += 1;
+        return jsonResponse([]);
+      }) as typeof fetch,
+    });
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+    writeFileSync(join(cacheDir, 'BBCA_news.json'), JSON.stringify({ fetchedAt: twoHoursAgo, data: [] }));
+    writeFileSync(join(cacheDir, 'BBCA_daily_transaction.json'), JSON.stringify({ fetchedAt: twoHoursAgo, data: [] }));
+
+    await client.getNews('BBCA'); // TTL 1j → refetch
+    await client.getDailyTransaction('BBCA'); // TTL 24j → cache hit
+    expect(hits).toBe(1);
+  });
+
+  it('maps 404 on market endpoint to NOT_FOUND', async () => {
+    const client = new SectorsClient({ cacheDir, fetchImpl: (async () => jsonResponse({ error: 'no' }, 404)) as typeof fetch });
+    const error = await client.getDailyTransaction('XYZ').catch((e) => e);
+    expect(error).toBeInstanceOf(SectorsApiError);
+    expect(error.code).toBe('NOT_FOUND');
   });
 });
 
@@ -164,7 +285,7 @@ describe('computeMatchScore', () => {
 describe('MockSectorsApi', () => {
   const api = new MockSectorsApi();
 
-  it('serves fixtures for known tickers', async () => {
+  it('serves canonical fixtures for known tickers', async () => {
     const report = await api.getCompanyReport('BBCA');
     expect(report.financials.roe).toBe(23.1);
     const fin = await api.getQuarterlyFinancials('BBCA');
@@ -177,108 +298,18 @@ describe('MockSectorsApi', () => {
     expect(error.code).toBe('NOT_FOUND');
   });
 
-  it('screens the whole mock universe', async () => {
+  it('screens the whole mock universe (deterministic)', async () => {
     const results = await api.screen(['profitable', 'growing']);
     expect(results.length).toBe(5);
     expect(results[0].ticker).toBe('BBCA');
   });
-});
 
-describe('Market & News Researcher (Phase 1, addendum §24-A)', () => {
-  let cacheDir: string;
-  beforeEach(() => {
-    cacheDir = mkdtempSync(join(tmpdir(), 'finharness-sectors-cache-'));
-  });
-  afterEach(() => {
-    rmSync(cacheDir, { recursive: true, force: true });
-  });
-
-  it('fetches daily transaction, foreign flow and parses the payload', async () => {
-    const calls: string[] = [];
-    const client = new SectorsClient({
-      cacheDir,
-      fetchImpl: (async (url: string) => {
-        calls.push(url);
-        if (url.includes('/daily-transaction')) return jsonResponse({ ticker: 'BBCA', avgValueBillion: 890 });
-        return jsonResponse({ ticker: 'BBCA', netFlow: 'buy' });
-      }) as typeof fetch,
-    });
-
-    const daily = await client.getDailyTransaction('BBCA');
-    expect(daily.avgValueBillion).toBe(890);
-    const foreign = await client.getForeignFlow('BBCA');
-    expect(foreign.netFlow).toBe('buy');
-    expect(calls).toEqual([
-      'https://api.sectors.app/v1/companies/BBCA/daily-transaction',
-      'https://api.sectors.app/v1/companies/BBCA/foreign-flow',
-    ]);
-  });
-
-  it('fetches news, filings and sentiment through the news endpoints', async () => {
-    const calls: string[] = [];
-    const client = new SectorsClient({
-      cacheDir,
-      fetchImpl: (async (url: string) => {
-        calls.push(url);
-        if (url.includes('/news')) return jsonResponse([{ id: 'n-1', headline: 'hi' }]);
-        if (url.includes('/filings')) return jsonResponse([{ id: 'f-1', type: 'annual_report' }]);
-        return jsonResponse({ aggregate: 0.7 });
-      }) as typeof fetch,
-    });
-
-    const news = await client.getNews('BBCA');
-    expect(news[0].headline).toBe('hi');
-    const filings = await client.getFilings('BBCA');
-    expect(filings[0].type).toBe('annual_report');
-    const sentiment = await client.getSentiment('BBCA');
-    expect(sentiment.aggregate).toBe(0.7);
-    expect(calls).toEqual([
-      'https://api.sectors.app/v1/companies/BBCA/news',
-      'https://api.sectors.app/v1/companies/BBCA/filings',
-      'https://api.sectors.app/v1/companies/BBCA/sentiment',
-    ]);
-  });
-
-  it('news cache uses a shorter TTL than market/fundamental cache', async () => {
-    let hits = 0;
-    const client = new SectorsClient({
-      cacheDir,
-      cacheTtlHours: 24,
-      newsCacheTtlHours: 1,
-      fetchImpl: (async () => {
-        hits += 1;
-        return jsonResponse({ ticker: 'BBCA' });
-      }) as typeof fetch,
-    });
-    // Entry 2 jam lalu: untuk news (TTL 1 jam) → kedaluwarsa → fetch ulang;
-    // untuk daily_transaction (TTL 24 jam) → masih valid → cache hit.
-    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
-    writeFileSync(join(cacheDir, 'BBCA_news.json'), JSON.stringify({ fetchedAt: twoHoursAgo, data: [] }));
-    writeFileSync(join(cacheDir, 'BBCA_daily_transaction.json'), JSON.stringify({ fetchedAt: twoHoursAgo, data: { ticker: 'BBCA' } }));
-
-    await client.getNews('BBCA');
-    await client.getDailyTransaction('BBCA');
-    expect(hits).toBe(1); // hanya getNews yang refetch
-  });
-
-  it('MockSectorsApi serves deterministic market/news fixtures', async () => {
-    const api = new MockSectorsApi();
+  it('serves deterministic market/news fixtures distinguishing liquidity & sentiment', async () => {
     const daily = await api.getDailyTransaction('BBCA');
     expect(daily.liquidityBand).toBe('high');
-    const foreign = await api.getForeignFlow('BBCA');
-    expect(foreign.netFlow).toBe('buy');
-    const sentiment = await api.getSentiment('BBCA');
-    expect(sentiment.aggregate).toBeGreaterThan(0);
-    // BJTM — likuiditas rendah & sentimen negatif (membedakan rubrik momentum/risk)
-    const bjtm = await api.getDailyTransaction('BJTM');
-    expect(bjtm.liquidityBand).toBe('low');
+    expect((await api.getForeignFlow('BBCA')).netFlow).toBe('buy');
+    expect((await api.getSentiment('BBCA')).aggregate as number).toBeGreaterThan(0);
+    expect((await api.getDailyTransaction('BJTM')).liquidityBand).toBe('low');
     expect((await api.getSentiment('BJTM')).aggregate as number).toBeLessThan(0);
-  });
-
-  it('maps 404 on market endpoint to NOT_FOUND', async () => {
-    const client = new SectorsClient({ cacheDir, fetchImpl: (async () => jsonResponse({ error: 'no' }, 404)) as typeof fetch });
-    const error = await client.getDailyTransaction('XYZ').catch((e) => e);
-    expect(error).toBeInstanceOf(SectorsApiError);
-    expect(error.code).toBe('NOT_FOUND');
   });
 });

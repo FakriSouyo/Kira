@@ -58,7 +58,7 @@ Atau via `~/.finharness/config.json`:
     "agent":  { "provider": "openai", "model": "gpt-4o", "temperature": 0.2, "maxTokens": 2000 },
     "router": { "provider": "openai", "model": "gpt-4o-mini", "temperature": 0.0, "maxTokens": 256 }
   },
-  "sectors_api": { "key": "SECTORS_API_KEY", "base_url": "https://api.sectors.app/v1", "cache_ttl_hours": 24 },
+  "sectors_api": { "key": "SECTORS_API_KEY", "base_url": "https://api.sectors.app/v2", "cache_ttl_hours": 24 },
   "features": { "auto_sync": true, "mock_mode": false }
 }
 ```
