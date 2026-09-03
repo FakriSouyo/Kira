@@ -27,6 +27,13 @@ deepseek-harness/
 # Working dir tool agent (plans, scratch)
 .zcode/
 
+# Artefak skill/tooling AI — BUKAN bagian dari repo ini
+.agents/
+.aider-desk/
+.freebuff/
+SKILL.md
+skills-lock.json
+
 # IDE
 .idea/
 .vscode/
