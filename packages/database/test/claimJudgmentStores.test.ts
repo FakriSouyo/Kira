@@ -74,10 +74,18 @@ describe('JudgmentStoreSqlite (Task 14)', () => {
     expect(loaded!.breakdown.risk).toBeNull();
   });
 
-  it('UNIQUE(run_id) — satu judgment per run', async () => {
+  it('UNIQUE(run_id) — upsert: save kedua overwrite (conditional debate Phase 3)', async () => {
     const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
     await db.judgments.save({ runId: run.id, judgment: JUDGMENT });
-    await expect(db.judgments.save({ runId: run.id, judgment: JUDGMENT })).rejects.toThrow();
+    const updated = await db.judgments.save({
+      runId: run.id,
+      judgment: { ...JUDGMENT, score: 50, stance: 'neutral', summary: 'Updated after conditional' },
+    });
+    const loaded = await db.judgments.getByRun(run.id);
+    expect(loaded!.score).toBe(50);
+    expect(loaded!.stance).toBe('neutral');
+    expect(loaded!.summary).toBe('Updated after conditional');
+    expect(updated.score).toBe(50);
   });
 
   it('getByRun tanpa judgment → null', async () => {

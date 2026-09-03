@@ -67,6 +67,22 @@ export function computeMatchScore(row: ScreenerRow, criteria: string[]): number 
   return Math.min(100, score);
 }
 
+/**
+ * Build `where` SQL untuk Sectors v2 `/companies/?where=...` (Phase 3).
+ * Mapping: `profitable → roe>0`, `growing → yoy_quarter_revenue_growth>0`.
+ * Kriteria tak dikenal → diabaikan; bila tidak ada yang dikenal → null (fallback client-side).
+ */
+export function buildWhereClause(criteria: string[]): string | null {
+  const parts: string[] = [];
+  for (const c of criteria) {
+    const lc = c.toLowerCase();
+    if (lc === 'profitable') parts.push('roe>0');
+    else if (lc === 'growing') parts.push('yoy_quarter_revenue_growth>0');
+  }
+  if (parts.length === 0) return null;
+  return parts.join(' AND ');
+}
+
 function isAbortError(error: unknown): boolean {
   return (
     (error instanceof DOMException && error.name === 'AbortError') ||
@@ -451,10 +467,26 @@ export class SectorsClient implements SectorsApi {
   }
 
   async screen(criteria: string[]): Promise<ScreenerResult[]> {
-    // v2 memakai /v2/companies/ (envelope {results,pagination}). Tanpa filter
-    // `where=` utk input kriteria: ambil universe lalu skor client-side
-    // (deterministis, konsisten dgn mock). Deviasi #14b mencatat `where` SQL
-    // sebagai opsi lanjutan bila perlu.
+    const where = buildWhereClause(criteria);
+    // Phase 3: where SQL-native v2 bila kriteria dikenal — pre-filter server-side,
+    // fallback client-side bila where 400/500 atau kriteria tak dikenal.
+    if (where) {
+      try {
+        const rows = await this.request<V2Paged<V2ScreenerItem>>(
+          `/companies/?where=${encodeURIComponent(where)}&limit=200`,
+        );
+        return toScreenerRows(rows)
+          .map((row) => ({ ...row, matchScore: computeMatchScore(row, criteria) }))
+          .filter((r) => r.matchScore > 0)
+          .sort((a, b) => b.matchScore - a.matchScore || a.ticker.localeCompare(b.ticker));
+      } catch (error) {
+        if (error instanceof SectorsApiError && (error.code === 'BAD_REQUEST' || error.code === 'SERVER_ERROR')) {
+          // fallback: ambil universe tanpa where
+        } else {
+          throw error;
+        }
+      }
+    }
     const rows = await this.request<V2Paged<V2ScreenerItem>>(`/companies/?limit=200`);
     return toScreenerRows(rows)
       .map((row) => ({ ...row, matchScore: computeMatchScore(row, criteria) }))

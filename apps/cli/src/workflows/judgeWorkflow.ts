@@ -68,6 +68,7 @@ export async function judgeWorkflow(
   ticker: string,
   progress: JudgeProgress = () => {},
   events: (event: AgentEvent) => void = () => {},
+  opts: { conditional?: boolean } = {},
 ): Promise<JudgeArtifacts> {
   // Emit satu tool fetch (start + duration) — dipakai Agent-Events TUI (Task 2).
   const tool = async <T>(name: AgentToolName, fetcher: () => Promise<T>): Promise<T> => {
@@ -278,7 +279,7 @@ export async function judgeWorkflow(
     progress('judge', 'Weighing the debate against the rubrik...');
     const allClaims = [...bullClaims, ...storedRebuttalClaims];
     const conversation = await ctx.db.conversation.getByRun(run.id);
-    const judgment = await ctx.judge.evaluate({ ticker, claims: allClaims, conversation });
+    let judgment = await ctx.judge.evaluate({ ticker, claims: allClaims, conversation });
     await ctx.db.judgments.save({ runId: run.id, judgment });
     await ctx.db.conversation.addMessage({
       runId: run.id,
@@ -290,6 +291,81 @@ export async function judgeWorkflow(
       sequenceOrder: 4,
       metadata: { score: judgment.score, stance: judgment.stance },
     });
+
+    // 5b. Conditional debate — satu ronde ekstra bila neutral / 40–60 (Phase 3)
+    const needsExtra = opts.conditional && (judgment.stance === 'neutral' || (judgment.score >= 40 && judgment.score <= 60));
+    if (needsExtra) {
+      events({ type: 'phase', phase: 'bear', label: 'Conditional: re-challenging (score neutral).' });
+      progress('bear', 'Conditional: re-challenging bullish thesis (extra round)...');
+      const bear2 = await ctx.bear.challenge({ ticker, evidenceIds, bullClaims: [...bullClaims, ...storedRebuttalClaims] });
+      ctx.validator.assertSeenEvidence(bear2.evidenceIds, evidenceIds);
+      await ctx.validator.validateChallenge(
+        bear2.counterpoints,
+        bear2.evidenceIds,
+        { claimIds: [...bullClaims, ...storedRebuttalClaims].map((c) => c.claimId), evidenceIds },
+      );
+      const bear2Content =
+        bear2.reasoning +
+        '\n' +
+        bear2.counterpoints
+          .map((cp, i) => `Challenge #${i + 1} (targets claim ${cp.targetClaimId}, strength ${cp.strength}): ${cp.argument}`)
+          .join('\n');
+      await ctx.db.conversation.addMessage({
+        runId: run.id,
+        messageId: `${bear2.messageId}_conditional`,
+        agent: 'bear',
+        messageType: 'challenge',
+        content: bear2Content,
+        evidenceIds: bear2.evidenceIds,
+        sequenceOrder: 5,
+        metadata: { challengeCount: bear2.counterpoints.length, seenEvidenceIds: evidenceIds, conditional: true },
+      });
+
+      events({ type: 'phase', phase: 'bull', label: 'Conditional: responding to re-challenge.' });
+      progress('bull', 'Conditional: responding to re-challenge...');
+      const rebuttal2 = await ctx.bull.rebuttal({
+        ticker,
+        evidenceIds,
+        bearCounterpoints: bear2.counterpoints,
+      });
+      const rebuttal2Claims = await ctx.validator.validate(rebuttal2.claims, evidenceIds);
+      ctx.validator.assertSeenEvidence(
+        rebuttal2Claims.flatMap((c) => c.evidenceIds),
+        evidenceIds,
+      );
+      const storedRebuttal2Claims: Claim[] = rebuttal2Claims.map((c, i) => ({ ...c, claimId: `rebuttal_conditional_${i + 1}` }));
+      await ctx.db.conversation.addMessage({
+        runId: run.id,
+        messageId: `${rebuttal2.messageId}_conditional`,
+        agent: 'bull',
+        messageType: 'response',
+        content: rebuttal2.reasoning,
+        evidenceIds: rebuttal2.evidenceIds,
+        sequenceOrder: 6,
+        metadata: { claimCount: storedRebuttal2Claims.length, seenEvidenceIds: evidenceIds, conditional: true },
+      });
+      for (const claim of storedRebuttal2Claims) {
+        await ctx.db.claims.save({ runId: run.id, messageId: `${rebuttal2.messageId}_conditional`, claim });
+      }
+
+      // Re-evaluate judge dengan semua klaim (overwrite judgment via upsert)
+      events({ type: 'phase', phase: 'judge', label: 'Conditional: re-weighing debate.' });
+      progress('judge', 'Conditional: re-weighing debate against the rubrik...');
+      const allClaims2 = [...bullClaims, ...storedRebuttalClaims, ...storedRebuttal2Claims];
+      const conversation2 = await ctx.db.conversation.getByRun(run.id);
+      judgment = await ctx.judge.evaluate({ ticker, claims: allClaims2, conversation: conversation2 });
+      await ctx.db.judgments.save({ runId: run.id, judgment });
+      await ctx.db.conversation.addMessage({
+        runId: run.id,
+        messageId: `judge_${run.id}_conditional`,
+        agent: 'judge',
+        messageType: 'decision',
+        content: judgment.summary,
+        evidenceIds: [],
+        sequenceOrder: 7,
+        metadata: { score: judgment.score, stance: judgment.stance, conditional: true },
+      });
+    }
 
     const completed = await ctx.db.execution.completeRun(run.id, (Date.now() - startedAt) / 1000);
     events({ type: 'session.complete', runId: run.id, status: 'completed' });

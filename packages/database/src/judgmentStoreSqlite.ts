@@ -47,7 +47,19 @@ export class JudgmentStoreSqlite implements JudgmentStore {
       summary: params.judgment.summary,
       createdAt: new Date().toISOString(),
     };
-    await this.db.insert(judgments).values(row);
+    await this.db
+      .insert(judgments)
+      .values(row)
+      .onConflictDoUpdate({
+        target: judgments.runId,
+        set: {
+          score: row.score,
+          stance: row.stance,
+          confidence: row.confidence,
+          breakdown: row.breakdown,
+          summary: row.summary,
+        },
+      });
     return toStored(row);
   }
 
