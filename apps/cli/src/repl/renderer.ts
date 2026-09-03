@@ -26,10 +26,10 @@ export const color = {
 const HEAVY = '━'.repeat(58);
 const LIGHT = '─'.repeat(58);
 
-export function renderBanner(homeDir: string, mockSectors: boolean, mockLlm: boolean): string {
+export function renderBanner(homeDir: string, mockSectors: boolean, mockLlm: boolean, version: string = '0.2.0-rc'): string {
   const lines = [
     HEAVY,
-    `  ${color.cyan(color.bold('⚡ Financial Agent Harness v0.1.0'))}`,
+    `  ${color.cyan(color.bold(`⚡ Financial Agent Harness v${version}`))}`,
     `  Evidence-based stock research system`,
     `  Type ${color.green('/help')} for available commands`,
     `  Data dir: ${color.gray(homeDir)}`,
@@ -47,11 +47,21 @@ export function renderHelp(): string {
     color.bold('Financial Agent Harness Commands'),
     '',
     color.bold('Core:'),
-    `  ${color.green('/judge [TICKER]')}     Full analysis + Debate ronde (Researcher → Bull → Bear → Bull → Judge)`,
-    `  ${color.green('/screen [CRITERIA]')}  Screen stocks (profitable, growing)`,
-    `  ${color.green('/auth-set KEY=VALUE')} Save API keys to .credentials.json (SECTORS/LLM.AGENT/LLM.ROUTER)`,
-    `  ${color.green('/help')}               Show this help`,
-    `  ${color.green('/exit')}               Exit harness`,
+    `  ${color.green('/judge [TICKER]')}           Full analysis + Debate ronde (Researcher → Bull → Bear → Bull → Judge)`,
+    `  ${color.green('/screen [CRITERIA]')}        Screen stocks (profitable, growing)`,
+    `  ${color.green('/history [--limit N]')}      List recent runs`,
+    `  ${color.green('/session <runId>')}          Show run artifacts (markdown)`,
+    `  ${color.green('/resume <runId>')}           Resume/display session (alias)`,
+    `  ${color.green('/export <runId>')}           Export run (json/md/html)`,
+    `  ${color.green('/web [--port N]')}           Tiny web preview (http://localhost:3280)`,
+    `  ${color.green('/auth-set KEY=VALUE')}       Save API keys to .credentials.json (SECTORS/LLM.AGENT/LLM.ROUTER)`,
+    `  ${color.green('/version')}                  Show version`,
+    `  ${color.green('/help')}                     Show this help`,
+    `  ${color.green('/exit')}                     Exit harness`,
+    '',
+    color.bold('Flags:'),
+    `  /judge BBCA --conditional   Extra debate round when neutral (Phase 3)`,
+    `  /screen profitable          Uses ?where= SQL-native (Phase 3)`,
     '',
     color.bold('Roadmap (coming soon):'),
     `  /challenge [CLAIM]   Test specific claim`,

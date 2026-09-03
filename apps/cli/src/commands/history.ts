@@ -1,6 +1,7 @@
 import type { HarnessContext } from '../context';
 import type { CommandHandler } from '../repl/loop';
 import { color } from '../repl/renderer';
+import { formatDuration } from '@harness/shared';
 import { UserFriendlyError } from '@harness/shared';
 
 export function makeHistoryCommand(ctx: HarnessContext): CommandHandler {
@@ -20,7 +21,8 @@ export function makeHistoryCommand(ctx: HarnessContext): CommandHandler {
     const lines = [color.bold('History (recent runs):'), ''];
     for (const r of runs) {
       const when = r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 16).replace('T', ' ') : '';
-      lines.push(`  ${color.gray(r.id)}  ${color.bold(r.ticker)}  ${r.status}  ${color.dim(when)}`);
+      const dur = formatDuration(r.executionTime);
+      lines.push(`  ${color.gray(r.id)}  ${color.bold(r.ticker)}  ${r.status}  ${color.dim(when)}  ${color.dim(dur)}`);
     }
     lines.push('', color.gray('View: /session <runId>  ·  Export: /export <runId>'));
     process.stdout.write(lines.join('\n') + '\n\n');

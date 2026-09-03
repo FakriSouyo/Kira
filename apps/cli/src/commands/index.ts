@@ -15,6 +15,7 @@ import { screenWorkflow } from '../workflows/screenWorkflow';
 import { makeExportCommand } from './export';
 import { makeHistoryCommand, makeResumeCommand, makeSessionCommand } from './history';
 import { createWebServer } from '../repl/web';
+import { makeVersionCommand } from './version';
 import { UserFriendlyError } from '@harness/shared';
 import { SectorsApiError } from '@harness/sectors-api';
 
@@ -148,6 +149,7 @@ export function buildCommands(ctx: HarnessContext): Map<string, CommandHandler> 
     ['session', makeSessionCommand(ctx)],
     ['resume', makeResumeCommand(ctx)],
     ['web', makeWebCommand(ctx)],
+    ['version', makeVersionCommand()],
     ['auth-set', makeAuthSetCommand(ctx)],
     ['help', async () => {
       process.stdout.write(`${renderHelp()}\n\n`);

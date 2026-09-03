@@ -7,6 +7,7 @@ import { buildContext, type HarnessContext } from './context';
 import type { CommandHandler } from './repl/loop';
 import { startRepl } from './repl/loop';
 import { renderBanner, renderError, renderStub } from './repl/renderer';
+import { VERSION } from './commands/version';
 
 const USAGE = `Usage: pnpm finharness [options]
 
@@ -16,6 +17,7 @@ Options:
   --home <dir>       Data directory (default: ~/.finharness)
   --mock-sectors     Use offline Sectors API fixtures (no API key needed)
   --mock-llm         Use deterministic offline LLM (no API key needed)
+  --version          Show version and exit
   -h, --help         Show this help`;
 
 interface CliArgs {
@@ -23,6 +25,7 @@ interface CliArgs {
   mockSectors?: boolean;
   mockLlm?: boolean;
   help?: boolean;
+  version?: boolean;
 }
 
 function parseCliArgs(argv: string[]): CliArgs {
@@ -31,6 +34,7 @@ function parseCliArgs(argv: string[]): CliArgs {
     const a = argv[i];
     if (a === '--mock-sectors') args.mockSectors = true;
     else if (a === '--mock-llm') args.mockLlm = true;
+    else if (a === '--version') args.version = true;
     else if (a === '--home') args.home = argv[++i];
     else if (a === '--help' || a === '-h') args.help = true;
   }
@@ -94,13 +98,17 @@ async function main(): Promise<void> {
     process.stdout.write(`${USAGE}\n`);
     return;
   }
+  if (args.version) {
+    process.stdout.write(`${VERSION}\n`);
+    return;
+  }
 
   const config = loadConfig({ homeDir: args.home, mockSectors: args.mockSectors, mockLlm: args.mockLlm });
   const db = openDb({ homeDir: config.homeDir, verbose: config.debug });
   const ctx = buildContext(db, config);
   const commands = buildCommands(ctx);
 
-  process.stdout.write(`${renderBanner(config.homeDir, config.sectors.mock, config.mockLlm)}\n\n`);
+  process.stdout.write(`${renderBanner(config.homeDir, config.sectors.mock, config.mockLlm, VERSION)}\n\n`);
 
   await startRepl({
     commands,
