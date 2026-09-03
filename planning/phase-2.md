@@ -50,7 +50,7 @@ Lihat `progress/phase-2/tasklist.md` — 6 task, masing-masing `test` → `imple
 3. Export JSON/Markdown/HTML (`commands/export.ts` + `repl/renderer.ts`) — **✓ done** (177/177)
 4. Skill-registry ringan (`packages/agent/registry.ts` + `--with` flag) — **✓ done** (177/177)
 5. E2E `record/replay` fixture keyless (`repl/replay.ts` + `fixtures/bbca.jsonl`) — **✓ done** (177/177)
-6. Smoke Phase 2: `--mock-sectors --mock-llm` + bitdeer real (setelah top-up)
+6. Smoke Phase 2: `--mock-sectors --mock-llm` + bitdeer real (setelah top-up) — **✓ mock done** (177/177), hybrid real pending top-up
 
 ## 6. Verifikasi
 
