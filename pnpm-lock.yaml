@@ -113,6 +113,9 @@ importers:
 
   packages/execution:
     dependencies:
+      '@harness/conversation':
+        specifier: workspace:*
+        version: link:../conversation
       '@harness/evidence':
         specifier: workspace:*
         version: link:../evidence

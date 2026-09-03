@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { asc, desc, eq } from 'drizzle-orm';
 import type { Orm } from './client';
-import { executions } from './schema';
-import type { ExecutionRun, ExecutionStore } from '@harness/execution';
+import { agentMessages, claims, evidence, executions, judgments } from './schema';
+import type { ExecutionArtifacts, ExecutionRun, ExecutionStore } from '@harness/execution';
+import { UserFriendlyError } from '@harness/shared';
 
 interface ExecutionRow {
   id: string;
@@ -80,6 +81,97 @@ export class ExecutionStoreSqlite implements ExecutionStore {
   async getRun(runId: string): Promise<ExecutionRun | null> {
     const rows = await this.db.select().from(executions).where(eq(executions.id, runId)).limit(1);
     return rows.length > 0 ? toRun(rows[0] as ExecutionRow) : null;
+  }
+
+  async listRuns(params?: { limit?: number; offset?: number; ticker?: string }): Promise<ExecutionRun[]> {
+    // drizzle where builder — ticker optional, ordered by createdAt DESC
+    const base = this.db.select().from(executions).orderBy(desc(executions.createdAt), desc(executions.id));
+    let rows: ExecutionRow[];
+    if (params?.ticker) {
+      rows = (await this.db
+        .select()
+        .from(executions)
+        .where(eq(executions.ticker, params.ticker))
+        .orderBy(desc(executions.createdAt), desc(executions.id))
+        .limit(params.limit ?? 100)
+        .offset(params.offset ?? 0)) as ExecutionRow[];
+    } else {
+      rows = (await base.limit(params?.limit ?? 100).offset(params?.offset ?? 0)) as ExecutionRow[];
+    }
+    return rows.map(toRun);
+  }
+
+  async getExecutionWithArtifacts(runId: string): Promise<ExecutionArtifacts> {
+    const run = await this.getRun(runId);
+    if (!run) {
+      throw new UserFriendlyError('NOT_FOUND', `Run "${runId}" not found`, 'Try: /judge BBCA (or other valid ticker)');
+    }
+    const [evidenceRows, messageRows, claimRows, judgmentRows] = await Promise.all([
+      this.db.select().from(evidence).where(eq(evidence.runId, runId)),
+      this.db.select().from(agentMessages).where(eq(agentMessages.runId, runId)).orderBy(asc(agentMessages.sequenceOrder)),
+      this.db.select().from(claims).where(eq(claims.runId, runId)).orderBy(asc(claims.claimId)),
+      this.db.select().from(judgments).where(eq(judgments.runId, runId)).limit(1),
+    ]);
+
+    const evidenceArtifacts = evidenceRows.map((r) => ({
+      id: (r as { id: string }).id,
+      runId: (r as { runId: string }).runId,
+      ticker: (r as { ticker: string }).ticker,
+      source: (r as { source: string }).source,
+      sourceType: (r as { sourceType: string }).sourceType as import('@harness/schemas').Evidence['sourceType'],
+      contentHash: (r as { contentHash: string }).contentHash,
+      retrievedAt: (r as { retrievedAt: string }).retrievedAt,
+      validAt: (r as { validAt: string | null }).validAt,
+      data: JSON.parse((r as { data: string }).data) as Record<string, unknown>,
+      provenance: (r as { provenance: string | null }).provenance
+        ? (JSON.parse((r as { provenance: string }).provenance) as Record<string, unknown>)
+        : null,
+      createdAt: (r as { createdAt: string }).createdAt,
+    })) as import('@harness/schemas').Evidence[];
+
+    const messages = messageRows.map((r) => ({
+      id: (r as { id: string }).id,
+      runId: (r as { runId: string }).runId,
+      messageId: (r as { messageId: string }).messageId,
+      agent: (r as { agent: string }).agent as import('@harness/shared').AgentName,
+      messageType: (r as { messageType: string }).messageType as import('@harness/shared').MessageType,
+      content: (r as { content: string }).content,
+      evidenceIds: JSON.parse((r as { evidenceIds: string }).evidenceIds) as string[],
+      metadata: (r as { metadata: string | null }).metadata
+        ? (JSON.parse((r as { metadata: string }).metadata) as Record<string, unknown>)
+        : null,
+      sequenceOrder: (r as { sequenceOrder: number }).sequenceOrder,
+      createdAt: (r as { createdAt: string }).createdAt,
+    })) as import('@harness/conversation').AgentMessage[];
+
+    const storedClaims = claimRows.map((r) => ({
+      id: (r as { id: string }).id,
+      runId: (r as { runId: string }).runId,
+      messageId: (r as { messageId: string | null }).messageId,
+      claimId: (r as { claimId: string }).claimId,
+      statement: (r as { statement: string }).statement,
+      confidence: (r as { confidence: string }).confidence as import('@harness/execution').StoredClaim['confidence'],
+      reasoning: (r as { reasoning: string | null }).reasoning,
+      evidenceIds: JSON.parse((r as { evidenceIds: string }).evidenceIds) as string[],
+      createdAt: (r as { createdAt: string }).createdAt,
+    })) as import('@harness/execution').StoredClaim[];
+
+    const judgment =
+      judgmentRows.length > 0
+        ? ({
+            id: (judgmentRows[0] as { id: string }).id,
+            runId: (judgmentRows[0] as { runId: string }).runId,
+            ticker: (judgmentRows[0] as { ticker: string }).ticker,
+            score: (judgmentRows[0] as { score: number }).score,
+            stance: (judgmentRows[0] as { stance: string | null }).stance as import('@harness/execution').StoredJudgment['stance'],
+            confidence: (judgmentRows[0] as { confidence: string | null }).confidence as import('@harness/execution').StoredJudgment['confidence'],
+            breakdown: JSON.parse((judgmentRows[0] as { breakdown: string }).breakdown) as import('@harness/schemas').Breakdown,
+            summary: (judgmentRows[0] as { summary: string | null }).summary,
+            createdAt: (judgmentRows[0] as { createdAt: string }).createdAt,
+          } as import('@harness/execution').StoredJudgment)
+        : null;
+
+    return { run, evidence: evidenceArtifacts, messages, claims: storedClaims, judgment };
   }
 
   private async assertRunning(runId: string): Promise<void> {

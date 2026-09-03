@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@harness/conversation": "workspace:*",
     "@harness/evidence": "workspace:*",
     "@harness/schemas": "workspace:*",
     "@harness/shared": "workspace:*"
