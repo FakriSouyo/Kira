@@ -17,6 +17,8 @@ export interface HarnessContext {
   judge: JudgeAgent;
   router: IntentRouter;
   validator: ClaimValidator;
+  /** Aktif/tidaknya sub-researcher Market & News untuk /judge (addendum §24-A.6). */
+  researchers: { market: boolean; news: boolean };
 }
 
 export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): HarnessContext {
@@ -31,6 +33,7 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
       apiKey: config.sectors.apiKey || undefined,
       baseUrl: config.sectors.baseUrl,
       cacheTtlHours: config.sectors.cacheTtlHours,
+      newsCacheTtlHours: config.sectors.newsCacheTtlHours,
       homeDir: config.homeDir,
     }),
     bull: new BullAgent(agentLlm, db.evidence),
@@ -38,5 +41,6 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
     judge: new JudgeAgent(agentLlm),
     router: new IntentRouter(routerLlm),
     validator: new ClaimValidator(db.evidence),
+    researchers: config.researchers,
   };
 }

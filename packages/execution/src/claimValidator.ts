@@ -1,5 +1,5 @@
-import { ClaimSchema, type Claim } from '@harness/schemas';
-import { ValidationError } from '@harness/shared';
+import { ClaimSchema, type Claim, type Evidence } from '@harness/schemas';
+import { UserFriendlyError, ValidationError } from '@harness/shared';
 import type { EvidenceStore } from '@harness/evidence';
 
 /**
@@ -10,6 +10,26 @@ import type { EvidenceStore } from '@harness/evidence';
  */
 export class ClaimValidator {
   constructor(private readonly evidenceStore: EvidenceStore) {}
+
+  /**
+   * Baca evidence; bila *eksekusi* store gagal (DB/network), bungkus sebagai
+   * `VALIDATION_UNAVAILABLE` — fail-closed (addendum §24-B.3): jangan pernah
+   * lanjut tanpa proof eksistensi. (Kegagalan *data* = store sukses tapi id
+   * tak ada → ditangani pemanggil sebagai ValidationError.)
+   */
+  private async readEvidence(ids: string[]): Promise<Evidence[]> {
+    try {
+      return await this.evidenceStore.getManyByIds(ids);
+    } catch (cause) {
+      throw new UserFriendlyError(
+        'VALIDATION_UNAVAILABLE',
+        `Could not execute evidence validation (storage read failed): ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+        `Run failed because proof of evidence existence could not be checked — integrity is fail-closed (addendum §24-B.3).`,
+      );
+    }
+  }
 
   /**
    * Validasi challenge Bear (Phase 1, addendum §16/§15) — run-scoped:
@@ -33,7 +53,7 @@ export class ClaimValidator {
     }
 
     const uniqueIds = [...new Set(bearEvidenceIds)];
-    const existing = await this.evidenceStore.getManyByIds(uniqueIds);
+    const existing = await this.readEvidence(uniqueIds);
     const existingIds = new Set(existing.map((e) => e.id));
     const allowedEvidence = new Set(allowed.evidenceIds);
     for (const id of uniqueIds) {
@@ -55,7 +75,7 @@ export class ClaimValidator {
 
     // Layer 2: Evidence existence check (DB)
     const allEvidenceIds = [...new Set(parsed.flatMap((c) => c.evidenceIds))];
-    const evidence = await this.evidenceStore.getManyByIds(allEvidenceIds);
+    const evidence = await this.readEvidence(allEvidenceIds);
     const existingIds = new Set(evidence.map((e) => e.id));
 
     for (const evidenceId of allEvidenceIds) {
@@ -78,5 +98,24 @@ export class ClaimValidator {
     }
 
     return parsed;
+  }
+
+  /**
+   * Invariant "yang dilihat = yang dicatat" (addendum §24-B.1) — assertion
+   * **inklusi**, bukan equality: `evidenceIds` harus subset dari `seenIds`
+   * (evidence block zona [1] yang benar-benar dikirim ke LLM pesan itu).
+   * Melempar `ValidationError` (bukan log warning) — auditability adalah
+   * jaminan, bukan niat.
+   */
+  assertSeenEvidence(evidenceIds: string[], seenIds: string[]): void {
+    const seen = new Set(seenIds);
+    for (const id of evidenceIds) {
+      if (!seen.has(id)) {
+        throw new ValidationError(
+          `Evidence ${id} references data the agent never saw. ` +
+            `Seen evidence ids: ${seenIds.join(', ') || '(none)'}`,
+        );
+      }
+    }
   }
 }

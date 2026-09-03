@@ -132,36 +132,100 @@ interface BullOutput {
   evidenceIds: string[];
 }
 
+/** Ekstrak nilai numerik dari data evidence bila ada. */
+function num(data: Record<string, unknown>, key: string): number | null {
+  return typeof data[key] === 'number' ? (data[key] as number) : null;
+}
+
 function generateBull(prompt: string, system: string): BullOutput {
   // buildBullPrompt: "... produce your analysis for <TICKER>."
   const tickerMatch = prompt.match(/\bfor\s+([A-Za-z]{2,6})\b/i);
   const ticker = (tickerMatch?.[1] ?? 'the company').toUpperCase();
   const evidence = parseEvidenceBlock(system);
   const isRebuttal = prompt.includes('Bear Agent raised the following challenges');
-  const claims = evidence.slice(0, 4).map((ev, i) =>
-    claimForEvidence(ticker, ev, i, isRebuttal ? `rebuttal_${i + 1}` : `claim_${i + 1}`),
+
+  // Kelompokkan evidence per domain (addendum §24-A): fundamental, market, news.
+  const fundamental = evidence.filter(
+    (e) => e.source === 'sectors.company_report' || e.source === 'sectors.quarterly_financials',
   );
+  const market = evidence.filter((e) => e.source === 'sectors.daily_transaction' || e.source === 'sectors.foreign_flow');
+  const news = evidence.filter((e) => e.source === 'sectors.sentiment');
+
+  const claims: Claim[] = [];
+
+  // 1) Klaim fundamental — dari company_report + quarterly_financials.
+  for (const ev of fundamental.slice(0, 2)) {
+    const c = claimForEvidence(ticker, ev, claims.length, isRebuttal ? `rebuttal_${claims.length + 1}` : `claim_${claims.length + 1}`);
+    claims.push(c);
+  }
+
+  // 2) Klaim momentum — dari DailyTransaction/ForeignFlow (addendum §24-A.4).
+  const marketIds = market.map((e) => e.id);
+  const netBuyDays = market
+    .map((e) => num(e.data, 'netBuyDaysPct') ?? num(e.data, 'upDaysPct'))
+    .find((v) => v !== null);
+  const daily = market.find((e) => e.source === 'sectors.daily_transaction');
+  const foreign = market.find((e) => e.source === 'sectors.foreign_flow');
+  if (marketIds.length > 0) {
+    const momentumIsStrong = (netBuyDays ?? 0) >= 55;
+    claims.push({
+      claimId: isRebuttal ? `rebuttal_${claims.length + 1}` : `claim_${claims.length + 1}`,
+      statement: `Momentum for ${ticker} is ${momentumIsStrong ? 'constructive' : 'moderate'} based on trading activity and foreign flow.`,
+      confidence: momentumIsStrong ? 'strong' : 'moderate',
+      reasoning: `Daily transaction and foreign-flow data for ${ticker} ` +
+        (foreign?.data?.netFlow === 'buy' || foreign?.data?.netFlow === 'sell'
+          ? `record net ${String(foreign.data.netFlow)} foreign flow`
+          : `${netBuyDays ?? 'mixed'}% of days saw net buying`) +
+        (daily && daily.data?.liquidityBand ? ` with ${String(daily.data.liquidityBand)} liquidity` : '') +
+        ', supporting the momentum assessment for the stock.',
+      evidenceIds: marketIds,
+    });
+  }
+
+  // 3) Klaim risk — dari Sentiment (addendum §24-A.4).
+  const sent = news[0];
+  if (sent) {
+    const aggregate = num(sent.data, 'aggregate');
+    const dist = sent.data.distribution as { negative?: number } | null | undefined;
+    const negative = typeof dist?.negative === 'number' ? dist.negative : null;
+    const elevated = (aggregate ?? 0) < -0.2 || (negative ?? 0) > 0.35;
+    claims.push({
+      claimId: isRebuttal ? `rebuttal_${claims.length + 1}` : `claim_${claims.length + 1}`,
+      statement: elevated
+        ? `Risk is elevated for ${ticker} based on recent sentiment.`
+        : `Risk appears contained for ${ticker} based on recent sentiment.`,
+      confidence: elevated ? 'strong' : negative !== null && negative > 0.2 ? 'moderate' : 'weak',
+      reasoning: `Aggregate sentiment for ${ticker} is ${aggregate ?? 'not negative'} ` +
+        (aggregate !== null ? `(${aggregate > 0 ? 'positive' : 'negative'} bias)` : '') +
+        ` with ${negative ?? 'no'} negative coverage, informing the risk assessment.`,
+      evidenceIds: [sent.id],
+    });
+  }
+
+  const finalClaims = claims.length > 0 ? claims : ([] as Claim[]);
   const highlights = claims.map((c) => c.reasoning).join(' ');
 
   const reasoning = isRebuttal
     ? `I stand by the bullish case for ${ticker} and address the challenges point by point. ` +
       `The cited figures (${highlights || 'the reviewed evidence'}) remain consistent with the ` +
       `fundamentals, and the concerns raised do not change the overall picture.`
-    : `I see several positive signals in the ${evidence.length} pieces of evidence for ${ticker}. ` +
+    : `I see ${claims.length ? `${claims.length} supporting signals` : 'a stable position'} in the evidence for ${ticker}. ` +
       (highlights || 'The reviewed data points to a stable financial position.') +
       ` Taken together, these signals support a constructive view on ${ticker}.`;
 
   return {
     reasoning,
-    claims: claims.length > 0 ? claims : [
-      {
-        claimId: isRebuttal ? 'rebuttal_1' : 'claim_1',
-        statement: `The reviewed data for ${ticker} shows no material red flags.`,
-        confidence: 'moderate',
-        reasoning: `The evidence attached to this run does not surface material adverse indicators for ${ticker}.`,
-        evidenceIds: [evidence[0]?.id ?? 'evidence_unknown'],
-      },
-    ],
+    claims: finalClaims.length > 0
+      ? finalClaims
+      : [
+          {
+            claimId: isRebuttal ? 'rebuttal_1' : 'claim_1',
+            statement: `The reviewed data for ${ticker} shows no material red flags.`,
+            confidence: 'moderate',
+            reasoning: `The evidence attached to this run does not surface material adverse indicators for ${ticker}.`,
+            evidenceIds: [evidence[0]?.id ?? 'evidence_unknown'],
+          },
+        ],
     evidenceIds: evidence.map((e) => e.id),
   };
 }
@@ -255,14 +319,31 @@ interface JudgeOutput {
   summary: string;
 }
 
+interface PromptClaim {
+  statement: string;
+  confidence: 'strong' | 'moderate' | 'weak';
+}
+
+/** Parse seluruh klaim dari blok "All claims:" prompt Judge (format buildJudgePrompt). */
+function parsePromptClaims(prompt: string): PromptClaim[] {
+  const claims: PromptClaim[] = [];
+  const re = /^\s*\d+\.\s+(.+?)\s+\((strong|moderate|weak)\)\s*$/gm;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(prompt)) !== null) {
+    claims.push({ statement: match[1].trim(), confidence: match[2] as PromptClaim['confidence'] });
+  }
+  return claims;
+}
+
+/** Skor kategori dari confidence klaim (deterministik). */
+function scoreFromConfidence(conf: PromptClaim['confidence']): number {
+  return conf === 'strong' ? 78 : conf === 'moderate' ? 60 : 42;
+}
+
 /** Hitung jumlah klaim per confidence dari blok "All claims:" prompt Judge. */
 function countClaimConfidences(prompt: string): { strong: number; moderate: number; weak: number } {
   const counts = { strong: 0, moderate: 0, weak: 0 };
-  const re = /^\s*\d+\.\s+.+?\s+\((strong|moderate|weak)\)\s*$/gm;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(prompt)) !== null) {
-    counts[match[1] as 'strong' | 'moderate' | 'weak'] += 1;
-  }
+  for (const c of parsePromptClaims(prompt)) counts[c.confidence] += 1;
   return counts;
 }
 
@@ -270,10 +351,22 @@ function generateJudge(prompt: string): JudgeOutput {
   const { strong, moderate, weak } = countClaimConfidences(prompt);
   const total = strong + moderate + weak;
 
+  // momentum & risk diisi dari klaim Bull yang menyebut momentum/sentimen-risk
+  // (addendum §24-A.5): bila tidak ada klaim tsb → null (degradasi enrichment).
+  let momentumConf: PromptClaim['confidence'] | null = null;
+  let riskConf: PromptClaim['confidence'] | null = null;
+  for (const c of parsePromptClaims(prompt)) {
+    if (/momentum/i.test(c.statement)) momentumConf = c.confidence;
+    if (/risk/i.test(c.statement)) riskConf = c.confidence;
+  }
+
   const financialHealth = Math.min(95, 55 + 12 * strong + 6 * moderate + 2 * weak);
   const growth = Math.min(90, 50 + 10 * strong + 5 * moderate + 2 * weak);
   const valuation = Math.min(85, 45 + 8 * strong + 4 * moderate + 2 * weak);
-  const breakdown = { financialHealth, growth, valuation, marketMomentum: null, risk: null };
+  const marketMomentum = momentumConf ? scoreFromConfidence(momentumConf) : null;
+  // Skor risk tinggi = risiko rendah; klaim risk "elevated/contained" dipetakan.
+  const risk = riskConf ? (riskConf === 'strong' ? 35 : riskConf === 'moderate' ? 60 : 80) : null;
+  const breakdown = { financialHealth, growth, valuation, marketMomentum, risk };
   const score = normalizeJudgmentScore(breakdown);
   const stance = stanceForScore(score);
   // Debat hadir → Bear menantang → kepastian turun satu tingkat (skeptisisme teruji).
@@ -290,12 +383,16 @@ function generateJudge(prompt: string): JudgeOutput {
     ? 'A debate round was held: Bear challenged the bull claims and Bull responded. ' +
       'I weighed the evidence-backed challenges against the rebuttal before scoring. '
     : 'No counterargument was presented in this run, so I evaluated the bull claims directly against the evidence. ';
+  const marketLine =
+    marketMomentum !== null || risk !== null
+      ? `Market momentum and risk were evaluated from market & news evidence ` +
+        `(momentum ${marketMomentum ?? 'n/a'}, risk ${risk ?? 'n/a'}).`
+      : 'Market Momentum and Risk are not evaluated (no market/news data fetched); the overall score is renormalized over the scored categories only.';
   const summary =
     `I evaluated ${total} claim${total === 1 ? '' : 's'} from the Bull agent ` +
     `(${strong} strong, ${moderate} moderate, ${weak} weak). ` +
     debateLine +
-    'Market Momentum and Risk are not yet evaluated (no market data fetched); the overall score ' +
-    'is renormalized over the scored categories only.';
+    marketLine;
 
   return { score, stance, confidence, breakdown, summary };
 }

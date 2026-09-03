@@ -139,3 +139,14 @@ describe('ClaimValidator.validateChallenge — run-scoped untuk Bear (Phase 1)',
     ).rejects.toThrow(/not in allowed set for this run \(bear challenge\)/);
   });
 });
+
+describe('ClaimValidator.assertSeenEvidence — invariant "yang dilihat = yang dicatat" (§24-B.1)', () => {
+  it('lolos saat evidenceIds ⊆ seenIds (inklusi, bukan equality)', () => {
+    expect(() => validator.assertSeenEvidence(['1111', '2222'], ['1111', '2222', '3333'])).not.toThrow();
+    expect(() => validator.assertSeenEvidence([], ['1111'])).not.toThrow();
+  });
+
+  it('melempar ValidationError saat klaim merujuk evidence yang "tidak pernah dilihat"', () => {
+    expect(() => validator.assertSeenEvidence(['1111', '9999'], ['1111', '2222'])).toThrow(/never saw/);
+  });
+});

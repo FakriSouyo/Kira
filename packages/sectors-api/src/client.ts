@@ -3,10 +3,15 @@ import { join } from 'node:path';
 import { FileCache } from './cache';
 import type {
   CompanyReport,
+  DailyTransaction,
+  Filing,
+  ForeignFlow,
+  NewsArticle,
   QuarterlyFinancials,
   SectorsApi,
   ScreenerResult,
   ScreenerRow,
+  Sentiment,
 } from './types';
 
 export type SectorsErrorCode =
@@ -38,6 +43,8 @@ export interface SectorsApiOptions {
   timeoutMs?: number;
   /** Default 24 jam. */
   cacheTtlHours?: number;
+  /** TTL khusus News (news/filings/sentiment) — semi-volatil. Default 1 jam (addendum §24-A.6). */
+  newsCacheTtlHours?: number;
   /** Default `<homeDir>/cache/sectors_api`. */
   cacheDir?: string;
   homeDir?: string;
@@ -118,6 +125,7 @@ export class SectorsClient implements SectorsApi {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly cache: FileCache;
+  private readonly newsCache: FileCache;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: SectorsApiOptions = {}) {
@@ -126,17 +134,21 @@ export class SectorsClient implements SectorsApi {
     this.timeoutMs = options.timeoutMs ?? 30_000;
     this.fetchImpl = options.fetchImpl ?? fetch;
     const homeDir = options.homeDir ?? process.env.FINHARNESS_HOME ?? join(homedir(), '.finharness');
-    this.cache = new FileCache(options.cacheDir ?? join(homeDir, 'cache', 'sectors_api'), (options.cacheTtlHours ?? 24) * 3_600_000);
+    const cacheDir = options.cacheDir ?? join(homeDir, 'cache', 'sectors_api');
+    // Fundamental & Market memakai TTL default (24 jam). News/filings/sentiment
+    // memakai TTL lebih pendek (default 1 jam) karena semi-volatil.
+    this.cache = new FileCache(cacheDir, (options.cacheTtlHours ?? 24) * 3_600_000);
+    this.newsCache = new FileCache(cacheDir, (options.newsCacheTtlHours ?? 1) * 3_600_000);
   }
 
   async getCompanyReport(ticker: string): Promise<CompanyReport> {
-    return this.cached('company_report', ticker, () =>
+    return this.cached(this.cache, 'company_report', ticker, () =>
       this.request<CompanyReport>(`/companies/${encodeURIComponent(ticker)}/report`, ticker),
     );
   }
 
   async getQuarterlyFinancials(ticker: string): Promise<QuarterlyFinancials> {
-    return this.cached('quarterly_financials', ticker, () =>
+    return this.cached(this.cache, 'quarterly_financials', ticker, () =>
       this.request<QuarterlyFinancials>(`/companies/${encodeURIComponent(ticker)}/financials/quarterly`, ticker),
     );
   }
@@ -149,13 +161,45 @@ export class SectorsClient implements SectorsApi {
       .sort((a, b) => b.matchScore - a.matchScore || a.ticker.localeCompare(b.ticker));
   }
 
+  // —— Market Researcher (Phase 1, addendum §24-A.2) ——
+  async getDailyTransaction(ticker: string): Promise<DailyTransaction> {
+    return this.cached(this.cache, 'daily_transaction', ticker, () =>
+      this.request<DailyTransaction>(`/companies/${encodeURIComponent(ticker)}/daily-transaction`, ticker),
+    );
+  }
+
+  async getForeignFlow(ticker: string): Promise<ForeignFlow> {
+    return this.cached(this.cache, 'foreign_flow', ticker, () =>
+      this.request<ForeignFlow>(`/companies/${encodeURIComponent(ticker)}/foreign-flow`, ticker),
+    );
+  }
+
+  // —— News Researcher (Phase 1, addendum §24-A.2) — newsCache TTL lebih pendek.
+  async getNews(ticker: string): Promise<NewsArticle[]> {
+    return this.cached(this.newsCache, 'news', ticker, () =>
+      this.request<NewsArticle[]>(`/companies/${encodeURIComponent(ticker)}/news`, ticker),
+    );
+  }
+
+  async getFilings(ticker: string): Promise<Filing[]> {
+    return this.cached(this.newsCache, 'filings', ticker, () =>
+      this.request<Filing[]>(`/companies/${encodeURIComponent(ticker)}/filings`, ticker),
+    );
+  }
+
+  async getSentiment(ticker: string): Promise<Sentiment> {
+    return this.cached(this.newsCache, 'sentiment', ticker, () =>
+      this.request<Sentiment>(`/companies/${encodeURIComponent(ticker)}/sentiment`, ticker),
+    );
+  }
+
   /** Read-through cache: hit → langsung return; miss → fetch lalu simpan. */
-  private async cached<T>(source: string, ticker: string, fetcher: () => Promise<T>): Promise<T> {
+  private async cached<T>(cache: FileCache, source: string, ticker: string, fetcher: () => Promise<T>): Promise<T> {
     const cacheKey = `${ticker.toUpperCase()}_${source}`;
-    const hit = this.cache.get<T>(cacheKey);
+    const hit = cache.get<T>(cacheKey);
     if (hit !== null) return hit;
     const data = await fetcher();
-    this.cache.set(cacheKey, data);
+    cache.set(cacheKey, data);
     return data;
   }
 

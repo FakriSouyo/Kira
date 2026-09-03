@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -181,5 +181,104 @@ describe('MockSectorsApi', () => {
     const results = await api.screen(['profitable', 'growing']);
     expect(results.length).toBe(5);
     expect(results[0].ticker).toBe('BBCA');
+  });
+});
+
+describe('Market & News Researcher (Phase 1, addendum §24-A)', () => {
+  let cacheDir: string;
+  beforeEach(() => {
+    cacheDir = mkdtempSync(join(tmpdir(), 'finharness-sectors-cache-'));
+  });
+  afterEach(() => {
+    rmSync(cacheDir, { recursive: true, force: true });
+  });
+
+  it('fetches daily transaction, foreign flow and parses the payload', async () => {
+    const calls: string[] = [];
+    const client = new SectorsClient({
+      cacheDir,
+      fetchImpl: (async (url: string) => {
+        calls.push(url);
+        if (url.includes('/daily-transaction')) return jsonResponse({ ticker: 'BBCA', avgValueBillion: 890 });
+        return jsonResponse({ ticker: 'BBCA', netFlow: 'buy' });
+      }) as typeof fetch,
+    });
+
+    const daily = await client.getDailyTransaction('BBCA');
+    expect(daily.avgValueBillion).toBe(890);
+    const foreign = await client.getForeignFlow('BBCA');
+    expect(foreign.netFlow).toBe('buy');
+    expect(calls).toEqual([
+      'https://api.sectors.app/v1/companies/BBCA/daily-transaction',
+      'https://api.sectors.app/v1/companies/BBCA/foreign-flow',
+    ]);
+  });
+
+  it('fetches news, filings and sentiment through the news endpoints', async () => {
+    const calls: string[] = [];
+    const client = new SectorsClient({
+      cacheDir,
+      fetchImpl: (async (url: string) => {
+        calls.push(url);
+        if (url.includes('/news')) return jsonResponse([{ id: 'n-1', headline: 'hi' }]);
+        if (url.includes('/filings')) return jsonResponse([{ id: 'f-1', type: 'annual_report' }]);
+        return jsonResponse({ aggregate: 0.7 });
+      }) as typeof fetch,
+    });
+
+    const news = await client.getNews('BBCA');
+    expect(news[0].headline).toBe('hi');
+    const filings = await client.getFilings('BBCA');
+    expect(filings[0].type).toBe('annual_report');
+    const sentiment = await client.getSentiment('BBCA');
+    expect(sentiment.aggregate).toBe(0.7);
+    expect(calls).toEqual([
+      'https://api.sectors.app/v1/companies/BBCA/news',
+      'https://api.sectors.app/v1/companies/BBCA/filings',
+      'https://api.sectors.app/v1/companies/BBCA/sentiment',
+    ]);
+  });
+
+  it('news cache uses a shorter TTL than market/fundamental cache', async () => {
+    let hits = 0;
+    const client = new SectorsClient({
+      cacheDir,
+      cacheTtlHours: 24,
+      newsCacheTtlHours: 1,
+      fetchImpl: (async () => {
+        hits += 1;
+        return jsonResponse({ ticker: 'BBCA' });
+      }) as typeof fetch,
+    });
+    // Entry 2 jam lalu: untuk news (TTL 1 jam) → kedaluwarsa → fetch ulang;
+    // untuk daily_transaction (TTL 24 jam) → masih valid → cache hit.
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+    writeFileSync(join(cacheDir, 'BBCA_news.json'), JSON.stringify({ fetchedAt: twoHoursAgo, data: [] }));
+    writeFileSync(join(cacheDir, 'BBCA_daily_transaction.json'), JSON.stringify({ fetchedAt: twoHoursAgo, data: { ticker: 'BBCA' } }));
+
+    await client.getNews('BBCA');
+    await client.getDailyTransaction('BBCA');
+    expect(hits).toBe(1); // hanya getNews yang refetch
+  });
+
+  it('MockSectorsApi serves deterministic market/news fixtures', async () => {
+    const api = new MockSectorsApi();
+    const daily = await api.getDailyTransaction('BBCA');
+    expect(daily.liquidityBand).toBe('high');
+    const foreign = await api.getForeignFlow('BBCA');
+    expect(foreign.netFlow).toBe('buy');
+    const sentiment = await api.getSentiment('BBCA');
+    expect(sentiment.aggregate).toBeGreaterThan(0);
+    // BJTM — likuiditas rendah & sentimen negatif (membedakan rubrik momentum/risk)
+    const bjtm = await api.getDailyTransaction('BJTM');
+    expect(bjtm.liquidityBand).toBe('low');
+    expect((await api.getSentiment('BJTM')).aggregate as number).toBeLessThan(0);
+  });
+
+  it('maps 404 on market endpoint to NOT_FOUND', async () => {
+    const client = new SectorsClient({ cacheDir, fetchImpl: (async () => jsonResponse({ error: 'no' }, 404)) as typeof fetch });
+    const error = await client.getDailyTransaction('XYZ').catch((e) => e);
+    expect(error).toBeInstanceOf(SectorsApiError);
+    expect(error.code).toBe('NOT_FOUND');
   });
 });

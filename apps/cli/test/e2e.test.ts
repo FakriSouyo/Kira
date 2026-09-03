@@ -94,9 +94,17 @@ describe('E2E — /judge offline (mock sectors + mock LLM)', () => {
       expect(executions[0].execution_time).toBeGreaterThan(0);
 
       const evidence = db.raw.prepare('SELECT id, source FROM evidence').all() as Array<{ id: string; source: string }>;
-      expect(evidence).toHaveLength(2);
+      expect(evidence).toHaveLength(7);
       const sources = evidence.map((e) => e.source).sort();
-      expect(sources).toEqual(['sectors.company_report', 'sectors.quarterly_financials']);
+      expect(sources).toEqual([
+        'sectors.company_report',
+        'sectors.daily_transaction',
+        'sectors.filings',
+        'sectors.foreign_flow',
+        'sectors.news',
+        'sectors.quarterly_financials',
+        'sectors.sentiment',
+      ]);
 
       const messages = db.raw
         .prepare('SELECT agent, message_type FROM agent_messages ORDER BY sequence_order')
@@ -139,14 +147,29 @@ describe('E2E — /judge offline (mock sectors + mock LLM)', () => {
       expect(judgments[0].score).toBeGreaterThanOrEqual(0);
       expect(judgments[0].score).toBeLessThanOrEqual(100);
       const breakdown = JSON.parse(judgments[0].breakdown) as Record<string, unknown>;
-      // Momentum & risk = null (data market belum di-fetch)
-      expect(breakdown.marketMomentum).toBeNull();
-      expect(breakdown.risk).toBeNull();
-      // Skor konsisten dengan breakdown (renormalisasi 25/20/20 atas 65)
+      // Market & News tersedia (mock) → momentum & risk non-null (addendum §24-A.5)
+      expect(typeof breakdown.marketMomentum).toBe('number');
+      expect(typeof breakdown.risk).toBe('number');
+      // Skor konsisten dengan breakdown (renormalisasi atas 100 — 5 kategori penuh)
       const expected = Math.round(
-        ((breakdown.financialHealth as number) * 25 + (breakdown.growth as number) * 20 + (breakdown.valuation as number) * 20) / 65,
+        ((breakdown.financialHealth as number) * 25 +
+          (breakdown.growth as number) * 20 +
+          (breakdown.valuation as number) * 20 +
+          (breakdown.marketMomentum as number) * 20 +
+          (breakdown.risk as number) * 15) /
+          100,
       );
       expect(judgments[0].score).toBe(expected);
+
+      // Invariant §24-B.1: bull/bear/rebuttal mencatat seenEvidenceIds = evidence yang dilihat
+      const seen = db.raw
+        .prepare("SELECT agent, metadata FROM agent_messages WHERE agent IN ('bull','bear') ORDER BY sequence_order")
+        .all() as Array<{ agent: string; metadata: string | null }>;
+      for (const row of seen) {
+        const meta = JSON.parse(row.metadata ?? '{}') as { seenEvidenceIds?: string[] };
+        expect(Array.isArray(meta.seenEvidenceIds)).toBe(true);
+        expect(meta.seenEvidenceIds!.length).toBeGreaterThanOrEqual(7);
+      }
     } finally {
       db.raw.close();
     }

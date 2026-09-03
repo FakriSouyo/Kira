@@ -26,10 +26,15 @@ interface ConfigFile {
     key?: string;
     base_url?: string;
     cache_ttl_hours?: number;
+    /** TTL khusus News (jam); default 1 (addendum §24-A.6). */
+    news_cache_ttl_hours?: number;
   };
   features?: {
     auto_sync?: boolean;
     mock_mode?: boolean;
+    /** Market & News Researcher aktif per `/judge`; default true (addendum §24-A.6). */
+    market_researcher?: boolean;
+    news_researcher?: boolean;
   };
 }
 
@@ -41,8 +46,11 @@ export interface FinharnessConfig {
     apiKey: string;
     baseUrl: string;
     cacheTtlHours: number;
+    newsCacheTtlHours: number;
     mock: boolean;
   };
+  /** Sub-researcher Market/News untuk flow /judge (addendum §24-A.6). */
+  researchers: { market: boolean; news: boolean };
   /** Mock LLM deterministik offline (development/E2E). */
   mockLlm: boolean;
   debug: boolean;
@@ -122,7 +130,12 @@ export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
       apiKey: process.env.SECTORS_API_KEY ?? file?.sectors_api?.key ?? '',
       baseUrl: file?.sectors_api?.base_url ?? 'https://api.sectors.app/v1',
       cacheTtlHours: file?.sectors_api?.cache_ttl_hours ?? 24,
+      newsCacheTtlHours: file?.sectors_api?.news_cache_ttl_hours ?? 1,
       mock: sectorsMock,
+    },
+    researchers: {
+      market: file?.features?.market_researcher ?? true,
+      news: file?.features?.news_researcher ?? true,
     },
     mockLlm,
     debug: process.env[ENV.debug] === 'true',

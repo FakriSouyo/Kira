@@ -237,7 +237,7 @@ describe('MockLLMClient — Judge', () => {
     const expected = Math.round((result.breakdown.financialHealth * 25 + result.breakdown.growth * 20 + result.breakdown.valuation * 20) / 65);
     expect(result.score).toBe(expected);
     expect(result.stance).toBe(expected > 60 ? 'bullish' : expected < 40 ? 'bearish' : 'neutral');
-    expect(result.summary).toContain('not yet evaluated');
+    expect(result.summary).toContain('not evaluated');
     expect(result.summary).toContain('No counterargument was presented');
   });
 
@@ -265,5 +265,52 @@ describe('MockLLMClient — Judge', () => {
     const weak = await mock.generateObject(params(['A (weak)', 'B (weak)']));
     const strong = await mock.generateObject(params(['A (strong)', 'B (strong)']));
     expect(strong.score).toBeGreaterThan(weak.score);
+  });
+});
+
+describe('MockLLMClient — Market & News (Phase 1, addendum §24-A)', () => {
+  const mock = new MockLLMClient();
+  const M = '77777777-cccc-4ccc-8ccc-777777777777'; // daily_transaction
+  const S = '66666666-dddd-4ddd-8ddd-666666666666'; // sentiment
+  const CONSTRUCTIVE = 'You are part of the Financial Agent Harness.\nAvailable evidence for BBCA:\n' +
+    renderEvidenceBlock([
+      { id: E1, source: 'sectors.company_report', data: { ticker: 'BBCA', financials: { roe: 23.1 } } },
+      { id: M, source: 'sectors.daily_transaction', data: { ticker: 'BBCA', upDaysPct: 63, liquidityBand: 'high' } },
+      { id: S, source: 'sectors.sentiment', data: { ticker: 'BBCA', aggregate: 0.7, distribution: { negative: 0.1 } } },
+    ]);
+
+  it('bull issues a momentum claim (market) and a risk claim (sentiment) when that evidence is seen', async () => {
+    const result = await mock.generateObject({
+      schema: BULL_OUTPUT_SCHEMA,
+      prompt: 'You are a bullish analyst for BBCA.',
+      system: [CONSTRUCTIVE, BULL_ZONE2],
+    });
+    const statements = result.claims.map((c) => c.statement).join(' ');
+    expect(/Momentum/.test(statements)).toBe(true);
+    expect(/Risk/.test(statements)).toBe(true);
+    // momentum claim menautkan evidence daily_transaction; risk claim → sentiment
+    const momentumClaim = result.claims.find((c) => /Momentum/.test(c.statement))!;
+    const riskClaim = result.claims.find((c) => /Risk/.test(c.statement))!;
+    expect(momentumClaim.evidenceIds).toContain(M);
+    expect(riskClaim.evidenceIds).toContain(S);
+  });
+
+  it('judge fills marketMomentum & risk when claims mention them, else keeps them null', async () => {
+    const withMarket = await mock.generateObject({
+      schema: JUDGE_OUTPUT_SCHEMA,
+      prompt:
+        'Ticker: BBCA\nAll claims:\n1. Momentum is constructive for BBCA. (strong)\n2. Risk is elevated for BBCA. (strong)\n3. Fundamentals are solid. (strong)',
+      system: JUDGE_SYSTEM,
+    });
+    expect(withMarket.breakdown.marketMomentum).toBe(78);
+    expect(withMarket.breakdown.risk).toBe(35);
+
+    const withoutMarket = await mock.generateObject({
+      schema: JUDGE_OUTPUT_SCHEMA,
+      prompt: 'Ticker: BBCA\nAll claims:\n1. Fundamentals are solid. (strong)',
+      system: JUDGE_SYSTEM,
+    });
+    expect(withoutMarket.breakdown.marketMomentum).toBeNull();
+    expect(withoutMarket.breakdown.risk).toBeNull();
   });
 });

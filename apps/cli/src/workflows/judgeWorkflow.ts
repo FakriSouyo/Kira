@@ -8,7 +8,16 @@ import type { HarnessContext } from '../context';
 /** Hasil lengkap /judge — dipakai renderer output conversational. */
 export interface JudgeArtifacts {
   run: ExecutionRun;
+  /** Evidence fundamental (Company Report + Quarterly Financials). */
   evidence: Evidence[];
+  /** Evidence Market (Daily Transaction + Foreign Flow) — enrichment (addendum §24-A). */
+  marketEvidence: Evidence[];
+  /** Evidence News (News + Filings + Sentiment) — enrichment (addendum §24-A). */
+  newsEvidence: Evidence[];
+  /** Market tersedia → `marketMomentum` dapat dinilai (false = degrade → null). */
+  marketAvailable: boolean;
+  /** News tersedia → `risk` dapat dinilai (false = degrade → null). */
+  newsAvailable: boolean;
   bull: BullAnalysisResponse;
   bear: BearChallengeResponse;
   rebuttal: BullAnalysisResponse;
@@ -42,13 +51,16 @@ function toUserFriendly(error: unknown, runId: string): UserFriendlyError {
 }
 
 /**
- * Workflow /judge — flow dengan Debate ronde (addendum §14/Task 14, Phase 1):
- *   Researcher (fetch + simpan evidence)
- *     → Bull (tesis + klaim, tervalidasi 3 lapis)
- *     → Bear (challenge terhadap klaim Bull, tervalidasi run-scoped)
- *     → Bull rebuttal (menjawab challenge, klaim tervalidasi)
- *     → Judge (menimbang semua argumen, rubrik 5 kategori).
- * Agent adalah pure function; seluruh persistence terjadi di sini.
+ * Workflow /judge — flow dengan Debate ronde + Market/News Researcher
+ * (addendum §14/§24-A, Phase 1):
+ *   Researcher fundamental → Researcher Market → Researcher News
+ *     → Bull (tesis + klaim) → Bear (challenge) → Bull rebuttal
+ *     → Judge (menimbang seluruh debat, rubrik 5 kategori).
+ * Agent adalah pure function; seluruh persistence & degradasi terjadi di sini.
+ *
+ * Degradasi enrichment (addendum §24-A.5): kegagalan Market/News → kategori
+ * rubrik terkait `null`, run tetap `completed`. Kegagalan fundamental
+ * (Company Report/Financials) → run `failed`.
  */
 export async function judgeWorkflow(
   ctx: HarnessContext,
@@ -59,7 +71,7 @@ export async function judgeWorkflow(
   const run = await ctx.db.execution.createRun({ ticker, command: 'judge' });
 
   try {
-    // 1. Researcher: ambil & simpan evidence (ground truth)
+    // 1. Researcher fundamental: ambil & simpan evidence (ground truth)
     progress('researcher', `I'm starting with Company Report and Quarterly Financials for ${ticker}...`);
     const report = await ctx.sectors.getCompanyReport(ticker);
     const evidenceReport = await ctx.db.evidence.save({
@@ -80,20 +92,90 @@ export async function judgeWorkflow(
     progress('researcher', '✓ Quarterly Financials retrieved');
 
     const evidenceIds = [evidenceReport.id, evidenceFinancials.id];
+    let marketEvidence: Evidence[] = [];
+    let newsEvidence: Evidence[] = [];
+    let marketAvailable = false;
+    let newsAvailable = false;
+
+    // 1b. Researcher Market — enrichment, degrade bila gagal (addendum §24-A.5).
+    if (ctx.researchers.market) {
+      try {
+        const daily = await ctx.sectors.getDailyTransaction(ticker);
+        const evDaily = await ctx.db.evidence.save({
+          runId: run.id,
+          ticker,
+          source: SECTORS_SOURCES.dailyTransaction,
+          data: daily as unknown as Record<string, unknown>,
+        });
+        const foreign = await ctx.sectors.getForeignFlow(ticker);
+        const evForeign = await ctx.db.evidence.save({
+          runId: run.id,
+          ticker,
+          source: SECTORS_SOURCES.foreignFlow,
+          data: foreign as unknown as Record<string, unknown>,
+        });
+        marketEvidence = [evDaily, evForeign];
+        marketAvailable = true;
+        evidenceIds.push(evDaily.id, evForeign.id);
+        progress('researcher', '✓ Market data (Daily Transaction + Foreign Flow) retrieved');
+      } catch {
+        progress('researcher', '⚠ Market data unavailable — marketMomentum left unevaluated');
+      }
+    }
+
+    // 1c. Researcher News — enrichment, degrade bila gagal (addendum §24-A.5).
+    if (ctx.researchers.news) {
+      try {
+        const news = await ctx.sectors.getNews(ticker);
+        const evNews = await ctx.db.evidence.save({
+          runId: run.id,
+          ticker,
+          source: SECTORS_SOURCES.news,
+          data: news as unknown as Record<string, unknown>,
+        });
+        const filings = await ctx.sectors.getFilings(ticker);
+        const evFilings = await ctx.db.evidence.save({
+          runId: run.id,
+          ticker,
+          source: SECTORS_SOURCES.filings,
+          data: filings as unknown as Record<string, unknown>,
+        });
+        const sentiment = await ctx.sectors.getSentiment(ticker);
+        const evSentiment = await ctx.db.evidence.save({
+          runId: run.id,
+          ticker,
+          source: SECTORS_SOURCES.sentiment,
+          data: sentiment as unknown as Record<string, unknown>,
+        });
+        newsEvidence = [evNews, evFilings, evSentiment];
+        newsAvailable = true;
+        evidenceIds.push(evNews.id, evFilings.id, evSentiment.id);
+        progress('researcher', '✓ News / Filings / Sentiment retrieved');
+      } catch {
+        progress('researcher', '⚠ News data unavailable — risk left unevaluated');
+      }
+    }
+
     await ctx.db.conversation.addMessage({
       runId: run.id,
       messageId: `researcher_${run.id}`,
       agent: 'researcher',
       messageType: 'observation',
-      content: `I retrieved the Company Report and Quarterly Financials for ${ticker} and stored them as evidence for this run.`,
+      content: `I retrieved the evidence for ${ticker} and stored it for this run.`,
       evidenceIds,
       sequenceOrder: 0,
+      metadata: { marketAvailable, newsAvailable },
     });
 
-    // 2. Bull: analisis → reasoning + klaim terstruktur
+    // 2. Bull: analisis → reasoning + klaim terstruktur (semua evidence dilihat)
     progress('bull', 'Analyzing the evidence for a bullish thesis...');
     const bull = await ctx.bull.analyze({ ticker, evidenceIds });
     const bullClaims = await ctx.validator.validate(bull.claims, evidenceIds);
+    // Invariant §24-B.1: klaim hanya boleh merujuk evidence yang benar-benar dilihat.
+    ctx.validator.assertSeenEvidence(
+      bullClaims.flatMap((c) => c.evidenceIds),
+      evidenceIds,
+    );
 
     await ctx.db.conversation.addMessage({
       runId: run.id,
@@ -103,7 +185,7 @@ export async function judgeWorkflow(
       content: bull.reasoning,
       evidenceIds: bull.evidenceIds,
       sequenceOrder: 1,
-      metadata: { claimCount: bullClaims.length },
+      metadata: { claimCount: bullClaims.length, seenEvidenceIds: evidenceIds },
     });
     for (const claim of bullClaims) {
       await ctx.db.claims.save({ runId: run.id, messageId: bull.messageId, claim });
@@ -113,6 +195,7 @@ export async function judgeWorkflow(
     // 3. Bear: challenge terhadap klaim Bull (Debate ronde, addendum §15)
     progress('bear', 'Challenging the bullish thesis...');
     const bear = await ctx.bear.challenge({ ticker, evidenceIds, bullClaims });
+    ctx.validator.assertSeenEvidence(bear.evidenceIds, evidenceIds);
     await ctx.validator.validateChallenge(
       bear.counterpoints,
       bear.evidenceIds,
@@ -132,7 +215,7 @@ export async function judgeWorkflow(
       content: bearContent,
       evidenceIds: bear.evidenceIds,
       sequenceOrder: 2,
-      metadata: { challengeCount: bear.counterpoints.length },
+      metadata: { challengeCount: bear.counterpoints.length, seenEvidenceIds: evidenceIds },
     });
     progress('bear', `✓ ${bear.counterpoints.length} challenge(s) validated`);
 
@@ -144,6 +227,10 @@ export async function judgeWorkflow(
       bearCounterpoints: bear.counterpoints,
     });
     const rebuttalClaims = await ctx.validator.validate(rebuttal.claims, evidenceIds);
+    ctx.validator.assertSeenEvidence(
+      rebuttalClaims.flatMap((c) => c.evidenceIds),
+      evidenceIds,
+    );
     // Normalisasi claimId rebuttal — UNIQUE(run_id, claim_id) di DB; id
     // `rebuttal_N` juga menandai asal claim di audit trail.
     const storedRebuttalClaims: Claim[] = rebuttalClaims.map((c, i) => ({ ...c, claimId: `rebuttal_${i + 1}` }));
@@ -155,7 +242,7 @@ export async function judgeWorkflow(
       content: rebuttal.reasoning,
       evidenceIds: rebuttal.evidenceIds,
       sequenceOrder: 3,
-      metadata: { claimCount: storedRebuttalClaims.length },
+      metadata: { claimCount: storedRebuttalClaims.length, seenEvidenceIds: evidenceIds },
     });
     for (const claim of storedRebuttalClaims) {
       await ctx.db.claims.save({ runId: run.id, messageId: rebuttal.messageId, claim });
@@ -179,13 +266,14 @@ export async function judgeWorkflow(
       metadata: { score: judgment.score, stance: judgment.stance },
     });
 
-    const completed = await ctx.db.execution.completeRun(
-      run.id,
-      (Date.now() - startedAt) / 1000,
-    );
+    const completed = await ctx.db.execution.completeRun(run.id, (Date.now() - startedAt) / 1000);
     return {
       run: completed,
       evidence: [evidenceReport, evidenceFinancials],
+      marketEvidence,
+      newsEvidence,
+      marketAvailable,
+      newsAvailable,
       bull,
       bear,
       rebuttal,

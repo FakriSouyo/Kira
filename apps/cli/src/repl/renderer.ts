@@ -104,11 +104,11 @@ export function writeProgress(output: NodeJS.WritableStream, phase: string, line
 
 /** Output penuh /judge — layout conversational addendum §19 + Debate ronde (Phase 1). */
 export function renderJudgeResult(artifacts: JudgeArtifacts): string {
-  const { run, evidence, bull, bear, rebuttal, judgment } = artifacts;
+  const { run, evidence, marketEvidence, newsEvidence, marketAvailable, newsAvailable, bull, bear, rebuttal, judgment } = artifacts;
   const ev = (id: string) => color.gray(id);
   const breakdown = judgment.breakdown;
   const b = (v: number | null, label: string) =>
-    `    ${label.padEnd(20)} ${v === null ? color.gray('-- (not evaluated: no market data yet)') : `${v} / 100`}`;
+    `    ${label.padEnd(20)} ${v === null ? color.gray('-- (not evaluated: data unavailable)') : `${v} / 100`}`;
   const claimIndex = new Map(bull.claims.map((c, i) => [c.claimId, i + 1]));
 
   return [
@@ -119,6 +119,12 @@ export function renderJudgeResult(artifacts: JudgeArtifacts): string {
     '',
     `🔍 RESEARCHER`,
     `  Evidence: ${ev(evidence[0]?.id ?? '-')}, ${ev(evidence[1]?.id ?? '-')}`,
+    ...(marketAvailable && marketEvidence.length > 0
+      ? [`  Market: ${marketEvidence.map((e) => ev(e.id)).join(', ')}`]
+      : [`  ${color.gray('Market: unavailable — marketMomentum left unevaluated')}`]),
+    ...(newsAvailable && newsEvidence.length > 0
+      ? [`  News: ${newsEvidence.map((e) => ev(e.id)).join(', ')}`]
+      : [`  ${color.gray('News: unavailable — risk left unevaluated')}`]),
     '',
     LIGHT,
     '',

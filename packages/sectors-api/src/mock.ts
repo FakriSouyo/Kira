@@ -1,10 +1,15 @@
 import { computeMatchScore, SectorsApiError } from './client';
 import type {
   CompanyReport,
+  DailyTransaction,
+  Filing,
+  ForeignFlow,
+  NewsArticle,
   QuarterlyFinancials,
   SectorsApi,
   ScreenerResult,
   ScreenerRow,
+  Sentiment,
 } from './types';
 
 /**
@@ -132,6 +137,70 @@ const SCREENER_ROWS: ScreenerRow[] = Object.entries(UNIVERSE).map(([ticker, fx])
   pb: fx.report.valuation.pb,
 }));
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Fixture Market & News (addendum §24-A) — deterministik.
+// BBCA: likuid tinggi, foreign net buy, sentimen positif, filing bersih.
+// BJTM: likuiditas rendah, net sell, sentimen negatif — untuk membuktikan
+// rubrik `marketMomentum` & `risk` bisa bernilai beda antar ticker.
+// ─────────────────────────────────────────────────────────────────────────────
+interface MarketNewsFixture {
+  daily: DailyTransaction;
+  foreign: ForeignFlow;
+  news: NewsArticle[];
+  filings: Filing[];
+  sentiment: Sentiment;
+}
+
+const MARKET_NEWS: Record<string, MarketNewsFixture> = {
+  BBCA: {
+    daily: {
+      ticker: 'BBCA',
+      asOf: '2025-01-15T00:00:00Z',
+      window: '30d',
+      avgValueBillion: 890,
+      volumeRatio: 1.3,
+      upDaysPct: 63,
+      avgIntradayVolatilityPct: 1.2,
+      liquidityBand: 'high',
+    },
+    foreign: { ticker: 'BBCA', asOf: '2025-01-15T00:00:00Z', window: '30d', netForeignPctOfCap: 0.8, netFlow: 'buy', netBuyDaysPct: 61 },
+    news: [
+      { id: 'n-1', ticker: 'BBCA', headline: 'BCA reports solid Q4 net income', publishedAt: '2025-01-10T02:00:00Z', snippet: 'Net income growth beats estimate.', sentiment: 'positive', source: 'Reuters' },
+      { id: 'n-2', ticker: 'BBCA', headline: 'Foreign investors raise BCA holdings', publishedAt: '2025-01-12T05:00:00Z', snippet: 'Net foreign flows turned positive.', sentiment: 'positive', source: 'Bloomberg' },
+    ],
+    filings: [{ id: 'f-1', ticker: 'BBCA', type: 'annual_report', title: 'Annual Report 2024', filedAt: '2025-03-01T00:00:00Z' }],
+    sentiment: { ticker: 'BBCA', asOf: '2025-01-15T00:00:00Z', window: '30d', aggregate: 0.7, distribution: { positive: 0.7, negative: 0.1, neutral: 0.2 }, articleCount: 20 },
+  },
+  BBRI: {
+    daily: { ticker: 'BBRI', asOf: '2025-01-15T00:00:00Z', window: '30d', avgValueBillion: 620, volumeRatio: 1.1, upDaysPct: 55, avgIntradayVolatilityPct: 1.5, liquidityBand: 'moderate' },
+    foreign: { ticker: 'BBRI', asOf: '2025-01-15T00:00:00Z', window: '30d', netForeignPctOfCap: 0.2, netFlow: 'neutral', netBuyDaysPct: 51 },
+    news: [{ id: 'n-1', ticker: 'BBRI', headline: 'BRI lending growth steady', publishedAt: '2025-01-08T02:00:00Z', snippet: 'Loan growth in line with guidance.', sentiment: 'neutral', source: 'Reuters' }],
+    filings: [{ id: 'f-1', ticker: 'BBRI', type: 'disclosure', title: 'Disclosure of shareholding', filedAt: '2025-02-10T00:00:00Z' }],
+    sentiment: { ticker: 'BBRI', asOf: '2025-01-15T00:00:00Z', window: '30d', aggregate: 0.2, distribution: { positive: 0.4, negative: 0.2, neutral: 0.4 }, articleCount: 15 },
+  },
+  BMRI: {
+    daily: { ticker: 'BMRI', asOf: '2025-01-15T00:00:00Z', window: '30d', avgValueBillion: 510, volumeRatio: 1.0, upDaysPct: 50, avgIntradayVolatilityPct: 1.6, liquidityBand: 'moderate' },
+    foreign: { ticker: 'BMRI', asOf: '2025-01-15T00:00:00Z', window: '30d', netForeignPctOfCap: 0.0, netFlow: 'neutral', netBuyDaysPct: 50 },
+    news: [],
+    filings: [],
+    sentiment: { ticker: 'BMRI', asOf: '2025-01-15T00:00:00Z', window: '30d', aggregate: 0.0, distribution: { positive: 0.35, negative: 0.3, neutral: 0.35 }, articleCount: 8 },
+  },
+  BBNI: {
+    daily: { ticker: 'BBNI', asOf: '2025-01-15T00:00:00Z', window: '30d', avgValueBillion: 380, volumeRatio: 0.9, upDaysPct: 44, avgIntradayVolatilityPct: 1.9, liquidityBand: 'moderate' },
+    foreign: { ticker: 'BBNI', asOf: '2025-01-15T00:00:00Z', window: '30d', netForeignPctOfCap: -0.2, netFlow: 'sell', netBuyDaysPct: 43 },
+    news: [{ id: 'n-1', ticker: 'BBNI', headline: 'BNI cost base under pressure', publishedAt: '2025-01-09T03:00:00Z', snippet: 'Cost-to-income ratio ticked up.', sentiment: 'negative', source: 'Reuters' }],
+    filings: [],
+    sentiment: { ticker: 'BBNI', asOf: '2025-01-15T00:00:00Z', window: '30d', aggregate: -0.1, distribution: { positive: 0.3, negative: 0.35, neutral: 0.35 }, articleCount: 10 },
+  },
+  BJTM: {
+    daily: { ticker: 'BJTM', asOf: '2025-01-15T00:00:00Z', window: '30d', avgValueBillion: 95, volumeRatio: 0.6, upDaysPct: 33, avgIntradayVolatilityPct: 2.4, liquidityBand: 'low' },
+    foreign: { ticker: 'BJTM', asOf: '2025-01-15T00:00:00Z', window: '30d', netForeignPctOfCap: -0.5, netFlow: 'sell', netBuyDaysPct: 35 },
+    news: [{ id: 'n-1', ticker: 'BJTM', headline: 'BJTM liquidity thins; sentiment negative', publishedAt: '2025-01-11T04:00:00Z', snippet: 'Thin trading continues.', sentiment: 'negative', source: 'Reuters' }],
+    filings: [],
+    sentiment: { ticker: 'BJTM', asOf: '2025-01-15T00:00:00Z', window: '30d', aggregate: -0.4, distribution: { positive: 0.2, negative: 0.5, neutral: 0.3 }, articleCount: 6 },
+  },
+};
+
 /**
  * Implementasi SectorsApi offline (addendum §12 mock_mode).
  * Ticker tak dikenal ⇒ NOT_FOUND dengan saran yang sama dengan client asli,
@@ -166,5 +235,39 @@ export class MockSectorsApi implements SectorsApi {
     return SCREENER_ROWS.map((row) => ({ ...row, matchScore: computeMatchScore(row, criteria) })).sort(
       (a, b) => b.matchScore - a.matchScore || a.ticker.localeCompare(b.ticker),
     );
+  }
+
+  // —— Market & News (Phase 1, addendum §24-A) — konsisten NOT_FOUND dgn client asli.
+
+  private marketOrThrow(ticker: string): MarketNewsFixture {
+    const fx = MARKET_NEWS[ticker.toUpperCase()];
+    if (!fx) {
+      throw new SectorsApiError(
+        'NOT_FOUND',
+        `Ticker "${ticker}" not found in Sectors API`,
+        'Try: /judge BBCA (or other valid ticker)',
+      );
+    }
+    return fx;
+  }
+
+  async getDailyTransaction(ticker: string): Promise<DailyTransaction> {
+    return this.marketOrThrow(ticker).daily;
+  }
+
+  async getForeignFlow(ticker: string): Promise<ForeignFlow> {
+    return this.marketOrThrow(ticker).foreign;
+  }
+
+  async getNews(ticker: string): Promise<NewsArticle[]> {
+    return this.marketOrThrow(ticker).news;
+  }
+
+  async getFilings(ticker: string): Promise<Filing[]> {
+    return this.marketOrThrow(ticker).filings;
+  }
+
+  async getSentiment(ticker: string): Promise<Sentiment> {
+    return this.marketOrThrow(ticker).sentiment;
   }
 }
