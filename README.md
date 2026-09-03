@@ -78,6 +78,9 @@ Atau via `~/.finharness/config.json`:
 > `sectors_api.key` / `llm.*.api_key` di `config.json` (baris `"key"` di atas) tetap dibaca
 > sebagai **fallback legacy** agar tidak breaking. Untuk CI/headless cukup pakai env
 > (`SECTORS_API_KEY`, `LLM_API_KEY`) yang menggantikan keduanya.
+>
+> Di dalam REPL langsung set lewat `/auth-set SECTORS=... LLM.AGENT=... LLM.ROUTER=...`
+> (menulis `.credentials.json` otomatis dengan mode `0600` di *nix).
 
 Prioritas konfigurasi: **env → `.credentials.json` → config.json → default** (env menang bila ada).
 

@@ -19,6 +19,8 @@ export interface HarnessContext {
   validator: ClaimValidator;
   /** Aktif/tidaknya sub-researcher Market & News untuk /judge (addendum §24-A.6). */
   researchers: { market: boolean; news: boolean };
+  /** Direktori data (~/.finharness) — dipakai command berbasis file spt /auth-set. */
+  homeDir: string;
 }
 
 export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): HarnessContext {
@@ -42,5 +44,6 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
     router: new IntentRouter(routerLlm),
     validator: new ClaimValidator(db.evidence),
     researchers: config.researchers,
+    homeDir: config.homeDir,
   };
 }

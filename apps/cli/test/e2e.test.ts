@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -243,8 +243,23 @@ describe('E2E — /screen dan command lainnya', () => {
 
     expect(run.code).toBe(0);
     expect(run.stdout).toContain('/judge [TICKER]');
+    expect(run.stdout).toContain('/auth-set KEY=VALUE');
     expect(run.stdout).toContain('/challenge is in active development');
     expect(run.stdout).toContain('Unknown command: /unknown');
     expect(run.stdout).toContain('Goodbye');
+  }, CLI_TIMEOUT_MS);
+
+  it('/auth-set menulis kredensial ke .credentials.json tanpa API key/network', async () => {
+    const home = freshHome();
+    const run = await runCli(home, '/auth-set SECTORS=sk-e2e LLM.AGENT=sk-agent-e2e\n/exit\n');
+
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain('Credentials saved to');
+    const json = JSON.parse(readFileSync(join(home, '.credentials.json'), 'utf8')) as {
+      sectors_api: { key: string };
+      llm: { agent: { api_key: string } };
+    };
+    expect(json.sectors_api.key).toBe('sk-e2e');
+    expect(json.llm.agent.api_key).toBe('sk-agent-e2e');
   }, CLI_TIMEOUT_MS);
 });

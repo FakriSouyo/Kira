@@ -47,6 +47,7 @@ export function renderHelp(): string {
     color.bold('Core:'),
     `  ${color.green('/judge [TICKER]')}     Full analysis + Debate ronde (Researcher → Bull → Bear → Bull → Judge)`,
     `  ${color.green('/screen [CRITERIA]')}  Screen stocks (profitable, growing)`,
+    `  ${color.green('/auth-set KEY=VALUE')} Save API keys to .credentials.json (SECTORS/LLM.AGENT/LLM.ROUTER)`,
     `  ${color.green('/help')}               Show this help`,
     `  ${color.green('/exit')}               Exit harness`,
     '',

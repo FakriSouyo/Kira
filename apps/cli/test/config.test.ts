@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadConfig } from '../src/config';
+import { loadConfig, writeCredentialsFile } from '../src/config';
 
 const SAVED_ENV = new Map<string, string | undefined>();
 
@@ -206,6 +206,52 @@ describe('loadConfig — pemisahan credential `.credentials.json` (addendum §12
     try {
       const config = loadConfig({ homeDir: home });
       expect(config.sectors.apiKey).toBe('sk-config');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('writeCredentialsFile — tulis .credentials.json mode 0600 (addendum §12)', () => {
+  it('membuat file dengan isi terstruktur dan path .credentials.json', () => {
+    const home = mkdtempSync(join(tmpdir(), 'finharness-cw-'));
+    try {
+      const path = writeCredentialsFile(home, {
+        sectors_api: { key: 'sk-1' },
+        llm: { agent: { api_key: 'sk-agent' } },
+      });
+      expect(path.endsWith('.credentials.json')).toBe(true);
+      const json = JSON.parse(readFileSync(path, 'utf8')) as { sectors_api: { key: string }; llm: { agent: { api_key: string } } };
+      expect(json.sectors_api.key).toBe('sk-1');
+      expect(json.llm.agent.api_key).toBe('sk-agent');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('merge dengan file existing — menulis field baru tak menghapus yang lama', () => {
+    const home = mkdtempSync(join(tmpdir(), 'finharness-cw-'));
+    try {
+      writeCredentialsFile(home, { sectors_api: { key: 'sk-keep' } });
+      writeCredentialsFile(home, { llm: { agent: { api_key: 'sk-agent' } } });
+      const json = JSON.parse(readFileSync(join(home, '.credentials.json'), 'utf8')) as {
+        sectors_api: { key: string };
+        llm: { agent: { api_key: string } };
+      };
+      expect(json.sectors_api.key).toBe('sk-keep');
+      expect(json.llm.agent.api_key).toBe('sk-agent');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('mode file 0600 (pemilik saja) di *nix; dilewati di Windows', () => {
+    if (process.platform === 'win32') return; // posix mode tak berlaku di Windows
+    const home = mkdtempSync(join(tmpdir(), 'finharness-cw-'));
+    try {
+      writeCredentialsFile(home, { sectors_api: { key: 'sk-1' } });
+      const mode = statSync(join(home, '.credentials.json')).mode & 0o777;
+      expect(mode).toBe(0o600);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

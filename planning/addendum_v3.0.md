@@ -1168,6 +1168,11 @@ export FINHARNESS_DEBUG=true
 > agar tidak breaking, tapi preferensi dipindah ke file credential; env (`SECTORS_API_KEY`,
 > `LLM_API_KEY`) menggantikan keduanya (CI/headless). Alasan: `config.json` yang bersih aman
 > di-screenshot/di-share untuk debug tanpa membawa key.
+>
+> **Penulis otomatis (`mode 0600`).** Command REPL `/auth-set KEY=VALUE` menulis file ini
+> (SECTORS=, LLM.AGENT=, LLM.ROUTER=; merge per-field dengan isi existing) memakai
+> `writeFileSync(..., { mode: 0o600 })` + `chmodSync` — key mentah hanya bisa dibaca pemilik
+> file (posix). Windows tak mendukung mode; di sana perlindungan via lokasi di luar repo.
 
 #### Referensi DeepSeek Harness (Kebijakan)
 

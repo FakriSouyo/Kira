@@ -1,4 +1,5 @@
 import type { HarnessContext } from '../context';
+import { writeCredentialsFile } from '../config';
 import type { CommandHandler, CommandResult } from '../repl/loop';
 import {
   color,
@@ -65,10 +66,56 @@ function makeStub(command: string): CommandHandler {
   };
 }
 
+/** Kredensial yang bisa diset lewat `/auth-set` (pola DSH: key mentah di file terpisah). */
+const AUTH_SET_FIELDS: ReadonlyArray<{ name: string; apply: (cred: Record<string, unknown>, value: string) => void }> = [
+  {
+    name: 'SECTORS',
+    apply: (cred, value) => (cred.sectors_api = { key: value }),
+  },
+  {
+    name: 'LLM.AGENT',
+    apply: (cred, value) => (cred.llm = { ...(cred.llm as object), agent: { api_key: value } }),
+  },
+  {
+    name: 'LLM.ROUTER',
+    apply: (cred, value) => (cred.llm = { ...(cred.llm as object), router: { api_key: value } }),
+  },
+];
+
+/** `/auth-set KEY=VALUE` — tulis kredensial ke `.credentials.json` (mode 0600). */
+function makeAuthSetCommand(ctx: HarnessContext): CommandHandler {
+  return async (args: string[]) => {
+    if (args.length === 0) {
+      throw new UserFriendlyError(
+        'MISSING_ARG',
+        'No credentials provided',
+        'Usage: /auth-set SECTORS=KEY LLM.AGENT=KEY LLM.ROUTER=KEY',
+      );
+    }
+    const cred: Record<string, unknown> = {};
+    for (const arg of args) {
+      const eq = arg.indexOf('=');
+      if (eq <= 0) {
+        throw new UserFriendlyError('INVALID_ARG', `"${arg}" is not a valid KEY=VALUE`, 'Example: /auth-set SECTORS=sk-abc LLM.AGENT=sk-def');
+      }
+      const name = arg.slice(0, eq).toUpperCase();
+      const value = arg.slice(eq + 1);
+      const field = AUTH_SET_FIELDS.find((f) => f.name === name);
+      if (!field) {
+        throw new UserFriendlyError('INVALID_ARG', `Unknown credential "${name}"`, 'Known keys: SECTORS, LLM.AGENT, LLM.ROUTER');
+      }
+      field.apply(cred, value);
+    }
+    const path = writeCredentialsFile(ctx.homeDir, cred as unknown as Parameters<typeof writeCredentialsFile>[1]);
+    process.stdout.write(`${color.green(`✓ Credentials saved to ${path}`)}\n\n`);
+  };
+}
+
 export function buildCommands(ctx: HarnessContext): Map<string, CommandHandler> {
   const commands: Map<string, CommandHandler> = new Map([
     ['judge', makeJudgeCommand(ctx)],
     ['screen', makeScreenCommand(ctx)],
+    ['auth-set', makeAuthSetCommand(ctx)],
     ['help', async () => {
       process.stdout.write(`${renderHelp()}\n\n`);
     }],

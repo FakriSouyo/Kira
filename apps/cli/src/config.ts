@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DATA_DIR_NAME, ENV } from '@harness/shared';
@@ -99,6 +99,35 @@ function readCredentialsFile(homeDir: string): CredentialsFile | null {
   } catch {
     return null;
   }
+}
+
+/** Gabungkan kredensial existing dengan partial baru; field yang diset `b` menang. */
+function mergeCredentials(a: CredentialsFile, b: CredentialsFile): CredentialsFile {
+  return {
+    sectors_api: { key: b?.sectors_api?.key ?? a?.sectors_api?.key },
+    llm: {
+      agent: { api_key: b?.llm?.agent?.api_key ?? a?.llm?.agent?.api_key },
+      router: { api_key: b?.llm?.router?.api_key ?? a?.llm?.router?.api_key },
+    },
+  };
+}
+
+/**
+ * Tulis `~/.finharness/.credentials.json` dengan mode `0600` (Unix) — key mentah
+ * hanya bisa dibaca pemilik file. Merge dengan file existing (overwrite per field),
+ * membuat homeDir bila belum ada. Mengembalikan path file yang ditulis.
+ */
+export function writeCredentialsFile(homeDir: string, credentials: CredentialsFile): string {
+  const path = join(homeDir, '.credentials.json');
+  const merged = mergeCredentials(readCredentialsFile(homeDir) ?? {}, credentials);
+  mkdirSync(homeDir, { recursive: true });
+  writeFileSync(path, `${JSON.stringify(merged, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  try {
+    chmodSync(path, 0o600); // berlaku utk file yang sudah ada (pesan macOS + *nix)
+  } catch {
+    // chmod adalah no-op di Windows; abaikan.
+  }
+  return path;
 }
 
 type Provider = LLMModelConfig['provider'];
