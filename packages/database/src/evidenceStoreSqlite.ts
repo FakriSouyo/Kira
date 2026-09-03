@@ -6,7 +6,7 @@ import { canonicalHash } from '@harness/evidence';
 import type { Evidence } from '@harness/schemas';
 import type { EvidenceStore } from '@harness/evidence';
 
-interface EvidenceRow {
+export interface EvidenceRow {
   id: string;
   runId: string;
   ticker: string;
@@ -20,7 +20,8 @@ interface EvidenceRow {
   createdAt: string;
 }
 
-function toEvidence(row: EvidenceRow): Evidence {
+/** Pemetaan baris evidence → objek canonical — dipakai EvidenceStore AND session helper (getExecutionWithArtifacts). */
+export function toEvidence(row: EvidenceRow): Evidence {
   return {
     id: row.id,
     runId: row.runId,

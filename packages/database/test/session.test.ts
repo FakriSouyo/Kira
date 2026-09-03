@@ -110,4 +110,19 @@ describe('Session helpers (Phase 2 Task 1)', () => {
       code: 'NOT_FOUND',
     });
   });
+
+  it('artifacts.evidence identik dgn getByRun — reuse toEvidence (Deviasi #19)', async () => {
+    const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
+    await db.evidence.save({
+      runId: run.id,
+      ticker: 'BBCA',
+      source: 'sectors.company_report',
+      data: { financials: { roe: 23.1 }, overview: { market_cap: 1e15 } },
+    });
+    const art = await db.execution.getExecutionWithArtifacts(run.id);
+    const byRun = await db.evidence.getByRun(run.id);
+    expect(art.evidence).toEqual(byRun);
+    expect(art.evidence[0].sourceType).toBe('api');
+    expect(art.evidence[0].data).toEqual({ financials: { roe: 23.1 }, overview: { market_cap: 1e15 } });
+  });
 });

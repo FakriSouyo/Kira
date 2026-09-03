@@ -4,6 +4,8 @@ import type { Orm } from './client';
 import { agentMessages, claims, evidence, executions, judgments } from './schema';
 import type { ExecutionArtifacts, ExecutionRun, ExecutionStore } from '@harness/execution';
 import { UserFriendlyError } from '@harness/shared';
+// reuse pemetaan evidence terpusat (Deviasi #19) — hindari duplikasi snake→camel
+import { type EvidenceRow, toEvidence } from './evidenceStoreSqlite';
 
 interface ExecutionRow {
   id: string;
@@ -113,21 +115,7 @@ export class ExecutionStoreSqlite implements ExecutionStore {
       this.db.select().from(judgments).where(eq(judgments.runId, runId)).limit(1),
     ]);
 
-    const evidenceArtifacts = evidenceRows.map((r) => ({
-      id: (r as { id: string }).id,
-      runId: (r as { runId: string }).runId,
-      ticker: (r as { ticker: string }).ticker,
-      source: (r as { source: string }).source,
-      sourceType: (r as { sourceType: string }).sourceType as import('@harness/schemas').Evidence['sourceType'],
-      contentHash: (r as { contentHash: string }).contentHash,
-      retrievedAt: (r as { retrievedAt: string }).retrievedAt,
-      validAt: (r as { validAt: string | null }).validAt,
-      data: JSON.parse((r as { data: string }).data) as Record<string, unknown>,
-      provenance: (r as { provenance: string | null }).provenance
-        ? (JSON.parse((r as { provenance: string }).provenance) as Record<string, unknown>)
-        : null,
-      createdAt: (r as { createdAt: string }).createdAt,
-    })) as import('@harness/schemas').Evidence[];
+    const evidenceArtifacts = evidenceRows.map((r) => toEvidence(r as EvidenceRow));
 
     const messages = messageRows.map((r) => ({
       id: (r as { id: string }).id,
