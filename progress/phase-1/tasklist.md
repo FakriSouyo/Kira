@@ -43,5 +43,10 @@ Checklist hidup ber-status. Sumber task: `addendum_v3.0.md` §24-A.7. Status:
 
 ## Verifikasi akhir
 - [x] ✅ `pnpm check` hijau (typecheck + 137 test, 17 file)
-- [x] 🔵 ARCHITECTURE deviasi & tasklist status di-update
-- [ ] ☐ Commit Phase 1 penuh
+- [x] ✅ ARCHITECTURE deviasi #14 (path HTTP Market/News perlu verifikasi API riil) & status
+- [x] ✅ Commit Phase 1 penuh — `8a83768`
+
+## Catatan untuk phase-2
+- Path HTTP Market/News (`/daily-transaction`, `/foreign-flow`, `/news`, `/filings`, `/sentiment`)
+  memakai bentuk logis yang **harus dikonfirmasi** terhadap dokumentasi Sectors API sebelum
+  produksi (Deviasi #14).
