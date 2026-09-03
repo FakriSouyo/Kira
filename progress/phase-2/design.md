@@ -22,7 +22,8 @@ Menambah `Session save/resume`, `Streaming output`, `Export (json/md/html)` dan 
 
 > Diisi selama eksekusi bila kode menyimpang dari `planning/phase-2.md` — catat di `ARCHITECTURE.md` tabel Deviasi.
 
-- (kosong)
+- **Task 1 (done `ee3b2cd`, hijau 150/150):** `getExecutionWithArtifacts` memetakan baris evidence/messages/claims/judgment **manual inline** (bukan reuse `toEvidence` existing di `evidenceStoreSqlite.ts`) → dicatat ARCHITECTURE Deviasi **#19**. `listRuns` default `limit 100` (aman untuk CLI). Resume = fork baru (`content_hash` dedup) sesuai `rules.md` — belum ada consumer command `/resume` (addendum §27 list fitur), helper sudah siap untuk Task 2/3.
+- (langkah berikutnya diisi saat Task 2 streaming dieksekusi)
 
 ## Cakupan / keluar-cakupan
 
