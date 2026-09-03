@@ -102,6 +102,44 @@ describe('SectorsClient (v2)', () => {
     expect((await client.getQuarterlyFinancials('BBCA')).quarters[0]).toEqual(fin.quarters[0]);
   });
 
+  it('fills YoY from company report when quarterly returns single row (fix #17)', async () => {
+    const v2Report = {
+      symbol: 'BBCA.JK',
+      company_name: 'Bank Central Asia',
+      overview: { sector: 'Financials' },
+      valuation: { last_close_price: 9850, latest_close_date: '2025-01-10', forward_pe: 4.6, historical_valuation: [{ year: 2024, pb: 1.6 }] },
+      financials: {
+        historical_financials: [{ year: 2024, revenue: 300000, earnings: 105000, total_assets: 600000, total_equity: 500000 }],
+        yoy_quarter_revenue_growth: 0.098,
+        yoy_quarter_earnings_growth: 0.087,
+      },
+      dividend: { historical_dividends: { '2024': { total_yield: 0.031 } } },
+    };
+    const calls: string[] = [];
+    const client = new SectorsClient({
+      cacheDir,
+      fetchImpl: (async (url: string) => {
+        calls.push(url);
+        if (url.includes('/company/report')) return jsonResponse(v2Report);
+        return jsonResponse([{ symbol: 'BBCA.JK', date: '2024-12-31', revenue: 11000, earnings: 4000 }]);
+      }) as typeof fetch,
+    });
+    // Report first → cached, then quarterly enriches from cache (no extra report fetch on second quarterly call)
+    const report = await client.getCompanyReport('BBCA');
+    expect(report.financials.yoyQuarterRevenueGrowth).toBeCloseTo(9.8);
+    expect(report.financials.yoyQuarterEarningsGrowth).toBeCloseTo(8.7);
+    const fin = await client.getQuarterlyFinancials('BBCA');
+    expect(fin.quarters[0].revenueGrowthYoy).toBeCloseTo(9.8);
+    expect(fin.quarters[0].netIncomeGrowthYoy).toBeCloseTo(8.7);
+    expect(calls.filter((u) => u.includes('/company/report')).length).toBe(1);
+    expect(calls.filter((u) => u.includes('/financials/quarterly')).length).toBe(1);
+    // Second quarterly call → cache hit, no network
+    calls.length = 0;
+    const fin2 = await client.getQuarterlyFinancials('BBCA');
+    expect(fin2.quarters[0].revenueGrowthYoy).toBeCloseTo(9.8);
+    expect(calls.length).toBe(0);
+  });
+
   it('uses file cache on second call (no second API hit)', async () => {
     let hits = 0;
     const client = new SectorsClient({

@@ -31,7 +31,7 @@ const UNIVERSE: Record<string, Fixture> = {
       name: 'Bank Central Asia',
       sector: 'Banking',
       asOf: '2024-12-31',
-      financials: { roe: 23.1, roa: 3.4, netMargin: 35.2, debtToEquity: 9.8 },
+      financials: { roe: 23.1, roa: 3.4, netMargin: 35.2, debtToEquity: 9.8, yoyQuarterRevenueGrowth: 9.8, yoyQuarterEarningsGrowth: 8.7 },
       valuation: { price: 9850, pe: 4.6, pb: 1.6, dividendYield: 3.1 },
     },
     financials: {
@@ -51,7 +51,7 @@ const UNIVERSE: Record<string, Fixture> = {
       name: 'Bank Rakyat Indonesia',
       sector: 'Banking',
       asOf: '2024-12-31',
-      financials: { roe: 20.3, roa: 3.0, netMargin: 32.0, debtToEquity: 8.9 },
+      financials: { roe: 20.3, roa: 3.0, netMargin: 32.0, debtToEquity: 8.9, yoyQuarterRevenueGrowth: 7.4, yoyQuarterEarningsGrowth: 7.2 },
       valuation: { price: 4620, pe: 4.2, pb: 1.4, dividendYield: 4.0 },
     },
     financials: {
@@ -71,7 +71,7 @@ const UNIVERSE: Record<string, Fixture> = {
       name: 'Bank Mandiri',
       sector: 'Banking',
       asOf: '2024-12-31',
-      financials: { roe: 18.5, roa: 2.6, netMargin: 30.5, debtToEquity: 8.2 },
+      financials: { roe: 18.5, roa: 2.6, netMargin: 30.5, debtToEquity: 8.2, yoyQuarterRevenueGrowth: 6.8, yoyQuarterEarningsGrowth: 6.1 },
       valuation: { price: 6150, pe: 4.8, pb: 1.3, dividendYield: 2.8 },
     },
     financials: {
@@ -91,7 +91,7 @@ const UNIVERSE: Record<string, Fixture> = {
       name: 'Bank Negara Indonesia',
       sector: 'Banking',
       asOf: '2024-12-31',
-      financials: { roe: 14.2, roa: 1.8, netMargin: 26.4, debtToEquity: 7.6 },
+      financials: { roe: 14.2, roa: 1.8, netMargin: 26.4, debtToEquity: 7.6, yoyQuarterRevenueGrowth: 4.6, yoyQuarterEarningsGrowth: 4.1 },
       valuation: { price: 4180, pe: 4.0, pb: 1.1, dividendYield: 3.4 },
     },
     financials: {
@@ -111,7 +111,7 @@ const UNIVERSE: Record<string, Fixture> = {
       name: 'Bank JP Morgan Indonesia',
       sector: 'Banking',
       asOf: '2024-12-31',
-      financials: { roe: 12.1, roa: 1.5, netMargin: 24.8, debtToEquity: 7.1 },
+      financials: { roe: 12.1, roa: 1.5, netMargin: 24.8, debtToEquity: 7.1, yoyQuarterRevenueGrowth: 2.4, yoyQuarterEarningsGrowth: 1.8 },
       valuation: { price: 1320, pe: 3.6, pb: 0.9, dividendYield: 1.9 },
     },
     financials: {

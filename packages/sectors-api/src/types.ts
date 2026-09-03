@@ -24,6 +24,10 @@ export interface CompanyReport {
     debtToEquity?: number;
     /** Current ratio, rasio. */
     currentRatio?: number;
+    /** YoY quarterly revenue growth, % (from yoy_quarter_revenue_growth). */
+    yoyQuarterRevenueGrowth?: number;
+    /** YoY quarterly earnings growth, % (from yoy_quarter_earnings_growth). */
+    yoyQuarterEarningsGrowth?: number;
   };
   valuation: {
     price?: number;

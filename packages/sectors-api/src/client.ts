@@ -239,6 +239,8 @@ function toCompanyReport(raw: V2Report): CompanyReport {
       roa: pct(roa),
       netMargin: pct(netMargin),
       debtToEquity: undefined, // berasal dari report mendalam; dihindari fetch tambahan
+      yoyQuarterRevenueGrowth: pct(raw.financials?.yoy_quarter_revenue_growth),
+      yoyQuarterEarningsGrowth: pct(raw.financials?.yoy_quarter_earnings_growth),
     },
     valuation: {
       price: raw.valuation?.last_close_price,
@@ -422,11 +424,30 @@ export class SectorsClient implements SectorsApi {
   }
 
   async getQuarterlyFinancials(ticker: string): Promise<QuarterlyFinancials> {
-    return this.cached(this.cache, 'quarterly_financials', ticker, () =>
-      this.request<V2QuarterRow[]>(`/financials/quarterly/${encodeURIComponent(ticker)}/`, ticker).then(
-        toQuarterlyFinancials,
-      ),
-    );
+    return this.cached(this.cache, 'quarterly_financials', ticker, async () => {
+      const raw = await this.request<V2QuarterRow[]>(`/financials/quarterly/${encodeURIComponent(ticker)}/`, ticker);
+      const fin = toQuarterlyFinancials(raw);
+      // Deviasi #17: v2 /financials/quarterly/ hanya 1 kuartal → YoY undefined.
+      // Isi dari company_report.financials.yoy_quarter_*_growth (report sudah
+      // di-fetch & cached di run normal; kalau belum, fetch via cache).
+      if (fin.quarters.length > 0) {
+        const q0 = fin.quarters[0];
+        if (q0.revenueGrowthYoy === undefined || q0.netIncomeGrowthYoy === undefined) {
+          try {
+            const report = await this.getCompanyReport(ticker);
+            if (q0.revenueGrowthYoy === undefined && report.financials.yoyQuarterRevenueGrowth !== undefined) {
+              q0.revenueGrowthYoy = report.financials.yoyQuarterRevenueGrowth;
+            }
+            if (q0.netIncomeGrowthYoy === undefined && report.financials.yoyQuarterEarningsGrowth !== undefined) {
+              q0.netIncomeGrowthYoy = report.financials.yoyQuarterEarningsGrowth;
+            }
+          } catch {
+            // Report unavailable → biarkan undefined, rubrik akan renorm
+          }
+        }
+      }
+      return fin;
+    });
   }
 
   async screen(criteria: string[]): Promise<ScreenerResult[]> {
