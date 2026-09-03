@@ -105,9 +105,9 @@ export function writeProgress(output: NodeJS.WritableStream, phase: string, line
   output.write(`  ${line}\n`);
 }
 
-/** Output penuh /judge — layout conversational addendum §19 + Debate ronde (Phase 1). */
+/** Output penuh /judge — layout conversational addendum §19 + Debate ronde (Phase 1) + conditional (Phase 3). */
 export function renderJudgeResult(artifacts: JudgeArtifacts): string {
-  const { run, evidence, marketEvidence, newsEvidence, marketAvailable, newsAvailable, bull, bear, rebuttal, judgment } = artifacts;
+  const { run, evidence, marketEvidence, newsEvidence, marketAvailable, newsAvailable, bull, bear, rebuttal, judgment, conditionalUsed } = artifacts;
   const ev = (id: string) => color.gray(id);
   const breakdown = judgment.breakdown;
   const b = (v: number | null, label: string) =>
@@ -165,7 +165,7 @@ export function renderJudgeResult(artifacts: JudgeArtifacts): string {
     ]),
     LIGHT,
     '',
-    `⚖️ JUDGE`,
+    `⚖️ JUDGE${conditionalUsed ? ` ${color.yellow('(conditional extra round)')}` : ''}`,
     ...indent(judgment.summary),
     '',
     `  ${color.bold(`→ Decision: ${judgment.stance.toUpperCase()}`)}`,
@@ -247,6 +247,7 @@ export function renderExportJson(artifacts: ExecutionArtifacts): string {
 /** Export Markdown — audit trail lengkap, dipakai /export --format md. */
 export function renderExportMarkdown(artifacts: ExecutionArtifacts): string {
   const { run, evidence, messages, claims, judgment } = artifacts;
+  const conditional = messages.some((m) => (m.metadata as Record<string, unknown> | null)?.conditional === true);
   const j = judgment;
   const score = j ? `${j.score} / 100` : '--';
   const stance = j?.stance?.toUpperCase() ?? '--';
@@ -254,9 +255,9 @@ export function renderExportMarkdown(artifacts: ExecutionArtifacts): string {
   const b = (v: number | null | undefined, label: string) =>
     `| ${label} | ${v == null ? '-- (not evaluated)' : `${v} / 100`} |`;
   return [
-    `# ${run.ticker} · FINAL JUDGMENT`,
+    `# ${run.ticker} · FINAL JUDGMENT${conditional ? ' · Conditional (extra round)' : ''}`,
     '',
-    `Run: \`${run.id}\` · Ticker: ${run.ticker} · Status: ${run.status}`,
+    `Run: \`${run.id}\` · Ticker: ${run.ticker} · Status: ${run.status}${conditional ? ' · conditional' : ''}`,
     '',
     `**Score:** ${score} · **Stance:** ${stance} · **Confidence:** ${j?.confidence?.toUpperCase() ?? '--'}`,
     '',

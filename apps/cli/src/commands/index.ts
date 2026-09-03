@@ -13,6 +13,8 @@ import {
 import { judgeWorkflow } from '../workflows/judgeWorkflow';
 import { screenWorkflow } from '../workflows/screenWorkflow';
 import { makeExportCommand } from './export';
+import { makeHistoryCommand, makeResumeCommand, makeSessionCommand } from './history';
+import { createWebServer } from '../repl/web';
 import { UserFriendlyError } from '@harness/shared';
 import { SectorsApiError } from '@harness/sectors-api';
 
@@ -112,11 +114,40 @@ function makeAuthSetCommand(ctx: HarnessContext): CommandHandler {
   };
 }
 
+function makeWebCommand(ctx: HarnessContext): CommandHandler {
+  let server: ReturnType<typeof createWebServer>['server'] | null = null;
+  return async (args: string[]) => {
+    if (server) {
+      process.stdout.write(`${color.yellow('Web preview already running — stop it first with Ctrl+C')}\n\n`);
+      return;
+    }
+    let port = 3280;
+    const idx = args.indexOf('--port');
+    if (idx !== -1) {
+      const v = Number(args[idx + 1]);
+      if (Number.isFinite(v) && v > 0) port = Math.floor(v);
+    }
+    const { server: srv } = createWebServer(ctx.db, { port });
+    server = srv;
+    await new Promise<void>((resolve, reject) => {
+      srv.listen(port, () => {
+        process.stdout.write(`${color.green(`✓ Web preview listening at http://localhost:${port}/`)}\n${color.dim('GET /  ·  GET /api/history  ·  GET /api/run/:id')}\n\n`);
+        resolve();
+      });
+      srv.on('error', reject);
+    });
+  };
+}
+
 export function buildCommands(ctx: HarnessContext): Map<string, CommandHandler> {
   const commands: Map<string, CommandHandler> = new Map([
     ['judge', makeJudgeCommand(ctx)],
     ['screen', makeScreenCommand(ctx)],
     ['export', makeExportCommand(ctx)],
+    ['history', makeHistoryCommand(ctx)],
+    ['session', makeSessionCommand(ctx)],
+    ['resume', makeResumeCommand(ctx)],
+    ['web', makeWebCommand(ctx)],
     ['auth-set', makeAuthSetCommand(ctx)],
     ['help', async () => {
       process.stdout.write(`${renderHelp()}\n\n`);

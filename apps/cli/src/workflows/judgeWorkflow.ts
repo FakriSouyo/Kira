@@ -23,6 +23,8 @@ export interface JudgeArtifacts {
   bear: BearChallengeResponse;
   rebuttal: BullAnalysisResponse;
   judgment: Judgment;
+  /** Conditional extra round dipakai (Phase 3 Task 2) — ditampilkan renderer. */
+  conditionalUsed?: boolean;
 }
 
 export type JudgeProgressPhase = 'researcher' | 'bull' | 'bear' | 'judge';
@@ -380,6 +382,7 @@ export async function judgeWorkflow(
       bear,
       rebuttal,
       judgment,
+      conditionalUsed: Boolean(needsExtra),
     };
   } catch (error) {
     events({ type: 'session.complete', runId: run.id, status: 'failed' });
