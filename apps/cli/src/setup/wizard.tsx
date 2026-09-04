@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
+import TextInput from 'ink-text-input';
 import { StepIndicator } from './components/StepIndicator';
 import { SecretInput } from './components/SecretInput';
 import { ProviderSelector } from './components/ProviderSelector';
@@ -9,7 +10,7 @@ import { getProvider, SECTORS_KEY_HINT, type ProviderId } from './providers';
 import { saveSectorsKey, saveProvider, testConnections, validateSectorsKey } from './service';
 import type { ConnectionResult } from './service';
 
-type Step = 'welcome' | 'sectors' | 'provider' | 'apikey' | 'agentModel' | 'routerModel' | 'testing' | 'done';
+type Step = 'welcome' | 'sectors' | 'provider' | 'apikey' | 'customBaseUrl' | 'agentModel' | 'routerModel' | 'testing' | 'done';
 
 export function SetupWizard({
   homeDir,
@@ -28,9 +29,10 @@ export function SetupWizard({
   const [step, setStep] = useState<Step>('welcome');
   const [sectorsKey, setSectorsKey] = useState('');
   const [sectorsError, setSectorsError] = useState<string | undefined>();
-  const [providerId, setProviderId] = useState<ProviderId>('bitdeer');
+  const [providerId, setProviderId] = useState<ProviderId>('openai');
   const [apiKey, setApiKey] = useState('');
   const [apiKeyError, setApiKeyError] = useState<string | undefined>();
+  const [customBaseUrl, setCustomBaseUrl] = useState('');
   const [agentModel, setAgentModel] = useState('');
   const [routerModel, setRouterModel] = useState('');
   const [result, setResult] = useState<ConnectionResult | null>(null);
@@ -38,7 +40,7 @@ export function SetupWizard({
 
   const provider = getProvider(providerId);
   const steps = ['Sectors API', 'AI Provider', 'Verify'];
-  const currentIdx = step === 'welcome' ? 0 : step === 'sectors' ? 0 : step === 'provider' || step === 'apikey' || step === 'agentModel' || step === 'routerModel' ? 1 : 2;
+  const currentIdx = step === 'welcome' ? 0 : step === 'sectors' ? 0 : step === 'provider' || step === 'apikey' || step === 'customBaseUrl' || step === 'agentModel' || step === 'routerModel' ? 1 : 2;
 
   useInput((input, key) => {
     if (key.escape) {
@@ -48,7 +50,8 @@ export function SetupWizard({
       } else if (step === 'sectors') setStep('welcome');
       else if (step === 'provider') setStep('sectors');
       else if (step === 'apikey') setStep('provider');
-      else if (step === 'agentModel') setStep('apikey');
+      else if (step === 'customBaseUrl') setStep('apikey');
+      else if (step === 'agentModel') setStep(providerId === 'custom' ? 'customBaseUrl' : 'apikey');
       else if (step === 'routerModel') setStep('agentModel');
       else if (step === 'testing') setStep('routerModel');
       else if (step === 'done') {
@@ -85,7 +88,10 @@ export function SetupWizard({
         if (sectorsKey) saveSectorsKey(homeDir, sectorsKey);
       } catch {}
       try {
-        if (apiKey && agentModel && routerModel) saveProvider(homeDir, providerId, apiKey, agentModel, routerModel);
+        if (apiKey && agentModel && routerModel) {
+          const baseUrl = providerId === 'custom' ? customBaseUrl.trim() || undefined : undefined;
+          saveProvider(homeDir, providerId, apiKey, agentModel, routerModel, baseUrl);
+        }
       } catch {}
       const r = await testConnections(deps);
       if (!cancelled) setResult(r);
@@ -113,10 +119,16 @@ export function SetupWizard({
     }
     setApiKey(v.trim());
     setApiKeyError(undefined);
-    // init default models from provider
-    const prov = getProvider(providerId);
-    setAgentModel(prov?.models[0]?.id ?? '');
-    setStep('agentModel');
+    if (providerId === 'custom') {
+      setCustomBaseUrl('');
+      setAgentModel('');
+      setStep('customBaseUrl');
+    } else {
+      // init default models from provider
+      const prov = getProvider(providerId);
+      setAgentModel(prov?.models[0]?.id ?? '');
+      setStep('agentModel');
+    }
   };
 
   if (step === 'welcome') {
@@ -176,7 +188,44 @@ export function SetupWizard({
     );
   }
 
+  if (step === 'customBaseUrl') {
+    return (
+      <Box flexDirection="column">
+        <Text bold>Custom endpoint — Base URL</Text>
+        <Text dimColor>Example: https://api-inference.bitdeer.ai/v1  (leave empty for default)</Text>
+        <Box>
+          <Text>› </Text>
+          <TextInput value={customBaseUrl} onChange={setCustomBaseUrl} onSubmit={() => setStep('agentModel')} placeholder="https://..." />
+        </Box>
+        <Text dimColor>[Enter] Continue  [Esc] Back</Text>
+      </Box>
+    );
+  }
+
   if (step === 'agentModel') {
+    if (providerId === 'custom') {
+      return (
+        <Box flexDirection="column">
+          <Text bold>Agent model (custom)</Text>
+          <Text dimColor>Example: deepseek-ai/DeepSeek-V4-Flash  or  gpt-4o</Text>
+          <Box>
+            <Text>› </Text>
+            <TextInput
+              value={agentModel}
+              onChange={setAgentModel}
+              onSubmit={(v) => {
+                const val = v.trim() || agentModel.trim();
+                if (!val) return;
+                setAgentModel(val);
+                setStep('routerModel');
+              }}
+              placeholder="model id"
+            />
+          </Box>
+          <Text dimColor>[Enter] Continue  [Esc] Back</Text>
+        </Box>
+      );
+    }
     const prov = getProvider(providerId);
     return (
       <Box flexDirection="column">
@@ -194,6 +243,29 @@ export function SetupWizard({
   }
 
   if (step === 'routerModel') {
+    if (providerId === 'custom') {
+      return (
+        <Box flexDirection="column">
+          <Text bold>Router model (custom)</Text>
+          <Text dimColor>Example: Qwen/Qwen3-30B-A3B  or  gpt-4o-mini</Text>
+          <Box>
+            <Text>› </Text>
+            <TextInput
+              value={routerModel}
+              onChange={setRouterModel}
+              onSubmit={(v) => {
+                const val = v.trim() || routerModel.trim();
+                if (!val) return;
+                setRouterModel(val);
+                setStep('testing');
+              }}
+              placeholder="model id"
+            />
+          </Box>
+          <Text dimColor>[Enter] Continue  [Esc] Back</Text>
+        </Box>
+      );
+    }
     const prov = getProvider(providerId);
     return (
       <Box flexDirection="column">

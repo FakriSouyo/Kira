@@ -18,10 +18,10 @@ describe('setup service Slice 1 (no UI)', () => {
   it('needsSetup true when missing keys, false when mock or keys present', () => {
     let cfg = loadConfig({ homeDir: dir });
     expect(needsSetup(cfg)).toBe(true);
-    saveSectorsKey(dir, 'sk-sectors-test123');
+    saveSectorsKey(dir, 'sectors-test123456');
     cfg = loadConfig({ homeDir: dir });
     expect(needsSetup(cfg)).toBe(true); // still missing LLM
-    saveProvider(dir, 'bitdeer', 'sk-llm-test123', 'deepseek-ai/DeepSeek-V4-Flash', 'Qwen/Qwen3-30B-A3B');
+    saveProvider(dir, 'openai', 'sk-llm-test123', 'gpt-4o', 'gpt-4o-mini');
     cfg = loadConfig({ homeDir: dir });
     expect(needsSetup(cfg)).toBe(false);
     cfg = loadConfig({ homeDir: dir, mockSectors: true });
@@ -30,9 +30,12 @@ describe('setup service Slice 1 (no UI)', () => {
 
   it('validateSectorsKey masks and validates', () => {
     expect(validateSectorsKey('')).toBe('API key is required');
-    expect(validateSectorsKey('bad')).toBe('Key should start with sk-');
-    expect(validateSectorsKey('sk-short')).toBe('Key is too short');
+    expect(validateSectorsKey('bad')).toBe('Key is too short');
+    expect(validateSectorsKey('short')).toBe('Key is too short');
+    expect(validateSectorsKey('sectors-valid-1234567890')).toBeUndefined();
     expect(validateSectorsKey('sk-valid-1234567890')).toBeUndefined();
+    // Sectors keys no longer require sk- prefix (real keys are opaque)
+    expect(validateSectorsKey('my-sectors-key-123456')).toBeUndefined();
   });
 
   it('saveSectorsKey persists to .credentials.json (0600) and masks not printed', () => {
@@ -43,18 +46,21 @@ describe('setup service Slice 1 (no UI)', () => {
   });
 
   it('saveProvider persists friendly→internal model IDs and baseURL', () => {
-    saveProvider(dir, 'bitdeer', 'sk-llm-xxx', 'deepseek-ai/DeepSeek-V4-Flash', 'Qwen/Qwen3-30B-A3B');
+    // custom provider is the generic path — Bitdeer is just an example custom endpoint (deepseek-harness style)
+    saveProvider(dir, 'custom', 'sk-llm-xxx', 'deepseek-ai/DeepSeek-V4-Flash', 'Qwen/Qwen3-30B-A3B', 'https://api-inference.bitdeer.ai/v1');
     const cfg = loadConfig({ homeDir: dir });
     expect(cfg.llm.agent.model).toBe('deepseek-ai/DeepSeek-V4-Flash');
     expect(cfg.llm.router.model).toBe('Qwen/Qwen3-30B-A3B');
     expect(cfg.llm.agent.baseURL).toBe('https://api-inference.bitdeer.ai/v1');
   });
 
-  it('PROVIDERS registry has bitdeer/openai/anthropic/openrouter/custom', () => {
+  it('PROVIDERS registry has openai/anthropic/openrouter/custom (bitdeer is custom example, not hardcoded)', () => {
     const ids = PROVIDERS.map((p) => p.id);
-    expect(ids).toContain('bitdeer');
     expect(ids).toContain('openai');
+    expect(ids).toContain('anthropic');
+    expect(ids).toContain('openrouter');
     expect(ids).toContain('custom');
+    expect(ids).not.toContain('bitdeer' as never);
   });
 
   it('testConnections success', async () => {

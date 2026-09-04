@@ -27,8 +27,8 @@ export function isLlmConfigured(config: FinharnessConfig): boolean {
 
 export function validateSectorsKey(key: string): string | undefined {
   if (!key.trim()) return 'API key is required';
-  if (!key.trim().startsWith('sk-')) return 'Key should start with sk-';
-  if (key.trim().length < 12) return 'Key is too short';
+  if (key.trim().length < 8) return 'Key is too short';
+  // Sectors API keys are opaque tokens — do not enforce sk- prefix (fix: user reports real keys don't start with sk-)
   return undefined;
 }
 

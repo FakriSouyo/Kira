@@ -7,7 +7,7 @@ import { DEFAULT_AGENT_CONFIG, DEFAULT_ROUTER_CONFIG } from '@harness/llm';
  * Do not hardcode elsewhere — inspect this file for provider list.
  */
 
-export type ProviderId = 'bitdeer' | 'openai' | 'anthropic' | 'openrouter' | 'custom';
+export type ProviderId = 'openai' | 'anthropic' | 'openrouter' | 'custom';
 
 export interface ProviderSpec {
   id: ProviderId;
@@ -19,17 +19,6 @@ export interface ProviderSpec {
 }
 
 export const PROVIDERS: ProviderSpec[] = [
-  {
-    id: 'bitdeer',
-    label: 'Bitdeer',
-    baseURL: 'https://api-inference.bitdeer.ai/v1',
-    provider: 'openai',
-    models: [
-      { id: 'deepseek-ai/DeepSeek-V4-Flash', label: 'DeepSeek V4 Flash' },
-      { id: 'Qwen/Qwen3-30B-A3B', label: 'Qwen3 30B' },
-    ],
-    docUrl: 'https://api-inference.bitdeer.ai',
-  },
   {
     id: 'openai',
     label: 'OpenAI',
