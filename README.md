@@ -1,25 +1,31 @@
 # Financial Agent Harness
 
+![version](https://img.shields.io/badge/version-0.3.0-blue) ![CI](https://github.com/actions/workflows/ci.yml/badge.svg) ![node](https://img.shields.io/badge/node-%3E%3D22-green)
+
 Evidence-based stock research system — interactive REPL harness dengan multi-agent
 reasoning (Researcher → Bull → Bear → Bull rebuttal → Judge), embedded SQLite,
 dan audit trail penuh.
 
 Spesifikasi lengkap: [`planning/addendum_v3.0.md`](planning/addendum_v3.0.md) (v3.1) ·
-Dokumentasi teknis: [`ARCHITECTURE.md`](ARCHITECTURE.md)
+Dokumentasi teknis: [`ARCHITECTURE.md`](ARCHITECTURE.md) · Changelog: [`CHANGELOG.md`](CHANGELOG.md)
 
-## Status: Phase 0 ✅ · Phase 1 (sebagian) 🔶
+## Status: Phase 0→8 ✅ (0.3.0)
 
-- **Phase 0** — 3-agent flow **Researcher → Bull → Judge** ✅
-- **Phase 1 · Debate ronde** ✅ — Bear Agent (challenge) + Bull rebuttal +
-  validasi run-scoped; Judge menimbang seluruh debat
-- **Phase 1 · Market & News Researcher** 📋 terspesifikasi — kontrak endpoint,
-  skema evidence, dan desain agent dikunci di addendum §24-A; implementasi belum
-  dimulai (lihat juga Deviasi #12 di `ARCHITECTURE.md`)
-- Sectors API client (type-safe, file cache TTL 24 jam, error mapping)
-- LLM dua-tier (agent + router) via Vercel AI SDK, retry backoff, `maxTokens` terkunci
-- 3 lapis validasi claim (struktur Zod → keberadaan evidence → keanggotaan run)
-- REPL interaktif: slash command, tab completion, history, Ctrl+C, natural language input
-- Mock mode penuh (sectors + LLM) — **jalan offline tanpa API key**
+- **Phase 0** ✅ 3-agent flow **Researcher → Bull → Judge**
+- **Phase 1** ✅ Debate ronde Bear+Bull rebuttal + Market/News Researcher (§24-A)
+- **Phase 2** ✅ Advanced: session `history`/`resume`, streaming `streamText`, `export` md/html, skill-registry `--with`, replay fixture
+- **Phase 3** ✅ Orchestration: `Workflow` (LangGraph evaluated→not adopted), conditional `--conditional` (seq 5–7, upsert), `where` SQL-native
+- **Phase 4** ✅ Session UX + Web Preview: `/history`/`/session`/`/resume`, `/web` (3280, `/api/history`/`/api/run/:id`), conditional badge
+- **Phase 5** ✅ Version `0.3.0` + `/version`/`--version`, `formatDuration`, help lengkap
+- **Phase 6** ✅ Final RC `eval.md` agregat 0→6
+- **Phase 7** ✅ Future prototype: vector `mockEmbedding` + `cosineSimilarity`, `searchEvidence` + `/search`
+- **Phase 8** ✅ Release: CI (`pnpm check`), `CHANGELOG.md`, README distribusi
+- Sectors API client (v2, file cache TTL 24h/1h news, `where` native, error mapping)
+- LLM dua-tier (agent+router, `maxTokens` 2000/256, custom `baseURL`/`apiKey`, Vercel AI SDK)
+- 3 lapis validasi claim + `assertSeenEvidence` invariant
+- REPL interaktif: slash command, tab completion, history, Ctrl+C best-effort, natural language via Intent Router
+- Mock mode penuh (sectors+LLM) — **jalan offline tanpa API key**
+- Vector prototype (Phase 7) — `mockEmbedding` placeholder `pgvector`
 
 ## Requirements
 
@@ -39,6 +45,12 @@ Lalu di REPL:
 ❯ /judge BBCA
 ❯ Apakah BBRI layak dibeli?
 ❯ /screen profitable growing
+❯ /history
+❯ /session <runId>
+❯ /search ROE
+❯ /export <runId> --format md
+❯ /web
+❯ /version
 ❯ /help
 ❯ /exit
 ```
@@ -107,6 +119,7 @@ Router tier yang berbeda model/provider cukup diset di `config.json`
 | `--home <dir>` | Direktori data (default `~/.finharness`) |
 | `--mock-sectors` | Data fiks Sectors API (offline) |
 | `--mock-llm` | LLM deterministik (offline) |
+| `--version` | Tampilkan versi (`0.3.0`) |
 | `-h, --help` | Tampilkan bantuan |
 
 Environment: lihat [`.env.example`](.env.example) — `SECTORS_API_KEY`, `LLM_PROVIDER`,
@@ -117,8 +130,15 @@ Environment: lihat [`.env.example`](.env.example) — `SECTORS_API_KEY`, `LLM_PR
 
 | Command | Fungsi |
 |---|---|
-| `/judge [TICKER]` | Analisis penuh + Debate ronde: Researcher → Bull → Bear → Bull rebuttal → Judge |
-| `/screen [CRITERIA]` | Screener (mis. `/screen profitable growing`) — pola historis, bukan prediksi |
+| `/judge [TICKER]` | Analisis penuh + Debate ronde: Researcher → Bull → Bear → Bull rebuttal → Judge (`--conditional` Phase 3) |
+| `/screen [CRITERIA]` | Screener (`profitable`/`growing`, `where` native Phase 3) — pola historis |
+| `/history [--limit N]` | List runs (Phase 4) |
+| `/session <runId>` | Show artifacts markdown (Phase 4) |
+| `/resume <runId>` | Alias session (Phase 4) |
+| `/search <query>` | Search evidence (keyword+vector prototype, Phase 7) |
+| `/export <runId> [--format json\|md\|html]` | Export audit trail (Phase 2) |
+| `/web [--port N]` | Tiny web preview `http://localhost:3280` (Phase 4) |
+| `/version` | Tampilkan versi (Phase 5) |
 | `/help` | Bantuan |
 | `/exit` | Keluar |
 | `/challenge`, `/compare`, `/research`, `/investigate` | Stub roadmap (Phase 1) |
