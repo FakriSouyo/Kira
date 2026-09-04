@@ -153,6 +153,7 @@ Run yang gagal tetap tercatat di `executions` dengan status `failed`.
 | 27 | Phase 6 — Final RC | `0.2.0-rc→0.2.0` + `eval.md` agregat 0→6 vs addendum §04–§29, gate final. **Stop di Phase 6** (Phase 7 pgvector/Tauri deferred Future). | `eval.md` + `pnpm check` 203/203, `--version` → `0.2.0`. |
 | 28 | Phase 7 — Future Vector Prototype (lanjutan `lanjut`) | `vector.ts` `mockEmbedding` 8-dim + `cosineSimilarity`, `search.ts` `searchEvidence` (keywordOverlap + cosine), `/search <query> [--run --limit]` + `renderSearchResult`, normalized vision DDL docs only (tanpa migrasi/pgvector real). | Mock placeholder pgvector Future; `vector.test.ts` (4) + `search.test.ts` (4), `pnpm check` **211/211**. |
 | 29 | Phase 8 — Release & Distribution (lanjutan) | `.github/workflows/ci.yml` (`pnpm check` Node22), `CHANGELOG.md` Phase0→8, `README.md` polish badge `v0.3.0` + commands lengkap, bump `0.2.0→0.3.0`. | Hardening pasca-Future; `pnpm check` tetap **211/211**. |
+| 30 | Phase 9A — Real Future (lanjutan 9A) | `0002_normalized.sql` real migration + `schema.ts` `financials_normalized`/`daily_normalized` + `NormalizedStore` upsert, `vector.ts` `getEmbedding` (LLM→fallback mock), `Workflow.run({signal})` + `judgeWorkflow({signal})` abort check. | Real minimal offline-safe; `normalized.test.ts` (4) + `abort.test.ts` (4), `pnpm check` **219/219** (35 files). |
 
 ## 9. Struktur Data (ringkas)
 

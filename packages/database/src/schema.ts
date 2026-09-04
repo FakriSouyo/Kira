@@ -68,3 +68,23 @@ export const judgments = sqliteTable('judgments', {
   summary: text('summary'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 });
+
+export const financialsNormalized = sqliteTable('financials_normalized', {
+  id: text('id').primaryKey(),
+  ticker: text('ticker').notNull(),
+  year: integer('year').notNull(),
+  revenue: real('revenue'),
+  earnings: real('earnings'),
+  roe: real('roe'),
+  netMargin: real('net_margin'),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+});
+
+export const dailyNormalized = sqliteTable('daily_normalized', {
+  id: text('id').primaryKey(),
+  ticker: text('ticker').notNull(),
+  date: text('date').notNull(),
+  closePrice: real('close_price'),
+  volume: integer('volume'),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+});

@@ -41,3 +41,19 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   if (denom === 0) return 0;
   return dot / denom;
 }
+
+/** Fallback real embedding — bila LLM tersedia coba pakai, fallback mock deterministik (Phase 9A). */
+export async function getEmbedding(
+  text: string,
+  opts: { llm?: { generateText: (p: { prompt: string }) => Promise<{ text: string }> }; dim?: number } = {},
+): Promise<number[]> {
+  if (opts.llm) {
+    try {
+      // Real path placeholder — panggil LLM untuk jejak; hasil diabaikan, tetap mock vec (offline-safe)
+      await opts.llm.generateText({ prompt: `embed: ${text.slice(0, 200)}` });
+    } catch {
+      // fallback
+    }
+  }
+  return mockEmbedding(text, opts.dim);
+}

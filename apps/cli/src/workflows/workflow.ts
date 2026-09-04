@@ -40,15 +40,17 @@ export class Workflow<Ctx> {
     return this;
   }
 
-  /** Eksekusi workflow — fail-closed: error pertama langsung throw. */
-  async run(ctx: Ctx, events?: WorkflowEvents): Promise<void> {
+  /** Eksekusi workflow — fail-closed + abort check (Phase 9A). */
+  async run(ctx: Ctx, events?: WorkflowEvents, opts: { signal?: AbortSignal } = {}): Promise<void> {
     for (const s of this.steps) {
+      if (opts.signal?.aborted) throw new Error('Aborted');
       events?.phase?.(s.name, s.name);
       await s.fn(ctx);
     }
     for (const b of this.branches) {
       if (b.predicate(ctx)) {
-        await b.workflow.run(ctx, events);
+        if (opts.signal?.aborted) throw new Error('Aborted');
+        await b.workflow.run(ctx, events, opts);
       }
     }
   }

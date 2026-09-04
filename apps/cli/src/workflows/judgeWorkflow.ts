@@ -70,7 +70,7 @@ export async function judgeWorkflow(
   ticker: string,
   progress: JudgeProgress = () => {},
   events: (event: AgentEvent) => void = () => {},
-  opts: { conditional?: boolean } = {},
+  opts: { conditional?: boolean; signal?: AbortSignal } = {},
 ): Promise<JudgeArtifacts> {
   // Emit satu tool fetch (start + duration) — dipakai Agent-Events TUI (Task 2).
   const tool = async <T>(name: AgentToolName, fetcher: () => Promise<T>): Promise<T> => {
@@ -83,10 +83,14 @@ export async function judgeWorkflow(
     }
   };
   const startedAt = Date.now();
+  const checkAbort = () => {
+    if (opts.signal?.aborted) throw new UserFriendlyError('ABORTED', 'Aborted', 'Run cancelled at phase boundary');
+  };
   const run = await ctx.db.execution.createRun({ ticker, command: 'judge' });
   events({ type: 'session.start', runId: run.id });
 
   try {
+    checkAbort();
     // 1. Researcher fundamental: ambil & simpan evidence (ground truth)
     events({ type: 'phase', phase: 'researcher', label: "I'm starting with Company Report and Quarterly Financials." });
     progress('researcher', `I'm starting with Company Report and Quarterly Financials for ${ticker}...`);
@@ -296,6 +300,7 @@ export async function judgeWorkflow(
 
     // 5b. Conditional debate — satu ronde ekstra bila neutral / 40–60 (Phase 3)
     const needsExtra = opts.conditional && (judgment.stance === 'neutral' || (judgment.score >= 40 && judgment.score <= 60));
+    checkAbort();
     if (needsExtra) {
       events({ type: 'phase', phase: 'bear', label: 'Conditional: re-challenging (score neutral).' });
       progress('bear', 'Conditional: re-challenging bullish thesis (extra round)...');

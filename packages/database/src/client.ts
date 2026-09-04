@@ -10,6 +10,7 @@ import { ConversationStoreSqlite } from './conversationStoreSqlite';
 import { ExecutionStoreSqlite } from './executionStoreSqlite';
 import { ClaimStoreSqlite } from './claimStoreSqlite';
 import { JudgmentStoreSqlite } from './judgmentStoreSqlite';
+import { NormalizedStore } from './normalized';
 
 export type Orm = BetterSQLite3Database<Record<string, never>>;
 
@@ -34,6 +35,7 @@ export interface FinharnessDatabase {
   execution: ExecutionStoreSqlite;
   claims: ClaimStoreSqlite;
   judgments: JudgmentStoreSqlite;
+  normalized: NormalizedStore;
 }
 
 export function openDb(options: { homeDir?: string; verbose?: boolean } = {}): FinharnessDatabase {
@@ -61,5 +63,6 @@ export function openDb(options: { homeDir?: string; verbose?: boolean } = {}): F
     execution: new ExecutionStoreSqlite(orm),
     claims: new ClaimStoreSqlite(orm),
     judgments: new JudgmentStoreSqlite(orm),
+    normalized: new NormalizedStore(orm),
   };
 }

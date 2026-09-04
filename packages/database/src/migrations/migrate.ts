@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import type Database from 'better-sqlite3';
 
 /** Daftar migrasi berurutan. File SQL dijalankan sekali, dicatat di _migrations. */
-const MIGRATIONS = ['./0001_initial.sql'] as const;
+const MIGRATIONS = ['./0001_initial.sql', './0002_normalized.sql'] as const;
 
 export function runMigrations(db: Database.Database): void {
   db.exec(
