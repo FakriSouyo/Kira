@@ -1,5 +1,5 @@
 import type { HarnessContext } from '../context';
-import { writeCredentialsFile } from '../config';
+import { loadConfig, writeCredentialsFile } from '../config';
 import type { CommandHandler, CommandResult } from '../repl/loop';
 import {
   color,
@@ -19,6 +19,7 @@ import { createWebServer } from '../repl/web';
 import { makeVersionCommand } from './version';
 import { UserFriendlyError } from '@harness/shared';
 import { SectorsApiError } from '@harness/sectors-api';
+import { PROVIDERS } from '../setup/providers';
 
 const TICKER_RE = /^[A-Z]{2,6}$/;
 
@@ -141,6 +142,84 @@ function makeWebCommand(ctx: HarnessContext): CommandHandler {
   };
 }
 
+function maskKey(key: string): string {
+  if (!key) return '(not set)';
+  if (key.length <= 8) return '•'.repeat(key.length);
+  return `${key.slice(0, 3)}${'•'.repeat(Math.min(12, key.length - 6))}${key.slice(-3)}`;
+}
+
+function makeStatusCommand(ctx: HarnessContext): CommandHandler {
+  return async () => {
+    const cfg = loadConfig({ homeDir: ctx.homeDir });
+    process.stdout.write(
+      `${color.cyan('FinHarness Status')}\n` +
+        `  Sectors API: ${cfg.sectors.apiKey ? color.green('✓ configured') : color.red('✗ missing')} ${color.dim(maskKey(cfg.sectors.apiKey))}\n` +
+        `  AI Provider: ${cfg.llm.agent.provider} · ${cfg.llm.agent.model} ${cfg.llm.agent.apiKey ? color.green('✓') : color.red('✗')}\n` +
+        `  Router: ${cfg.llm.router.provider} · ${cfg.llm.router.model} ${cfg.llm.router.apiKey ? color.green('✓') : color.red('✗')}\n` +
+        `  Config: ${ctx.homeDir}/config.json | creds: ${ctx.homeDir}/.credentials.json\n\n`,
+    );
+  };
+}
+
+function makeProvidersCommand(): CommandHandler {
+  return async () => {
+    process.stdout.write(`${color.cyan('Providers')}\n`);
+    for (const p of PROVIDERS) {
+      const models = p.models.map((m) => m.label).join(', ');
+      process.stdout.write(`  ${color.green(p.label)} (${p.id}) — ${models}${p.baseURL ? ` — ${p.baseURL}` : ''}\n`);
+    }
+    process.stdout.write('\n');
+  };
+}
+
+function makeSetupCommand(ctx: HarnessContext): CommandHandler {
+  return async () => {
+    if (!process.stdout.isTTY) {
+      const cfg = loadConfig({ homeDir: ctx.homeDir });
+      process.stdout.write(
+        `${color.cyan('FinHarness Setup')}\n` +
+          `  Sectors API: ${cfg.sectors.apiKey ? '✓' : '✗'}\n` +
+          `  AI Provider: ${cfg.llm.agent.provider} · ${cfg.llm.agent.model}\n` +
+          `  Use /auth-set for non-interactive setup.\n\n`,
+      );
+      return;
+    }
+    const cfg = loadConfig({ homeDir: ctx.homeDir });
+    const { createSectorsApi } = await import('@harness/sectors-api');
+    const { createLLMClient } = await import('@harness/llm');
+    const { default: React } = await import('react');
+    const { render } = await import('ink');
+    const { SetupWizard } = await import('../setup/wizard.js');
+    const sectors = createSectorsApi({
+      mock: false,
+      apiKey: cfg.sectors.apiKey || undefined,
+      baseUrl: cfg.sectors.baseUrl,
+      cacheTtlHours: cfg.sectors.cacheTtlHours,
+      newsCacheTtlHours: cfg.sectors.newsCacheTtlHours,
+      homeDir: cfg.homeDir,
+    });
+    const agentLlm = createLLMClient(cfg.llm.agent, { mock: false });
+    const routerLlm = createLLMClient(cfg.llm.router, { mock: false });
+    await new Promise<void>((resolve) => {
+      const instance = render(
+        // @ts-ignore dynamic
+        React.createElement(SetupWizard, {
+          homeDir: cfg.homeDir,
+          deps: { sectors, agentLlm, routerLlm },
+          onDone: () => {
+            try {
+              (instance as unknown as { unmount: () => void }).unmount();
+            } catch {}
+            resolve();
+          },
+        }),
+      );
+      (instance as unknown as { waitUntilExit: () => Promise<void> }).waitUntilExit().then(() => resolve()).catch(() => resolve());
+    });
+    process.stdout.write('\n');
+  };
+}
+
 export function buildCommands(ctx: HarnessContext): Map<string, CommandHandler> {
   const commands: Map<string, CommandHandler> = new Map([
     ['judge', makeJudgeCommand(ctx)],
@@ -153,6 +232,9 @@ export function buildCommands(ctx: HarnessContext): Map<string, CommandHandler> 
     ['web', makeWebCommand(ctx)],
     ['version', makeVersionCommand()],
     ['auth-set', makeAuthSetCommand(ctx)],
+    ['setup', makeSetupCommand(ctx)],
+    ['status', makeStatusCommand(ctx)],
+    ['providers', makeProvidersCommand()],
     ['help', async () => {
       process.stdout.write(`${renderHelp()}\n\n`);
     }],
