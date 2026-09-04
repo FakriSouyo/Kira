@@ -52,6 +52,7 @@ export function renderHelp(): string {
     `  ${color.green('/history [--limit N]')}      List recent runs`,
     `  ${color.green('/session <runId>')}          Show run artifacts (markdown)`,
     `  ${color.green('/resume <runId>')}           Resume/display session (alias)`,
+    `  ${color.green('/search <query>')}           Search evidence (keyword + vector proto)`,
     `  ${color.green('/export <runId>')}           Export run (json/md/html)`,
     `  ${color.green('/web [--port N]')}           Tiny web preview (http://localhost:3280)`,
     `  ${color.green('/auth-set KEY=VALUE')}       Save API keys to .credentials.json (SECTORS/LLM.AGENT/LLM.ROUTER)`,
@@ -305,6 +306,28 @@ export function renderExportHtml(artifacts: ExecutionArtifacts): string {
   const md = renderExportMarkdown(artifacts);
   const escaped = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return `<!doctype html><html><head><meta charset="utf-8"><title>${artifacts.run.ticker} · FINAL JUDGMENT</title></head><body><pre>${escaped}</pre></body></html>`;
+}
+
+/** Search results (Phase 7) — tampilkan ranking evidence untuk query. */
+export function renderSearchResult(query: string, results: Array<{ id: string; source: string; data: unknown; _score: number }>, runId?: string): string {
+  const lines = [
+    HEAVY,
+    `  ${color.cyan(color.bold(`🔍 Search: "${query}"`))}${runId ? color.dim(` (run ${runId})`) : ''}`,
+    `  ${results.length} result(s)`,
+    LIGHT,
+  ];
+  if (results.length === 0) {
+    lines.push(`  ${color.gray('No evidence matched — try broader query or run /judge first')}`);
+  } else {
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      const preview = JSON.stringify(r.data).slice(0, 120).replace(/\s+/g, ' ');
+      lines.push(`  ${i + 1}. ${color.bold(r.source)} ${color.gray(r.id)}  score=${r._score.toFixed(2)}`);
+      lines.push(`     ${color.dim(preview)}${preview.length >= 120 ? '…' : ''}`);
+    }
+  }
+  lines.push(HEAVY);
+  return lines.join('\n');
 }
 
 function indent(text: string): string[] {

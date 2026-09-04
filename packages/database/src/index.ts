@@ -6,3 +6,4 @@ export { ConversationStoreSqlite } from './conversationStoreSqlite';
 export { ExecutionStoreSqlite } from './executionStoreSqlite';
 export { ClaimStoreSqlite } from './claimStoreSqlite';
 export { JudgmentStoreSqlite } from './judgmentStoreSqlite';
+export { searchEvidence } from './search';
