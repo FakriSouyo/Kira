@@ -1,7 +1,8 @@
 # Full TUI and Agent Engine Design
 
-**Status:** Approved in conversation on 2026-09-08  
-**Scope:** Replace the current CLI presentation with the `finharness-mockup-ui` experience and extend the engine so every visible research capability is real.  
+**Status:** Approved in conversation on 2026-09-08
+
+**Scope:** Replace the current CLI presentation with the `finharness-mockup-ui` experience and extend the engine so every visible research capability is real.
 **Visual source:** `C:\code\finharness-mockup-ui`
 
 ## 1. Objective
