@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -26,6 +26,13 @@ const V2_REPORT = {
   dividend: { historical_dividends: { '2024': { total_yield: 0.031 } } },
 };
 
+const CAPTURED_COMPANY_REPORT = JSON.parse(
+  readFileSync(new URL('./fixtures/company-report-bbca-sections.json', import.meta.url), 'utf8'),
+) as Record<string, unknown>;
+const CAPTURED_QUARTERLY_FINANCIALS = JSON.parse(
+  readFileSync(new URL('./fixtures/quarterly-financials-bbca-n1.json', import.meta.url), 'utf8'),
+) as Record<string, unknown>;
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
@@ -33,6 +40,16 @@ function jsonResponse(body: unknown, status = 200): Response {
 /** Client dengan fetchStub yang mengembalikan nilai `body` untuk semua URL. */
 function stubClient(body: unknown, cacheDir: string): SectorsClient {
   return new SectorsClient({ cacheDir, fetchImpl: (async () => jsonResponse(body)) as typeof fetch });
+}
+
+function capturedQuarterlyClient(body: unknown, cacheDir: string, calls: string[] = []): SectorsClient {
+  return new SectorsClient({
+    cacheDir,
+    fetchImpl: (async (url: string) => {
+      calls.push(url);
+      return jsonResponse(url.includes('/company/report') ? CAPTURED_COMPANY_REPORT : body);
+    }) as typeof fetch,
+  });
 }
 
 describe('SectorsClient (v2)', () => {
@@ -121,6 +138,17 @@ describe('SectorsClient (v2)', () => {
     expect(reducedReport).toEqual(fullReport);
   });
 
+  it('derives Company Report dataAsOf from valuation.latest_close_date only', async () => {
+    const client = new SectorsClient({
+      cacheDir,
+      fetchImpl: (async () => jsonResponse(CAPTURED_COMPANY_REPORT)) as typeof fetch,
+    });
+
+    const report = await client.getCompanyReport('BBCA');
+    expect(report.asOf).toBe('2026-09-16');
+    expect(CAPTURED_COMPANY_REPORT).not.toHaveProperty('asOf');
+  });
+
   it('proves n_quarters=1 preserves the normalized latest quarter and YoY consumed by /judge', async () => {
     const reportWithGrowth = {
       ...V2_REPORT,
@@ -159,6 +187,66 @@ describe('SectorsClient (v2)', () => {
     await fullClient.getCompanyReport('BBCA');
     const fullNormalized = await fullClient.getQuarterlyFinancials('BBCA');
     expect(normalized.quarters[0]).toEqual(fullNormalized.quarters[0]);
+  });
+
+  it('normalizes the captured single-object n_quarters=1 response as one quarter', async () => {
+    const calls: string[] = [];
+    const client = capturedQuarterlyClient(CAPTURED_QUARTERLY_FINANCIALS, cacheDir, calls);
+    const normalized = await client.getQuarterlyFinancials('BBCA');
+
+    expect(normalized).toMatchObject({
+      ticker: 'BBCA',
+      quarters: [{
+        period: '2026-Q2',
+        periodType: 'single_quarter',
+        revenue: 28677339000000,
+        netIncome: 14861321000000,
+        revenueGrowthYoy: 0.305775623420816,
+      }],
+    });
+    expect(normalized.quarters[0]?.netIncomeGrowthYoy).toBeCloseTo(-0.136772238340106, 12);
+    expect(calls).toEqual([
+      'https://api.sectors.app/v2/financials/quarterly/BBCA/?n_quarters=1&approx=true',
+      'https://api.sectors.app/v2/company/report/BBCA/?sections=overview%2Cvaluation%2Cfinancials%2Cdividend',
+    ]);
+  });
+
+  it('keeps an equivalent array envelope identical to the captured single-object result', async () => {
+    const single = await capturedQuarterlyClient(CAPTURED_QUARTERLY_FINANCIALS, cacheDir).getQuarterlyFinancials('BBCA');
+    const arrayCacheDir = mkdtempSync(join(tmpdir(), 'finharness-quarter-array-'));
+    let array: Awaited<ReturnType<SectorsClient['getQuarterlyFinancials']>>;
+    try {
+      array = await capturedQuarterlyClient([CAPTURED_QUARTERLY_FINANCIALS], arrayCacheDir).getQuarterlyFinancials('BBCA');
+    } finally {
+      rmSync(arrayCacheDir, { recursive: true, force: true });
+    }
+
+    expect(array).toEqual(single);
+    expect(array.quarters[0]).toMatchObject({
+      period: '2026-Q2',
+      revenueGrowthYoy: 0.305775623420816,
+    });
+    expect(array.quarters[0]?.netIncomeGrowthYoy).toBeCloseTo(-0.136772238340106, 12);
+  });
+
+  it('rejects a malformed quarterly row instead of normalizing arbitrary fields', async () => {
+    const malformed = [{
+      ...(CAPTURED_QUARTERLY_FINANCIALS as Record<string, unknown>),
+      revenue: '28677339000000',
+    }];
+    const client = capturedQuarterlyClient(malformed, cacheDir);
+
+    await expect(client.getQuarterlyFinancials('BBCA')).rejects.toThrow('Invalid Sectors quarterly financial response');
+  });
+
+  it('rejects a malformed single-object quarterly response with the same validation', async () => {
+    const malformed = {
+      ...(CAPTURED_QUARTERLY_FINANCIALS as Record<string, unknown>),
+      date: 20260630,
+    };
+    const client = capturedQuarterlyClient(malformed, cacheDir);
+
+    await expect(client.getQuarterlyFinancials('BBCA')).rejects.toThrow('Invalid Sectors quarterly financial response');
   });
 
   it('retains multi-row YoY derivation as a correctness fallback when report growth is absent', async () => {

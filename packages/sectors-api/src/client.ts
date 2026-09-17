@@ -205,10 +205,11 @@ interface V2Report {
 interface V2QuarterRow {
   symbol?: string;
   date?: string;
-  revenue?: number;
-  earnings?: number;
-  ebitda?: number;
-  total_equity?: number;
+  revenue?: number | null;
+  earnings?: number | null;
+  ebitda?: number | null;
+  total_equity?: number | null;
+  financials_sector_metrics?: Record<string, number | null>;
 }
 
 interface V2DailyRow {
@@ -315,11 +316,39 @@ function periodOfDate(date: string | undefined): string {
   return `${parsed[1]}-Q${quarter}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNullableFiniteNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === 'number' && Number.isFinite(value));
+}
+
+function isQuarterlyRow(value: unknown): value is V2QuarterRow {
+  if (!isRecord(value) || typeof value.symbol !== 'string' || value.symbol.length === 0
+    || typeof value.date !== 'string' || value.date.length === 0) return false;
+  const hasRequiredNumber = (field: 'revenue' | 'earnings'): boolean =>
+    Object.prototype.hasOwnProperty.call(value, field) && isNullableFiniteNumber(value[field]);
+  if (!hasRequiredNumber('revenue') || !hasRequiredNumber('earnings')) return false;
+  for (const field of ['ebitda', 'total_equity'] as const) {
+    if (field in value && !isNullableFiniteNumber(value[field])) return false;
+  }
+  const sectorMetrics = value.financials_sector_metrics;
+  return sectorMetrics === undefined
+    || (isRecord(sectorMetrics) && Object.values(sectorMetrics).every(isNullableFiniteNumber));
+}
+
+function normalizeQuarterlyPayload(raw: unknown): V2QuarterRow[] {
+  const rows = Array.isArray(raw) ? raw : [raw];
+  if (!rows.every(isQuarterlyRow)) throw new Error('Invalid Sectors quarterly financial response');
+  return rows;
+}
+
 function toQuarterlyFinancials(raw: V2QuarterRow[]): QuarterlyFinancials {
   const rows = [...(raw ?? [])].sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')));
   const byPeriod = new Map(rows.map((row) => [periodOfDate(row.date), row]));
-  const growth = (current?: number, previous?: number): number | undefined =>
-    current !== undefined && previous !== undefined && previous !== 0
+  const growth = (current?: number | null, previous?: number | null): number | undefined =>
+    current !== undefined && current !== null && previous !== undefined && previous !== null && previous !== 0
       ? pct((current - previous) / Math.abs(previous)) : undefined;
   const quarters: QuarterlyFinancials['quarters'] = rows.map((r) => {
     const period = periodOfDate(r.date);
@@ -547,11 +576,11 @@ export class SectorsClient implements SectorsApi {
   }
 
   private async fetchQuarterly(ticker: string, nQuarters: number): Promise<QuarterlyFinancials> {
-    const raw = await this.request<V2QuarterRow[]>(
+    const raw = await this.request<unknown>(
       `/financials/quarterly/${encodeURIComponent(ticker)}/?n_quarters=${nQuarters}&approx=true`,
       ticker,
     );
-    return toQuarterlyFinancials(raw);
+    return toQuarterlyFinancials(normalizeQuarterlyPayload(raw));
   }
 
   private async fillQuarterlyGrowth(ticker: string, fin: QuarterlyFinancials): Promise<QuarterlyFinancials> {
