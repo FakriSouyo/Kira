@@ -166,6 +166,91 @@ Run yang gagal tetap tercatat di `executions` dengan status `failed`.
 Konvensi: **snake_case di DB ↔ camelCase di TS/Zod**, dipetakan eksplisit di
 `packages/database/src/schema.ts` (satu-satunya tempat yang tahu dua konvensi).
 
+### Canonical lifecycle foundation (PR A)
+
+`ResearchSessionStore` adalah persistence boundary untuk relasi durable
+`Session -> Turn -> Execution`, bukan pemilik workflow, context, artifact,
+journal projection, cache, atau memory. Setiap input yang diterima akan menjadi
+satu Turn setelah wiring production di PR B; Turn dapat memiliki nol atau banyak
+Execution attempt.
+
+Migrasi `0007_canonical_lifecycle.sql` mempertahankan `research_turns.run_id`
+sebagai kolom transisi nullable tanpa constraint unik, lalu memindahkan ownership
+ke `executions.session_id`, `executions.turn_id`, dan `executions.attempt`. Relasi
+lama di-backfill sebagai attempt 1. Execution lama tanpa research turn tetap
+valid dan tidak dipaksa memiliki relasi palsu. Status terminal execution canonical
+mencakup `completed`, `failed`, dan `cancelled`.
+
+### Live lifecycle and journal linkage (PR B)
+
+`createHarnessSession` adalah composition boundary untuk request live. Setiap
+input yang diterima membuat tepat satu Turn melalui `ResearchSessionStore`, lalu
+menyelesaikannya sebagai `completed`, `failed`, atau `stopped`. Percakapan biasa
+tidak membuat Execution. `/judge` membuat Execution canonical untuk Turn yang
+sama, tetapi tetap menjalankan pipeline manual yang ada; pemindahan execution
+truth ke `WorkflowRunner` dikerjakan di PR C (selesai — Deviation #33).
+
+Command yang presentasinya ditangani lokal oleh workspace TTY (`/help`, menu,
+`/context`, dan `/new`) tetap melewati boundary lifecycle yang sama; UI tidak
+boleh membuat jalur input kedua. Saat restart, proyeksi journal yang masih
+`running` direkonsiliasi terhadap lifecycle canonical: status terminal canonical
+diproyeksikan apa adanya, sedangkan Execution yang sungguh terputus diselesaikan
+`cancelled` dan Turn induknya diselesaikan secara konsisten.
+
+`ConversationJournal` hanya menyimpan audit/replay append-only. Event baru
+memakai payload version 1 dan membawa `turnId`, `executionId` bila ada,
+`correlationId`, serta rantai `causationId`; `sessionId`, sequence, dan timestamp
+tetap berada pada envelope journal. Event lama tanpa metadata itu tetap dapat
+dibaca. Pembuatan Session tidak lagi dimiliki journal.
+
+### SessionWorkingContext (PR D)
+
+Working context adalah materialized view **versioned** dari "apa yang masih
+relevan di satu session" — reference state terstruktur, bukan history. Journal
+tetap pemilik urutan kejadian; `SessionWorkingContext` hanya memiliki yang masih
+relevan. Contract: `packages/session/core/src/workingContext.ts`
+(`applyWorkingContextPatch` murni, `assertWorkingContextCommit` untuk CAS,
+`deriveWorkingContextPatch` hanya dari baris durable). Storage:
+`session_context_versions` (migrasi `0008`) + `WorkingContextStoreSqlite`
+(`current`/`at`/`history`/`commit`); versi lama tetap terbaca dan tidak ada pointer
+"current" terpisah, sehingga tidak ada state turunan yang bisa drift.
+
+Updater tunggal ada di `apps/cli/src/repl/workingContext.ts`, dipanggil dari
+composition boundary setelah Turn settle `completed`:
+
+```text
+/judge BBRI         → activeSubjects=[BBRI], currentIntent=judge,
+                      activeVerdictRef={kind:'judgment', executionId} (resolve via judgments.getByRun)
+kenapa BBRI turun?  → currentIntent=conversation (Turn tanpa Execution; subject tetap)
+Turn failed/stopped → tidak publish apa pun
+```
+
+Dua guard compare-and-set menolak penulis stale: `expectedVersion` lama
+(`STALE_CONTEXT_VERSION`) dan prefix journal lama (`STALE_SOURCE_SEQUENCE`).
+`sourceSequence` adalah sequence kanonik `turn.started` milik Turn yang diterima,
+bukan journal tail saat settlement, sehingga completion Turn lama tidak dapat
+terlihat causally lebih baru hanya karena selesai belakangan.
+Journal menerima satu event referensi `session.context.updated` per versi; payload
+context tidak diduplikasi ke journal, dan kegagalan append tidak membatalkan versi
+durable (diperbaiki deterministik saat restore). Field yang belum punya produsen
+durable (thesis/bull/bear/risk ref, focus topics, pinned refs, user assertion,
+summary ref) dibiarkan kosong — bukan diarang; PR F/G yang mengisinya. PR E
+(freshness/reuse provider) sengaja tidak ada di sini: working context hanya
+mereferensikan, tidak pernah mengotorisasi reuse data eksternal.
+
+### Rencana PR berikutnya (Core Refactor Plan)
+
+Urutan PR dan definisinya yang mengikat ada di `docs/core/03-CONTEXT-AND-MEMORY.md`
+§21 (PR A–PR L) dan `docs/core/13-CORE-REFACTOR-PLAN.md` §8. PR A–PR D selesai;
+**PR E = selective provider retrieval + freshness policy** disisipkan setelah PR D
+dan sebelum integrasi Context Engine pertama:
+permintaan Sectors menjadi demand-driven per requirement node, data yang masih
+valid di-reuse, hanya yang stale/missing/incompatible di-refresh, `fetchedAt` /
+`dataAsOf` / `period` / `requestedAsOf` tetap dibedakan, dan cache identity
+memuat operation/argumen/asOf/period. PR E tidak mengimplementasikan ContextPacket,
+Context Engine, capability registry, atau provider abstraction generik; boundary
+Context Engine ↔ provider dicatat di `03-CONTEXT-AND-MEMORY.md` §12.
+
 ## 10. Pengujian
 
 ```

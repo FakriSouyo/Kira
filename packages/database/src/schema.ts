@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, real, sqliteTable, text, primaryKey, unique, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /**
  * Mirror Drizzle dari DDL di migrations/0001_initial.sql (source of truth).
@@ -7,8 +7,33 @@ import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
  * pemetaan eksplisit di sini — satu-satunya tempat yang tahu dua konvensi ini.
  */
 
+export const researchSessions = sqliteTable('research_sessions', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  provider: text('provider').notNull(),
+  model: text('model').notNull(),
+  reasoningMode: text('reasoning_mode').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
+
+export const researchTurns = sqliteTable('research_turns', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => researchSessions.id, { onDelete: 'cascade' }),
+  /** Transitional read compatibility only; new execution ownership is executions.turn_id. */
+  runId: text('run_id'),
+  input: text('input').notNull(),
+  command: text('command').notNull(),
+  status: text('status').notNull(),
+  startedAt: text('started_at').notNull(),
+  completedAt: text('completed_at'),
+});
+
 export const executions = sqliteTable('executions', {
   id: text('id').primaryKey(),
+  sessionId: text('session_id').references(() => researchSessions.id, { onDelete: 'cascade' }),
+  turnId: text('turn_id').references(() => researchTurns.id, { onDelete: 'cascade' }),
+  attempt: integer('attempt'),
   ticker: text('ticker').notNull(),
   command: text('command').notNull(),
   status: text('status').notNull(),
@@ -16,7 +41,9 @@ export const executions = sqliteTable('executions', {
   error: text('error'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
   completedAt: text('completed_at'),
-});
+}, (table) => [
+  uniqueIndex('executions_turn_attempt_uniq').on(table.turnId, table.attempt).where(sql`${table.turnId} IS NOT NULL`),
+]);
 
 export const evidence = sqliteTable('evidence', {
   id: text('id').primaryKey(),
@@ -44,6 +71,11 @@ export const agentMessages = sqliteTable('agent_messages', {
   sequenceOrder: integer('sequence_order').notNull(),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 });
+
+export const runEvidence = sqliteTable('run_evidence', {
+  runId: text('run_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  evidenceId: text('evidence_id').notNull().references(() => evidence.id, { onDelete: 'cascade' }),
+}, (table) => [primaryKey({ columns: [table.runId, table.evidenceId] })]);
 
 export const claims = sqliteTable('claims', {
   id: text('id').primaryKey(),
@@ -78,7 +110,7 @@ export const financialsNormalized = sqliteTable('financials_normalized', {
   roe: real('roe'),
   netMargin: real('net_margin'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
-});
+}, (t) => [unique('financials_ticker_year_uniq').on(t.ticker, t.year)]);
 
 export const dailyNormalized = sqliteTable('daily_normalized', {
   id: text('id').primaryKey(),
@@ -87,4 +119,65 @@ export const dailyNormalized = sqliteTable('daily_normalized', {
   closePrice: real('close_price'),
   volume: integer('volume'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+}, (t) => [unique('daily_ticker_date_uniq').on(t.ticker, t.date)]);
+
+export const workflowSteps = sqliteTable('workflow_steps', {
+  id: text('id').primaryKey(),
+  runId: text('run_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  nodeId: text('node_id').notNull(),
+  parentNodeIds: text('parent_node_ids').notNull(),
+  subagent: text('subagent'),
+  skills: text('skills').notNull(),
+  status: text('status').notNull(),
+  durationMs: real('duration_ms'),
+  summary: text('summary'),
+  error: text('error'),
+  createdAt: text('created_at').notNull(),
+  completedAt: text('completed_at'),
+}, (table) => [unique('workflow_steps_run_node_uniq').on(table.runId, table.nodeId)]);
+
+export const modelCalls = sqliteTable('model_calls', {
+  id: text('id').primaryKey(),
+  runId: text('run_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  stepId: text('step_id').notNull().references(() => workflowSteps.id, { onDelete: 'cascade' }),
+  subagent: text('subagent').notNull(),
+  provider: text('provider').notNull(),
+  model: text('model').notNull(),
+  attempt: integer('attempt').notNull(),
+  inputTokens: integer('input_tokens'),
+  outputTokens: integer('output_tokens'),
+  cachedInputTokens: integer('cached_input_tokens'),
+  totalTokens: integer('total_tokens'),
+  latencyMs: real('latency_ms').notNull(),
+  finishReason: text('finish_reason'),
+  cost: real('cost'),
+  currency: text('currency'),
+  createdAt: text('created_at').notNull(),
 });
+
+export const conversationEvents = sqliteTable('conversation_events', {
+  sessionId: text('session_id').notNull().references(() => researchSessions.id),
+  sequence: integer('sequence').notNull(),
+  createdAt: text('created_at').notNull(),
+  payload: text('payload').notNull(),
+}, table => [primaryKey({ columns: [table.sessionId, table.sequence] })]);
+
+export const conversationEvidence = sqliteTable('conversation_evidence', {
+  sessionId: text('session_id').notNull().references(() => researchSessions.id),
+  internalId: text('internal_id').notNull().references(() => evidence.id),
+  displayNumber: integer('display_number').notNull(),
+}, table => [primaryKey({ columns: [table.sessionId, table.internalId] }), unique().on(table.sessionId, table.displayNumber)]);
+
+/**
+ * PR D: durable versioned working context. One row per committed version; the
+ * payload keeps the structured state so no working-context property needs its own
+ * table before a query requirement exists.
+ */
+export const sessionContextVersions = sqliteTable('session_context_versions', {
+  sessionId: text('session_id').notNull().references(() => researchSessions.id, { onDelete: 'cascade' }),
+  version: integer('version').notNull(),
+  sourceSequence: integer('source_sequence').notNull(),
+  payloadJson: text('payload_json').notNull(),
+  updatedByTurnId: text('updated_by_turn_id').references(() => researchTurns.id, { onDelete: 'set null' }),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+}, table => [primaryKey({ columns: [table.sessionId, table.version] })]);

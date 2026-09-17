@@ -8,3 +8,5 @@ export { ClaimStoreSqlite } from './claimStoreSqlite';
 export { JudgmentStoreSqlite } from './judgmentStoreSqlite';
 export { searchEvidence } from './search';
 export { NormalizedStore } from './normalized';
+export { ResearchSessionStoreSqlite } from './researchSessionStoreSqlite';
+export { WorkingContextStoreSqlite } from './workingContextStoreSqlite';
