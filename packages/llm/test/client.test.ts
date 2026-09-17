@@ -1,9 +1,9 @@
 import { createServer, type Server } from 'node:http';
 import { APICallError } from 'ai';
 import { MockLanguageModelV2 } from 'ai/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { DEFAULT_AGENT_CONFIG, LLMClient, classifyLLMError, createProvider, toSystemPrompt } from '../src/index';
+import { DEFAULT_AGENT_CONFIG, LLMClient, classifyLLMError, createProvider, parseJsonResponse, toSystemPrompt } from '../src/index';
 
 const OBJECT_SCHEMA = z.object({ answer: z.string(), score: z.number() });
 
@@ -40,6 +40,58 @@ function textModel(text: string): MockLanguageModelV2 {
 }
 
 describe('LLMClient', () => {
+  it('validates a fenced custom-provider JSON reply locally', () => {
+    expect(parseJsonResponse('```json\n{"answer":"ok","score":7}\n```', OBJECT_SCHEMA))
+      .toEqual({ answer: 'ok', score: 7 });
+    expect(() => parseJsonResponse('{"answer":"bad","score":"7"}', OBJECT_SCHEMA)).toThrow();
+  });
+  it('keeps truthful Responses session affinity stable and uses streaming with cache metadata', async () => {
+    const requests: Array<{ headers: Headers; body: any }> = [];
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      requests.push({ headers: new Headers(init.headers), body: JSON.parse(String(init.body)) });
+      return new Response('{"error":{"message":"unauthorized"}}', { status: 401 });
+    });
+    try {
+      const client = new LLMClient({ config: { ...DEFAULT_AGENT_CONFIG, api: 'responses', baseURL: 'https://gateway.test/v1', apiKey: 'test-key' }, maxRetries: 1 });
+      for (let i = 0; i < 2; i++) await expect(client.generateText({ prompt: 'OK' })).rejects.toBeDefined();
+      expect(requests).toHaveLength(2);
+      const id = requests[0].headers.get('session_id');
+      expect(id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(requests[1].headers.get('session_id')).toBe(id);
+      expect(requests[0].headers.get('user-agent')).toContain('finharness');
+      expect(requests[0].body).toMatchObject({ stream: true, store: false, prompt_cache_key: id });
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it('preserves a streaming provider failure instead of an empty-object wrapper', async () => {
+    const failure = new APICallError({ message: 'insufficient balance', statusCode: 402, url: 'https://example.test', requestBodyValues: {} });
+    const model = new MockLanguageModelV2({ doStream: async () => { throw failure; } });
+    const client = new LLMClient({ config: DEFAULT_AGENT_CONFIG, maxRetries: 1, modelFactory: () => model });
+    await expect(client.streamObject({ schema: OBJECT_SCHEMA, prompt: 'test' })).rejects.toBe(failure);
+  });
+  it('aborts text checks without retrying or falling back', async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    const model = new MockLanguageModelV2({ doGenerate: async (options) => {
+      calls++;
+      controller.abort();
+      options.abortSignal?.throwIfAborted();
+      return resultOf('unexpected');
+    } });
+    const client = new LLMClient({ config: DEFAULT_AGENT_CONFIG, modelFactory: () => model,
+      fallbackConfigs: [DEFAULT_AGENT_CONFIG], retryBaseDelayMs: 1 });
+    await expect(client.generateText({ prompt: 'ping', abortSignal: controller.signal })).rejects.toThrow();
+    expect(calls).toBe(1);
+  });
+  it('validates JSON against the schema even when native structured output is unsupported', async () => {
+    let calls = 0;
+    const model = new MockLanguageModelV2({ doGenerate: async () => {
+      calls++;
+      if (calls === 1) throw new APICallError({ message: 'response_format json_schema unsupported', url: 'https://test/chat', requestBodyValues: {}, statusCode: 400 });
+      return resultOf({ answer: 'x', score: 'not a number' });
+    } });
+    const client = new LLMClient({ config: DEFAULT_AGENT_CONFIG, modelFactory: () => model });
+    await expect(client.generateObject({ schema: OBJECT_SCHEMA, prompt: 'p' })).rejects.toThrow();
+  });
   it('generateObject returns the schema-parsed object', async () => {
     const client = new LLMClient({
       config: DEFAULT_AGENT_CONFIG,
@@ -47,6 +99,28 @@ describe('LLMClient', () => {
     });
     const result = await client.generateObject({ schema: OBJECT_SCHEMA, prompt: 'p', system: 's' });
     expect(result).toEqual({ answer: 'hello', score: 72 });
+  });
+
+  it('generateObjectResult returns the parsed value with provider usage metadata', async () => {
+    const config = { ...DEFAULT_AGENT_CONFIG, model: 'usage-model' };
+    const client = new LLMClient({
+      config,
+      modelFactory: () => jsonModel({ answer: 'hello', score: 72 }),
+    });
+
+    const result = await client.generateObjectResult({ schema: OBJECT_SCHEMA, prompt: 'p' });
+
+    expect(result.value).toEqual({ answer: 'hello', score: 72 });
+    expect(result.metadata).toEqual({
+      provider: config.provider,
+      model: 'usage-model',
+      inputTokens: 10,
+      outputTokens: 5,
+      cachedInputTokens: null,
+      totalTokens: 15,
+      finishReason: 'stop',
+      latencyMs: expect.any(Number),
+    });
   });
 
   it('generateText returns the model text', async () => {

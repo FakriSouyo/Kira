@@ -1,6 +1,6 @@
 import type { Claim, Intent } from '@harness/schemas';
 import { normalizeJudgmentScore, stanceForScore } from '@harness/shared';
-import type { GenerateObjectParams, GenerateTextParams, LLMClientLike, StreamTextParams } from './types';
+import type { GenerateObjectParams, GenerateTextParams, LLMClientLike, StreamObjectParams, StreamTextParams } from './types';
 
 /**
  * Mock LLM deterministik untuk development offline & E2E test
@@ -14,6 +14,8 @@ import type { GenerateObjectParams, GenerateTextParams, LLMClientLike, StreamTex
  *   "Bear Agent"    → challenge (menarget klaim Bull dari prompt, angka dari evidence)
  *   "Judge Agent"   → judgment (dibangun dari claims di prompt; menyebut
  *                     debat bila conversation berisi challenge Bear)
+ *   specialist marker Researcher/Fundamentals/Market/Valuation/Risk →
+ *                     output evidence-addressable untuk workflow offline
  * Marker ini wajib dipertahankan di prompt agents.
  *
  * Output divalidasi dengan Zod schema pemanggil — bila mock menyimpang,
@@ -397,6 +399,62 @@ function generateJudge(prompt: string): JudgeOutput {
   return { score, stance, confidence, breakdown, summary };
 }
 
+function firstEvidence(system: string): MockEvidence {
+  const evidence = parseEvidenceBlock(system)[0];
+  if (!evidence) throw new Error('Mock specialist requires at least one evidence item');
+  return evidence;
+}
+
+function generateResearcher(system: string) {
+  const evidence = parseEvidenceBlock(system);
+  return {
+    summary: `Reviewed ${evidence.length} evidence item${evidence.length === 1 ? '' : 's'} for decision-relevant facts.`,
+    findings: evidence.slice(0, 3).map((item) => ({ claim: `Relevant facts were found in ${item.source}.`, evidenceIds: [item.id], confidence: 'medium' as const })),
+    sourceAssessments: evidence.map((item) => ({ evidenceId: item.id, quality: item.source.startsWith('sectors.') ? 'primary' as const : 'secondary' as const, rationale: 'The source is directly attached to this run.' })),
+    gaps: [],
+  };
+}
+
+function generateFundamentals(system: string) {
+  const evidence = firstEvidence(system);
+  return {
+    summary: 'Profitability and growth were assessed from the supplied financial evidence.',
+    insights: [
+      { topic: 'profitability' as const, assessment: 'Reported profitability is supported by the company evidence.', direction: 'positive' as const, evidenceIds: [evidence.id] },
+      { topic: 'growth' as const, assessment: 'The available reporting period supports a measured growth assessment.', direction: 'mixed' as const, evidenceIds: [evidence.id] },
+    ],
+    accountingFlags: [], gaps: [],
+  };
+}
+
+function generateMarket(system: string) {
+  const evidence = firstEvidence(system);
+  return {
+    summary: 'Market context was assessed from trading and flow evidence.', regime: 'stable' as const,
+    signals: [{ dimension: 'price_trend' as const, assessment: 'The observed market window is stable.', signal: 'neutral' as const, evidenceIds: [evidence.id] }],
+    caveats: ['The assessment is limited to the supplied observation window.'],
+  };
+}
+
+function generateValuation(system: string) {
+  const evidence = firstEvidence(system);
+  return {
+    summary: 'Valuation was assessed only from metrics present in the supplied evidence.', assessment: 'uncertain' as const,
+    observations: [{ method: 'relative_multiple' as const, assessment: 'The available snapshot supports only a relative valuation observation.', evidenceIds: [evidence.id] }],
+    assumptions: ['Comparable periods must be aligned.'], uncertainties: ['A complete peer set is not present.'],
+  };
+}
+
+function generateRisk(system: string) {
+  const evidence = firstEvidence(system);
+  return {
+    summary: 'Material downside paths were tested against the supplied evidence.',
+    scenarios: [{ title: 'Growth normalization', trigger: 'Reported growth weakens materially.', impact: 'Expected earnings and valuation support would decline.', likelihood: 'unknown' as const, severity: 'medium' as const, evidenceIds: [evidence.id] }],
+    failureConditions: [{ condition: 'The thesis fails if profitability deteriorates persistently.', observable: 'Multiple reporting periods show weaker profitability.', evidenceIds: [evidence.id] }],
+    gaps: [],
+  };
+}
+
 function routeIntent(text: string): Intent {
   const upper = text.toUpperCase();
   const tickers = upper.match(/\b[A-Z]{4}\b/g) ?? [];
@@ -417,7 +475,11 @@ function routeIntent(text: string): Intent {
   }
   // "Saham apa yang konsisten tumbuh?" → screen
   if (/\b(TUMBUH|SCREEN|SCREENING|PROFITABLE|GROWING|LIST|SAHAM APA|REKOMENDASI)\b/i.test(text)) {
-    return { type: 'screen', confidence: 0.85, criteria: text.trim(), ticker };
+    const criteria = [
+      /\b(PROFITABLE|PROFIT|UNTUNG|LABA)\b/i.test(text) ? 'profitable' : '',
+      /\b(TUMBUH|GROWING|GROWTH)\b/i.test(text) ? 'growing' : '',
+    ].filter(Boolean).join(' ');
+    return criteria ? { type: 'screen', confidence: 0.85, criteria } : { type: 'clarification', confidence: 0.5, question: 'Screen profitable, growing, or both?' };
   }
   if (ticker && /\b(BBCA|BBRI|BMRI|BBNI)\b/.test(upper)) {
     return { type: 'judge', confidence: 0.75, ticker };
@@ -436,25 +498,59 @@ export class MockLLMClient implements LLMClientLike {
     return params.schema.parse(JSON.parse(JSON.stringify(output))) as T;
   }
 
+  async streamObject<T>(params: StreamObjectParams<T>): Promise<T> {
+    const output = await this.generateObject(params);
+    const record = output as Record<string, unknown>;
+    const field = typeof record.reasoning === 'string' ? 'reasoning' : typeof record.summary === 'string' ? 'summary' : undefined;
+    if (field) {
+      const text = record[field] as string;
+      for (let i = 1; i <= 3; i++) params.onPartial?.({ ...record, [field]: text.slice(0, Math.ceil(text.length * i / 3)) } as Partial<T>);
+    } else params.onPartial?.(output as Partial<T>);
+    return output;
+  }
+
   async generateText(params: GenerateTextParams): Promise<string> {
+    const system = Array.isArray(params.system) ? params.system.join('\n') : params.system ?? '';
+    if (system.includes('Main FinHarness Agent')) {
+      return this.mainAgentAnswer(params.prompt);
+    }
     return `[mock-llm] ${params.prompt.slice(0, 120)}`;
   }
 
-  /** Streaming deterministik 3 chunk (tanpa delay) — konsumen menerima 3 yield. */
+  /** Streaming deterministik (tanpa delay) — konsumen menerima beberapa yield. */
   async *streamText(params: StreamTextParams): AsyncIterable<string> {
+    const system = Array.isArray(params.system) ? params.system.join('\n') : params.system ?? '';
+    if (system.includes('Main FinHarness Agent')) {
+      // Samakan dengan generateText supaya streaming conversation konsisten di mock.
+      const answer = this.mainAgentAnswer(params.prompt);
+      const step = Math.max(1, Math.ceil(answer.length / 3));
+      for (let i = 0; i < answer.length; i += step) yield answer.slice(i, i + step);
+      return;
+    }
     yield '[mock-llm] ';
     yield params.prompt.slice(0, 40);
     yield params.prompt.slice(40, 80);
   }
 
+  /** Jawaban kanonik Main FinHarness Agent untuk prompt conversation (konsisten response & stream). */
+  private mainAgentAnswer(prompt: string): string {
+    const topic = prompt.match(/User question:\s*(.+)/i)?.[1] ?? 'pertanyaan finansial';
+    return `${topic} adalah topik finansial yang bisa saya bantu jelaskan secara umum. Untuk jawaban berbasis data dan sumber terbaru, lanjutkan dengan /research ${topic}`;
+  }
+
   private generate(system: string | string[] | undefined, prompt: string): unknown {
     const systemText = Array.isArray(system) ? system.join('\n') : system ?? '';
     if (systemText.includes('Intent Router')) return routeIntent(prompt);
+    if (systemText.includes('Researcher Agent')) return generateResearcher(systemText);
+    if (systemText.includes('Fundamentals Agent')) return generateFundamentals(systemText);
+    if (systemText.includes('Market Agent')) return generateMarket(systemText);
+    if (systemText.includes('Valuation Agent')) return generateValuation(systemText);
+    if (systemText.includes('Risk Agent')) return generateRisk(systemText);
     if (systemText.includes('Bear Agent')) return generateBear(prompt, systemText);
     if (systemText.includes('Bull Agent')) return generateBull(prompt, systemText);
     if (systemText.includes('Judge Agent')) return generateJudge(prompt);
     throw new Error(
-      'MockLLMClient: no recognized system-prompt marker (Intent Router / Bull Agent / Bear Agent / Judge Agent)',
+      'MockLLMClient: no recognized system-prompt marker (router or financial specialist)',
     );
   }
 }

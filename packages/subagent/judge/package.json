@@ -1,0 +1,5 @@
+{
+  "name": "@harness/subagent-judge", "version": "0.1.0", "type": "module", "private": true,
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@harness/llm": "workspace:*", "@harness/schemas": "workspace:*", "@harness/shared": "workspace:*", "@harness/skill-filesystem": "workspace:*", "@harness/subagent-core": "workspace:*" }
+}

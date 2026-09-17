@@ -7,6 +7,10 @@ export interface EvidenceLike {
   data: Record<string, unknown>;
 }
 
+export const EVIDENCE_PREAMBLE =
+  'You are part of the Financial Agent Harness, an evidence-based stock research system. ' +
+  'Cite evidence by ID only — never invent data.';
+
 /**
  * Helper deterministik SATU untuk semua prompt builder (addendum §17).
  * Urutan key deterministik (sortKeys) ⇒ blok byte-identical antar agent
@@ -24,4 +28,9 @@ export function renderEvidenceBlock(evidence: readonly EvidenceLike[]): string {
         `  Data: ${JSON.stringify(sortKeys(e.data), null, 2)}`,
     )
     .join('\n');
+}
+
+/** Canonical cache-stable evidence zone shared by every specialist in one run. */
+export function buildEvidenceZone(ticker: string, evidence: readonly EvidenceLike[]): string {
+  return `${EVIDENCE_PREAMBLE}\nAvailable evidence for ${ticker}:\n${renderEvidenceBlock(evidence)}`;
 }

@@ -1,0 +1,5 @@
+# @harness/orchestrator
+
+Main conversational FinHarness agent. It handles identity and bounded financial chat, then recommends an evidence workflow when live or company-specific facts are needed.
+
+It is deliberately separate from `packages/command/*` and `packages/subagent/*`: commands own workflow graphs and invoke only the specialists they need; this package never impersonates those specialists.

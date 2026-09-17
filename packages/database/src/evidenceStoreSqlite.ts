@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { eq, inArray } from 'drizzle-orm';
 import type { Orm } from './client';
-import { evidence } from './schema';
+import { evidence, runEvidence } from './schema';
 import { canonicalHash } from '@harness/evidence';
 import type { Evidence } from '@harness/schemas';
 import type { EvidenceStore } from '@harness/evidence';
@@ -53,9 +53,11 @@ export class EvidenceStoreSqlite implements EvidenceStore {
       .select()
       .from(evidence)
       .where(eq(evidence.contentHash, contentHash))
-      .limit(1);
-    if (existing.length > 0) {
-      return toEvidence(existing[0] as EvidenceRow);
+      .limit(10);
+    const scoped = existing.find((r) => r.ticker === params.ticker && r.source === params.source);
+    if (scoped) {
+      await this.db.insert(runEvidence).values({ runId: params.runId, evidenceId: scoped.id }).onConflictDoNothing();
+      return toEvidence(scoped as EvidenceRow);
     }
 
     const row: EvidenceRow = {
@@ -71,14 +73,18 @@ export class EvidenceStoreSqlite implements EvidenceStore {
       provenance: null,
       createdAt: new Date().toISOString(),
     };
-    await this.db.insert(evidence).values(row);
+    this.db.transaction((tx) => {
+      tx.insert(evidence).values(row).run();
+      tx.insert(runEvidence).values({ runId: params.runId, evidenceId: row.id }).run();
+    });
     return toEvidence(row);
   }
 
   async getManyByIds(ids: string[]): Promise<Evidence[]> {
     if (ids.length === 0) return [];
     const rows = await this.db.select().from(evidence).where(inArray(evidence.id, ids));
-    return rows.map((r) => toEvidence(r as EvidenceRow));
+    const byId = new Map(rows.map((r) => [r.id, toEvidence(r as EvidenceRow)]));
+    return ids.flatMap((id) => { const row = byId.get(id); return row ? [row] : []; });
   }
 
   async getByTicker(ticker: string): Promise<Evidence[]> {
@@ -87,7 +93,8 @@ export class EvidenceStoreSqlite implements EvidenceStore {
   }
 
   async getByRun(runId: string): Promise<Evidence[]> {
-    const rows = await this.db.select().from(evidence).where(eq(evidence.runId, runId));
-    return rows.map((r) => toEvidence(r as EvidenceRow));
+    const rows = await this.db.select({ evidence }).from(runEvidence)
+      .innerJoin(evidence, eq(runEvidence.evidenceId, evidence.id)).where(eq(runEvidence.runId, runId));
+    return rows.map((r) => toEvidence(r.evidence as EvidenceRow));
   }
 }

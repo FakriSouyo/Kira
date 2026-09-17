@@ -1,6 +1,7 @@
 import type { HarnessContext } from '../context';
 import { loadConfig, writeCredentialsFile } from '../config';
 import type { CommandHandler, CommandResult } from '../repl/loop';
+import type { AgentEvent } from '../repl/events';
 import {
   color,
   renderError,
@@ -44,19 +45,27 @@ function failToUserFriendly(error: unknown): UserFriendlyError {
   return new UserFriendlyError('UNKNOWN_ERROR', message, 'Check the output above, or retry.');
 }
 
-function makeJudgeCommand(ctx: HarnessContext): CommandHandler {
-  return async (args: string[]) => {
+function makeJudgeCommand(ctx: HarnessContext, options: {
+  write?: (text: string) => void;
+  events?: (event: AgentEvent) => void;
+} = {}): CommandHandler {
+  const write = options.write ?? ((text: string) => process.stdout.write(text));
+  return async (args: string[], execution) => {
     if (args.length === 0) {
       throw new UserFriendlyError('MISSING_TICKER', 'No ticker provided', 'Usage: /judge TICKER  (e.g. /judge BBCA)');
     }
     const ticker = assertTicker(args[0]);
+    if (args.slice(1).some((arg) => arg !== '--conditional')) throw new UserFriendlyError('INVALID_ARG', 'Unknown /judge argument', 'Usage: /judge TICKER [--conditional]');
     const artifacts = await judgeWorkflow(ctx, ticker, (phase, line) =>
-      writeProgress(process.stdout, phase, line),
+      writeProgress({ write } as NodeJS.WritableStream, phase, line), options.events ?? (() => {}), {
+        signal: execution?.signal,
+        lifecycle: execution?.lifecycle,
+        conditional: args.includes('--conditional'),
+      },
     );
-    process.stdout.write(`\n${renderJudgeResult(artifacts)}\n\n`);
+    write(`\n${renderJudgeResult(artifacts)}\n\n`);
   };
 }
-
 function makeScreenCommand(ctx: HarnessContext): CommandHandler {
   return async (args: string[]) => {
     const criteria = args.map((a) => a.toLowerCase());
@@ -220,9 +229,16 @@ function makeSetupCommand(ctx: HarnessContext): CommandHandler {
   };
 }
 
-export function buildCommands(ctx: HarnessContext): Map<string, CommandHandler> {
+export function buildCommands(ctx: HarnessContext, options: {
+  write?: (text: string) => void;
+  events?: (event: AgentEvent) => void;
+  renderEvents?: boolean;
+  onCleanup?: (fn: () => Promise<void>) => void;
+  getReasoningMode?: () => 'usual' | 'reasoning';
+} = {}): Map<string, CommandHandler> {
+  const write = options.write ?? ((text: string) => process.stdout.write(text));
   const commands: Map<string, CommandHandler> = new Map([
-    ['judge', makeJudgeCommand(ctx)],
+    ['judge', makeJudgeCommand(ctx, options)],
     ['screen', makeScreenCommand(ctx)],
     ['export', makeExportCommand(ctx)],
     ['history', makeHistoryCommand(ctx)],
@@ -235,20 +251,16 @@ export function buildCommands(ctx: HarnessContext): Map<string, CommandHandler> 
     ['setup', makeSetupCommand(ctx)],
     ['status', makeStatusCommand(ctx)],
     ['providers', makeProvidersCommand()],
-    ['help', async () => {
-      process.stdout.write(`${renderHelp()}\n\n`);
-    }],
+    ['new', async () => { write(`${color.dim('New session ready.')}\n\n`); }],
+    ['help', async () => { write(`${renderHelp()}\n\n`); }],
     ['exit', async (): Promise<CommandResult> => {
-      process.stdout.write(`${color.dim('Goodbye! 👋')}\n`);
+      write(`${color.dim('Goodbye! 👋')}\n`);
       return { quit: true };
     }],
   ]);
-  for (const stub of ['challenge', 'compare', 'investigate', 'research']) {
-    commands.set(stub, makeStub(stub));
-  }
+  for (const stub of ['challenge', 'compare', 'investigate', 'research']) commands.set(stub, makeStub(stub));
   return commands;
 }
-
 /** Jembatan Intent Router → command (dipakai handleNaturalLanguage). */
 export function isRoutableCommand(name: string, commands: Map<string, CommandHandler>): boolean {
   return commands.has(name);

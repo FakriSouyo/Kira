@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { asc, desc, eq } from 'drizzle-orm';
 import type { Orm } from './client';
-import { agentMessages, claims, evidence, executions, judgments } from './schema';
+import { agentMessages, claims, evidence, executions, judgments, runEvidence } from './schema';
 import type { ExecutionArtifacts, ExecutionRun, ExecutionStore } from '@harness/execution';
 import { UserFriendlyError } from '@harness/shared';
 // reuse pemetaan evidence terpusat (Deviasi #19) — hindari duplikasi snake→camel
@@ -109,13 +109,13 @@ export class ExecutionStoreSqlite implements ExecutionStore {
       throw new UserFriendlyError('NOT_FOUND', `Run "${runId}" not found`, 'Try: /judge BBCA (or other valid ticker)');
     }
     const [evidenceRows, messageRows, claimRows, judgmentRows] = await Promise.all([
-      this.db.select().from(evidence).where(eq(evidence.runId, runId)),
+      this.db.select({ evidence }).from(runEvidence).innerJoin(evidence, eq(runEvidence.evidenceId, evidence.id)).where(eq(runEvidence.runId, runId)),
       this.db.select().from(agentMessages).where(eq(agentMessages.runId, runId)).orderBy(asc(agentMessages.sequenceOrder)),
       this.db.select().from(claims).where(eq(claims.runId, runId)).orderBy(asc(claims.claimId)),
       this.db.select().from(judgments).where(eq(judgments.runId, runId)).limit(1),
     ]);
 
-    const evidenceArtifacts = evidenceRows.map((r) => toEvidence(r as EvidenceRow));
+    const evidenceArtifacts = evidenceRows.map((r) => toEvidence(r.evidence as EvidenceRow));
 
     const messages = messageRows.map((r) => ({
       id: (r as { id: string }).id,
