@@ -70,6 +70,11 @@ function normalizeTicker(ticker: string): string {
   return ticker.toUpperCase();
 }
 
+function formatLocalDate(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function requirement(
   operation: string,
   ticker: string,
@@ -501,11 +506,14 @@ export class SectorsClient implements SectorsApi {
     // financials need bounded revalidation. Keep one conservative configurable
     // window rather than applying long-lived profile freshness to the whole entry.
     this.periodicCache = new FileCache(cacheDir, this.cacheTtlMs, { now: this.now });
-    // Default window 90 hari (batas maksimum v2 daily/foreign-flow).
-    const end = this.now();
+    // Daily/foreign-flow docs permit `end=today` but do not guarantee that the
+    // current trading day's row is immutable. End yesterday so this calendar-
+    // day cache contains only completed historical sessions.
+    const end = new Date(this.now());
+    end.setDate(end.getDate() - 1);
     const start = new Date(end.getTime() - 90 * 86_400_000);
-    this.sdate = start.toISOString().slice(0, 10);
-    this.edate = end.toISOString().slice(0, 10);
+    this.sdate = formatLocalDate(start);
+    this.edate = formatLocalDate(end);
   }
 
   async getCompanyReport(ticker: string): Promise<CompanyReport> {

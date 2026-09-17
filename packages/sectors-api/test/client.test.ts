@@ -452,6 +452,33 @@ describe('Market & News Researcher (Phase 1, v2)', () => {
     expect(hits).toBe(3);
   });
 
+  it('excludes the current day from daily and foreign ranges before calendar-day reuse', async () => {
+    const calls: string[] = [];
+    let now = new Date(2026, 8, 17, 12, 0, 0);
+    const client = new SectorsClient({
+      cacheDir,
+      now: () => now,
+      fetchImpl: (async (url: string) => {
+        calls.push(url);
+        return url.includes('/foreign-flow/')
+          ? jsonResponse({ symbol: 'BBCA.JK', data: [] })
+          : jsonResponse([]);
+      }) as typeof fetch,
+    });
+
+    await client.getDailyTransaction('BBCA');
+    await client.getForeignFlow('BBCA');
+    expect(calls).toHaveLength(2);
+    expect(calls.every((url) => url.includes('end=2026-09-16'))).toBe(true);
+    expect(calls.every((url) => !url.includes('end=2026-09-17'))).toBe(true);
+
+    // A later request on the same date can reuse the completed historical range.
+    now = new Date(2026, 8, 17, 16, 0, 0);
+    await client.getDailyTransaction('BBCA');
+    await client.getForeignFlow('BBCA');
+    expect(calls).toHaveLength(2);
+  });
+
   it('maps 404 on market endpoint to NOT_FOUND', async () => {
     const client = new SectorsClient({ cacheDir, fetchImpl: (async () => jsonResponse({ error: 'no' }, 404)) as typeof fetch });
     const error = await client.getDailyTransaction('XYZ').catch((e) => e);

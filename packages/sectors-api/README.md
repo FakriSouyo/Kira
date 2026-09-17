@@ -16,5 +16,5 @@ Catatan:
 - Company Report meminta hanya sections `overview`, `valuation`, `financials`, dan `dividend`; response campuran memakai TTL konservatif dan `asOf` tidak dianggap sebagai periode finansial.
 - Latest quarterly financials meminta `n_quarters=1` setelah parity characterization; bila YoY tidak tersedia dari report, client mempertahankan derivasi multi-quarter sebagai fallback.
 - Cache identity hanya memakai provider operation, normalized parameters, subject scope, temporal semantics, schema, dan adapter. Workflow/command/Turn/Execution/run tidak menjadi identity; provider hit tetap menghasilkan Evidence baru per Execution.
-- Daily/Foreign memakai validity calendar-day untuk range historis; News/Filings memakai TTL pendek yang dikonfigurasi. Shared/on-demand IDX endpoints dan screener tetap di luar normal `/judge` cache surface.
+- Daily/Foreign meminta range historis yang berakhir pada hari sebelumnya agar row trading-day yang masih berkembang tidak masuk cache; data historis selesai memakai validity calendar-day. News/Filings memakai TTL pendek yang dikonfigurasi. Shared/on-demand IDX endpoints dan screener tetap di luar normal `/judge` cache surface.
 - Skor screener (aturan eksak, teruji): profitable → ROE>0 +50; growing → revGrowth>0 +30, niGrowth>0 +20.
