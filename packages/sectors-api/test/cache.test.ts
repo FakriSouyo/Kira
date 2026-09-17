@@ -39,9 +39,27 @@ describe('FileCache', () => {
     expect(cache.get('k')).toBeNull();
   });
 
+  it('reuses an entry for the same calendar date and refreshes on the next date', () => {
+    let now = new Date('2026-09-09T23:59:00+08:00');
+    const cache = new FileCache(dir, 60_000, { calendarDay: true, now: () => now });
+    cache.set('BBCA_company_report', { roe: 23.1 });
+
+    now = new Date('2026-09-09T23:59:59+08:00');
+    expect(cache.get('BBCA_company_report')).toEqual({ roe: 23.1 });
+
+    now = new Date('2026-09-10T00:00:01+08:00');
+    expect(cache.get('BBCA_company_report')).toBeNull();
+  });
+
   it('treats corrupted files as a miss', () => {
     const cache = new FileCache(dir, 60_000);
     writeFileSync(join(dir, 'k.json'), '{not valid json');
+    expect(cache.get('k')).toBeNull();
+  });
+
+  it('treats an invalid fetchedAt as a miss', () => {
+    const cache = new FileCache(dir, 60_000);
+    writeFileSync(join(dir, 'k.json'), JSON.stringify({ fetchedAt: 'not-a-date', data: { a: 1 } }));
     expect(cache.get('k')).toBeNull();
   });
 

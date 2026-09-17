@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -44,6 +44,33 @@ describe('SectorsClient (v2)', () => {
     rmSync(cacheDir, { recursive: true, force: true });
   });
 
+  it('matches YoY by calendar quarter and does not label rolling quarters as YTD', async () => {
+    const quarters = [
+      { symbol: 'BBCA.JK', date: '2025-09-30', revenue: 120, earnings: 0 },
+      { symbol: 'BBCA.JK', date: '2025-03-31', revenue: 110, earnings: 5 },
+      { symbol: 'BBCA.JK', date: '2024-12-31', revenue: 105, earnings: 5 },
+      { symbol: 'BBCA.JK', date: '2024-09-30', revenue: 100, earnings: 5 },
+      { symbol: 'BBCA.JK', date: '2024-06-30', revenue: 80, earnings: 4 },
+      { symbol: 'BBCA.JK', date: '2024-03-31', revenue: 90, earnings: 4 },
+    ];
+    const fin = await stubClient(quarters, cacheDir).getQuarterlyFinancials('BBCA');
+    expect(fin.quarters[0].revenueGrowthYoy).toBeCloseTo(20);
+    expect(fin.quarters[0].netIncomeGrowthYoy).toBe(-100);
+    expect(fin.cumulativeYtd).toBeUndefined();
+  });
+
+  it('fills missing ROE from bounded cached company reports for profitable screening', async () => {
+    let reports = 0;
+    const client = new SectorsClient({ cacheDir, fetchImpl: (async (url: string) => {
+      if (url.includes('/company/report')) { reports++; return jsonResponse(V2_REPORT); }
+      return jsonResponse({ results: [{ symbol: 'BBCA.JK', company_name: 'Bank Central Asia' }] });
+    }) as typeof fetch });
+    const results = await client.screen(['profitable']);
+    expect(results[0]).toMatchObject({ ticker: 'BBCA', roe: 21, matchScore: 50 });
+    await client.screen(['profitable']);
+    expect(reports).toBe(1);
+  });
+
   it('fetches company report (v2 path) and normalizes to canonical', async () => {
     const calls: string[] = [];
     const client = new SectorsClient({
@@ -55,7 +82,7 @@ describe('SectorsClient (v2)', () => {
     });
 
     const report = await client.getCompanyReport('BBCA');
-    expect(calls).toEqual(['https://api.sectors.app/v2/company/report/BBCA/']);
+    expect(calls).toEqual(['https://api.sectors.app/v2/company/report/BBCA/?sections=overview%2Cvaluation%2Cfinancials%2Cdividend']);
     expect(report).toMatchObject({
       ticker: 'BBCA',
       name: 'Bank Central Asia',
@@ -69,6 +96,128 @@ describe('SectorsClient (v2)', () => {
     expect(report.valuation.pe).toBe(4.6);
     expect(report.valuation.pb).toBeCloseTo(1.6);
     expect(report.valuation.dividendYield).toBeCloseTo(3.1);
+  });
+
+  it('preserves /judge Company Report output when only consumed sections are returned', async () => {
+    const omitted = { future: { earnings_estimates: [] }, peers: [], management: [], ownership: [] };
+    const full = {
+      ...V2_REPORT,
+      ...omitted,
+    };
+    const reduced = {
+      symbol: V2_REPORT.symbol,
+      company_name: V2_REPORT.company_name,
+      overview: V2_REPORT.overview,
+      valuation: V2_REPORT.valuation,
+      financials: V2_REPORT.financials,
+      dividend: V2_REPORT.dividend,
+    };
+    const make = (body: unknown) => new SectorsClient({
+      cacheDir: mkdtempSync(join(tmpdir(), 'finharness-report-parity-')),
+      fetchImpl: (async () => jsonResponse(body)) as typeof fetch,
+    });
+    const fullReport = await make(full).getCompanyReport('BBCA');
+    const reducedReport = await make(reduced).getCompanyReport('BBCA');
+    expect(reducedReport).toEqual(fullReport);
+  });
+
+  it('proves n_quarters=1 preserves the normalized latest quarter and YoY consumed by /judge', async () => {
+    const reportWithGrowth = {
+      ...V2_REPORT,
+      financials: {
+        ...V2_REPORT.financials,
+        yoy_quarter_revenue_growth: 0.1,
+        yoy_quarter_earnings_growth: 0.08,
+      },
+    };
+    const fullRows = [
+      { symbol: 'BBCA.JK', date: '2025-12-31', revenue: 110, earnings: 54 },
+      { symbol: 'BBCA.JK', date: '2024-12-31', revenue: 100, earnings: 50 },
+      { symbol: 'BBCA.JK', date: '2025-09-30', revenue: 90, earnings: 45 },
+    ];
+    const latestOnly = [fullRows[0]];
+    const calls: string[] = [];
+    const client = new SectorsClient({
+      cacheDir,
+      fetchImpl: (async (url: string) => {
+        calls.push(url);
+        if (url.includes('/company/report')) return jsonResponse(reportWithGrowth);
+        return jsonResponse(url.includes('n_quarters=1') ? latestOnly : fullRows);
+      }) as typeof fetch,
+    });
+    await client.getCompanyReport('BBCA');
+    const normalized = await client.getQuarterlyFinancials('BBCA');
+    expect(calls).toContain('https://api.sectors.app/v2/financials/quarterly/BBCA/?n_quarters=1&approx=true');
+    expect(normalized.quarters[0]).toMatchObject({
+      period: '2025-Q4', revenue: 110, netIncome: 54,
+      revenueGrowthYoy: 10, netIncomeGrowthYoy: 8,
+    });
+    const fullClient = new SectorsClient({
+      cacheDir: mkdtempSync(join(tmpdir(), 'finharness-quarter-parity-full-')),
+      fetchImpl: (async (url: string) => jsonResponse(url.includes('/company/report') ? reportWithGrowth : fullRows)) as typeof fetch,
+    });
+    await fullClient.getCompanyReport('BBCA');
+    const fullNormalized = await fullClient.getQuarterlyFinancials('BBCA');
+    expect(normalized.quarters[0]).toEqual(fullNormalized.quarters[0]);
+  });
+
+  it('retains multi-row YoY derivation as a correctness fallback when report growth is absent', async () => {
+    const calls: string[] = [];
+    const rows = [
+      { symbol: 'BBCA.JK', date: '2025-12-31', revenue: 110, earnings: 54 },
+      { symbol: 'BBCA.JK', date: '2024-12-31', revenue: 100, earnings: 50 },
+    ];
+    const client = new SectorsClient({
+      cacheDir,
+      fetchImpl: (async (url: string) => {
+        calls.push(url);
+        if (url.includes('/company/report')) return jsonResponse(V2_REPORT);
+        return jsonResponse(url.includes('n_quarters=1') ? [rows[0]] : rows);
+      }) as typeof fetch,
+    });
+    const fin = await client.getQuarterlyFinancials('BBCA');
+    expect(fin.quarters[0]).toMatchObject({ revenueGrowthYoy: 10, netIncomeGrowthYoy: 8 });
+    expect(calls.filter((url) => url.includes('/financials/quarterly')).length).toBe(2);
+  });
+
+  it('boundedly revalidates latest financials after the configured window', async () => {
+    let now = new Date('2026-09-17T12:00:00Z');
+    let quarterlyFetches = 0;
+    const client = new SectorsClient({
+      cacheDir,
+      cacheTtlHours: 1,
+      now: () => now,
+      fetchImpl: (async (url: string) => {
+        if (url.includes('/company/report')) return jsonResponse({
+          ...V2_REPORT,
+          financials: { ...V2_REPORT.financials, yoy_quarter_revenue_growth: 0.1, yoy_quarter_earnings_growth: 0.08 },
+        });
+        quarterlyFetches += 1;
+        return jsonResponse([{ symbol: 'BBCA.JK', date: quarterlyFetches === 1 ? '2025-12-31' : '2026-03-31', revenue: 110, earnings: 54 }]);
+      }) as typeof fetch,
+    });
+    expect((await client.getQuarterlyFinancials('BBCA')).quarters[0].period).toBe('2025-Q4');
+    now = new Date('2026-09-17T14:00:00Z');
+    expect((await client.getQuarterlyFinancials('BBCA')).quarters[0].period).toBe('2026-Q1');
+    expect(quarterlyFetches).toBe(2);
+  });
+
+  it('reuses a compatible subject-specific request across client/workflow instances but not across subjects', async () => {
+    let hits = 0;
+    const fetchImpl = (async (url: string) => {
+      hits += 1;
+      if (url.includes('/company/report')) return jsonResponse({
+        ...V2_REPORT,
+        financials: { ...V2_REPORT.financials, yoy_quarter_revenue_growth: 0.1, yoy_quarter_earnings_growth: 0.08 },
+      });
+      return jsonResponse([{ symbol: 'BBCA.JK', date: '2025-12-31', revenue: 1, earnings: 1 }]);
+    }) as typeof fetch;
+    await new SectorsClient({ cacheDir, fetchImpl }).getQuarterlyFinancials('BBCA');
+    await new SectorsClient({ cacheDir, fetchImpl }).getQuarterlyFinancials('BBCA');
+    await new SectorsClient({ cacheDir, fetchImpl }).getQuarterlyFinancials('BBRI');
+    // Each subject needs its own report + quarterly provider responses; the
+    // second BBCA workflow reuses both responses, while BBRI cannot reuse them.
+    expect(hits).toBe(4);
   });
 
   it('sends Authorization header WITHOUT the Bearer prefix (v2 auth)', async () => {
@@ -282,24 +431,25 @@ describe('Market & News Researcher (Phase 1, v2)', () => {
     expect(calls.every((u) => !u.includes('/sentiment'))).toBe(true);
   });
 
-  it('news cache uses a shorter TTL than market/fundamental cache', async () => {
+  it('applies short news TTL while retaining completed daily history for the local date', async () => {
     let hits = 0;
+    let now = new Date('2026-09-17T12:00:00Z');
     const client = new SectorsClient({
       cacheDir,
       cacheTtlHours: 24,
       newsCacheTtlHours: 1,
+      now: () => now,
       fetchImpl: (async () => {
         hits += 1;
         return jsonResponse([]);
       }) as typeof fetch,
     });
-    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
-    writeFileSync(join(cacheDir, 'BBCA_news.json'), JSON.stringify({ fetchedAt: twoHoursAgo, data: [] }));
-    writeFileSync(join(cacheDir, 'BBCA_daily_transaction.json'), JSON.stringify({ fetchedAt: twoHoursAgo, data: [] }));
-
-    await client.getNews('BBCA'); // TTL 1j → refetch
-    await client.getDailyTransaction('BBCA'); // TTL 24j → cache hit
-    expect(hits).toBe(1);
+    await client.getNews('BBCA');
+    await client.getDailyTransaction('BBCA');
+    now = new Date('2026-09-17T14:00:00Z');
+    await client.getNews('BBCA');
+    await client.getDailyTransaction('BBCA');
+    expect(hits).toBe(3);
   });
 
   it('maps 404 on market endpoint to NOT_FOUND', async () => {
