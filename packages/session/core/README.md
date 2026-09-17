@@ -8,7 +8,8 @@ terminal before their parent Turn settles.
 
 The session store is a persistence boundary, not a runtime coordinator. It does
 not execute workflows, assemble model context, project the conversation journal,
-or own artifacts, cache, or memory.
+or own cache or memory. PR F artifact identity and storage are separate
+contracts; the session lifecycle only carries their durable references.
 
 The live CLI adopts this lifecycle at its request composition boundary. Journal
 payloads may carry versioned Turn/Execution correlation, but replay remains a
@@ -35,10 +36,12 @@ relevant.
   (`STALE_CONTEXT_VERSION`) and an older journal prefix
   (`STALE_SOURCE_SEQUENCE`). Last-write-wins is never allowed.
 - `deriveWorkingContextPatch` publishes only what durable rows support:
-  `activeSubjects` and `currentIntent` for any settled Turn, plus
-  `activeVerdictRef` when a judgment actually resolves through
-  `JudgmentStore.getByRun`. Thesis/Bull/Bear/Risk references stay unset until PR F
-  defines resolvable artifacts — no reference is invented.
+  `activeSubjects` and `currentIntent` for any settled Turn, plus typed
+  `activeBullCaseRef`, `activeBearCaseRef`, and `activeVerdictRef` when PR F
+  artifacts resolve. `activeThesisRef`, risk, and running-summary references
+  remain null because no distinct producer exists.
+- The legacy `{ kind: 'judgment', executionId }` reference remains readable for
+  pre-PR-F rows; new `/judge` contexts use `{ kind, artifactId }`.
 - User-state items (`USER_ASSERTION`, `ASSUMPTION`, `OPEN_QUESTION`) keep explicit
   provenance so user claims can never stand in for verified evidence.
 

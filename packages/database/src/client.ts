@@ -14,6 +14,7 @@ import { NormalizedStore } from './normalized';
 import { ResearchSessionStoreSqlite } from './researchSessionStoreSqlite';
 import { ConversationJournalSqlite } from './conversationJournalSqlite';
 import { WorkingContextStoreSqlite } from './workingContextStoreSqlite';
+import { ArtifactStoreSqlite } from './artifactStoreSqlite';
 
 export type Orm = BetterSQLite3Database<Record<string, never>>;
 
@@ -42,6 +43,7 @@ export interface FinharnessDatabase {
   sessions: ResearchSessionStoreSqlite;
   journal: ConversationJournalSqlite;
   workingContext: WorkingContextStoreSqlite;
+  artifacts: ArtifactStoreSqlite;
 }
 
 export function openDb(options: { homeDir?: string; verbose?: boolean } = {}): FinharnessDatabase {
@@ -73,5 +75,6 @@ export function openDb(options: { homeDir?: string; verbose?: boolean } = {}): F
     sessions: new ResearchSessionStoreSqlite(orm),
     journal: new ConversationJournalSqlite(orm),
     workingContext: new WorkingContextStoreSqlite(orm),
+    artifacts: new ArtifactStoreSqlite(orm),
   };
 }

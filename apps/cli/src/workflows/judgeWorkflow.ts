@@ -1,5 +1,5 @@
 import type { ExecutionRun } from '@harness/execution';
-import type { Evidence, Judgment } from '@harness/schemas';
+import type { ArtifactEnvelope, DurableArtifactRef, Evidence, Judgment } from '@harness/schemas';
 import {
   createJudgeCommandContext, createJudgeWorkflow,
   type JudgeRoundDecision,
@@ -35,6 +35,8 @@ export interface JudgeArtifacts {
   bear: BearChallengeResponse;
   rebuttal: BullAnalysisResponse;
   judgment: Judgment;
+  /** Durable typed output references, empty for direct non-lifecycle callers. */
+  artifactRefs: DurableArtifactRef[];
   /** Exact package-owned skills loaded for the migrated debate specialists. */
   subagentAudit: { bull: SkillReference[]; bear: SkillReference[]; judge: SkillReference[] };
   /** Conditional extra round dipakai (Phase 3 Task 2) — ditampilkan renderer. */
@@ -179,6 +181,50 @@ export async function judgeWorkflow(
       ? await ctx.db.sessions.settleExecution(run.id, 'completed', { executionTimeSeconds })
       : await ctx.db.execution.completeRun(run.id, executionTimeSeconds);
     executionSettled = true;
+    let artifactRefs: DurableArtifactRef[] = [];
+    if (opts.lifecycle) {
+      const storedClaims = await ctx.db.claims.getByRun(run.id);
+      const envelopes: ArtifactEnvelope[] = [
+        {
+          artifactId: `artifact_bull_case_${run.id}`,
+          kind: 'BULL_CASE',
+          schemaVersion: 1,
+          sessionId: opts.lifecycle.sessionId,
+          turnId: opts.lifecycle.turnId,
+          executionId: run.id,
+          ticker,
+          payload: {
+            thesis: { ...thesis.response, claims: thesis.claims },
+            rebuttal: { ...rebuttal.response, claims: rebuttal.claims },
+          },
+          createdAt: new Date().toISOString(),
+        },
+        {
+          artifactId: `artifact_bear_case_${run.id}`,
+          kind: 'BEAR_CASE',
+          schemaVersion: 1,
+          sessionId: opts.lifecycle.sessionId,
+          turnId: opts.lifecycle.turnId,
+          executionId: run.id,
+          ticker,
+          payload: challenge.response,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          artifactId: `artifact_verdict_${run.id}`,
+          kind: 'VERDICT',
+          schemaVersion: 1,
+          sessionId: opts.lifecycle.sessionId,
+          turnId: opts.lifecycle.turnId,
+          executionId: run.id,
+          ticker,
+          payload: { judgment, evidenceIds: collected.evidenceIds, claimIds: storedClaims.map(claim => claim.claimId), rounds: synthesis.rounds },
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      const saved = await ctx.db.artifacts.saveMany(envelopes);
+      artifactRefs = saved.map(artifact => ({ kind: artifact.kind, artifactId: artifact.artifactId }));
+    }
     events({
       type: 'verdict',
       stance: judgment.stance, score: judgment.score, confidence: judgment.confidence,
@@ -197,6 +243,7 @@ export async function judgeWorkflow(
       bear: challenge.response,
       rebuttal: rebuttal.response,
       judgment,
+      artifactRefs,
       subagentAudit: { bull: thesis.result.skills, bear: challenge.result.skills, judge: judgeTurn.result.skills },
       conditionalUsed: synthesis.rounds > 1,
     };

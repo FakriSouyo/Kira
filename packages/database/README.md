@@ -9,6 +9,7 @@ Implementasi SQLite — satu-satunya paket yang menyentuh Drizzle/better-sqlite3
 | `schema.ts` | Definisi Drizzle + satu-satunya pemetaan snake_case (DB) ↔ camelCase (TS) |
 | `researchSessionStoreSqlite.ts` | Persistence boundary canonical untuk Session, Turn, dan Execution attempt |
 | `workingContextStoreSqlite.ts` | Penyimpanan versioned `SessionWorkingContext` (PR D) dengan commit compare-and-set |
+| `artifactStoreSqlite.ts` | Penyimpanan immutable typed artifacts PR F, idempotent per execution/kind, dengan lookup durable |
 | `conversationJournalSqlite.ts` | Audit/replay append-only; menyimpan event berkorelasi tanpa membuat atau memiliki Session |
 | `*StoreSqlite.ts` | Implementasi store interface lain dari paket kontrak masing-masing |
 
@@ -32,3 +33,7 @@ Catatan:
   Turn yang dipublish, bukan journal tail saat settlement; ini mencegah Turn lama
   yang selesai belakangan terlihat lebih baru. Journal tetap audit/urutan, bukan
   store context (event `session.context.updated` hanya membawa referensi versi).
+- `artifacts` (migrasi `0009`, PR F) menyimpan hanya output typed yang benar-benar
+  diproduksi `/judge`: Bull case (thesis + rebuttal), Bear case, dan deterministic
+  Verdict. Setiap row wajib terhubung ke Session/Turn/completed judge Execution;
+  identity immutable, write ulang ekuivalen idempotent, dan konflik ditolak.

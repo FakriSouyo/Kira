@@ -1,4 +1,5 @@
 import { canonicalJson } from '@harness/shared';
+import type { DurableArtifactRef } from '@harness/schemas';
 
 /**
  * SessionWorkingContext — PR D (Core Refactor Plan Phase 3).
@@ -15,7 +16,7 @@ import { canonicalJson } from '@harness/shared';
  * - LLM-visible packets or prompt text (Context Engine, PR G and later).
  */
 
-/** Minimal entity identity available today: an IDX ticker. Richer kinds arrive with PR F artifacts. */
+/** Minimal entity identity available today: an IDX ticker. */
 export interface EntityRef {
   ticker: string;
 }
@@ -31,9 +32,8 @@ export interface FocusTopic {
 }
 
 /**
- * Durable reference to persisted work. Only identities with a defined store
- * lookup may be created, so a reference is always resolvable:
- * `judgment` resolves through `JudgmentStore.getByRun(executionId)`.
+ * Legacy durable reference retained for pre-PR-F rows. New work uses the typed
+ * artifact refs from @harness/schemas.
  */
 export interface JudgmentRef {
   kind: 'judgment';
@@ -41,7 +41,7 @@ export interface JudgmentRef {
 }
 
 /** Reference union. PR F adds the immutable typed-artifact kinds. */
-export type ArtifactRef = JudgmentRef;
+export type ArtifactRef = JudgmentRef | DurableArtifactRef;
 
 /** Open question attached to its originating Turn. */
 export interface OpenQuestion {
@@ -238,12 +238,13 @@ export interface SettledTurnFacts {
   executions: ReadonlyArray<{ executionId: string; ticker: string; command: string }>;
   /** Execution ids whose persisted record exists through a defined store lookup. */
   judgedExecutionIds: readonly string[];
+  /** Durable PR F artifacts resolved for the settled execution, when present. */
+  artifactRefs?: readonly DurableArtifactRef[];
 }
 
 /**
  * Deterministic derivation from settled canonical work. Never invents artifact
- * identities: `activeThesisRef`, `activeBullCaseRef`, `activeBearCaseRef`, and
- * `activeRiskAssessmentRef` stay unset until PR F defines resolvable artifacts.
+ * identities: only refs resolved by the artifact store are published.
  */
 export function deriveWorkingContextPatch(facts: SettledTurnFacts): WorkingContextPatch {
   const patch: WorkingContextPatch = { currentIntent: { command: facts.command } };
@@ -251,6 +252,14 @@ export function deriveWorkingContextPatch(facts: SettledTurnFacts): WorkingConte
   const execution = facts.executions.at(-1);
   if (!execution) return patch;
   patch.activeSubjects = [{ ticker: execution.ticker }];
+  if (facts.artifactRefs && facts.artifactRefs.length > 0) {
+    for (const ref of facts.artifactRefs) {
+      if (ref.kind === 'BULL_CASE') patch.activeBullCaseRef = ref;
+      if (ref.kind === 'BEAR_CASE') patch.activeBearCaseRef = ref;
+      if (ref.kind === 'VERDICT') patch.activeVerdictRef = ref;
+    }
+    return patch;
+  }
   if (facts.judgedExecutionIds.includes(execution.executionId)) {
     patch.activeVerdictRef = { kind: 'judgment', executionId: execution.executionId };
   }

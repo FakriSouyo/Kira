@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import type Database from 'better-sqlite3';
 
 /** Daftar migrasi berurutan. File SQL dijalankan sekali, dicatat di _migrations. */
-const MIGRATIONS = ['./0001_initial.sql', './0002_normalized.sql', './0003_run_evidence.sql', './0004_evidence_hash_scoped.sql', './0005_research_sessions.sql', './0006_conversation_journal.sql', './0007_canonical_lifecycle.sql', './0008_session_working_context.sql'] as const;
+const MIGRATIONS = ['./0001_initial.sql', './0002_normalized.sql', './0003_run_evidence.sql', './0004_evidence_hash_scoped.sql', './0005_research_sessions.sql', './0006_conversation_journal.sql', './0007_canonical_lifecycle.sql', './0008_session_working_context.sql', './0009_artifacts.sql'] as const;
 
 export function runMigrations(db: Database.Database): void {
   db.exec(

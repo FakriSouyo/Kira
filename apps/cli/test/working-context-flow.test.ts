@@ -46,14 +46,16 @@ describe('session working context (PR D)', () => {
       activeSubjects: [{ ticker: 'BBRI' }],
       updatedByTurnId: artifacts.turns[0].id,
     });
-    // The reference resolves through a defined store contract.
-    expect(context?.activeVerdictRef).toEqual({ kind: 'judgment', executionId: execution.id });
+    // PR F references resolve through the typed artifact store; the old
+    // JudgmentStore row remains available independently.
+    expect(context?.activeVerdictRef).toEqual({ kind: 'VERDICT', artifactId: `artifact_verdict_${execution.id}` });
+    expect(context?.activeBullCaseRef).toEqual({ kind: 'BULL_CASE', artifactId: `artifact_bull_case_${execution.id}` });
+    expect(context?.activeBearCaseRef).toEqual({ kind: 'BEAR_CASE', artifactId: `artifact_bear_case_${execution.id}` });
     expect(await db.judgments.getByRun(execution.id)).not.toBeNull();
 
-    // No durable artifact identity exists for these yet, so nothing is invented.
+    // No distinct thesis/risk/summary producer exists, so nothing is invented
+    // for those slots.
     expect(context?.activeThesisRef).toBeNull();
-    expect(context?.activeBullCaseRef).toBeNull();
-    expect(context?.activeBearCaseRef).toBeNull();
     expect(context?.activeRiskAssessmentRef).toBeNull();
     expect(context?.runningSummaryRef).toBeNull();
     // Working context stays reference state: no history, no transcripts.
@@ -90,7 +92,7 @@ describe('session working context (PR D)', () => {
     expect(context).toMatchObject({ version: 2, currentIntent: { command: 'conversation' } });
     // The subject stays relevant across the follow-up.
     expect(context?.activeSubjects).toEqual([{ ticker: 'BBRI' }]);
-    expect(context?.activeVerdictRef).toEqual({ kind: 'judgment', executionId: expect.any(String) });
+    expect(context?.activeVerdictRef).toEqual({ kind: 'VERDICT', artifactId: expect.stringMatching(/^artifact_verdict_run_/) });
 
     const artifacts = await db.sessions.getSessionArtifacts(sessionId);
     const conversationTurn = artifacts.turns.find(turn => turn.command === 'conversation')!;

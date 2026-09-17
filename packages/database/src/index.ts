@@ -10,3 +10,4 @@ export { searchEvidence } from './search';
 export { NormalizedStore } from './normalized';
 export { ResearchSessionStoreSqlite } from './researchSessionStoreSqlite';
 export { WorkingContextStoreSqlite } from './workingContextStoreSqlite';
+export { ArtifactStoreSqlite } from './artifactStoreSqlite';

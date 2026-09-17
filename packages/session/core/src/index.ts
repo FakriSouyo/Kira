@@ -1,5 +1,6 @@
 export * from './conversation';
 export * from './workingContext';
+export * from './artifact';
 export type TurnStatus = 'running' | 'completed' | 'failed' | 'stopped';
 export type ExecutionStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 

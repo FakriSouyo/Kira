@@ -7,6 +7,7 @@ import {
   type ResearchSessionArtifacts,
   type SessionWorkingContext,
 } from '@harness/session-core';
+import type { DurableArtifactRef } from '@harness/schemas';
 
 /**
  * Publishes `SessionWorkingContext` from settled canonical work (PR D).
@@ -14,7 +15,8 @@ import {
  * Publication rules:
  * - only a Turn whose canonical status is `completed` may publish;
  * - the patch is derived from durable rows only (Turn, completed Executions, and
- *   a persisted judgment reached through `JudgmentStore.getByRun`);
+ *   persisted artifacts resolved through the typed artifact store (legacy
+ *   judgments remain readable for pre-PR-F executions);
  * - a conversational Turn legitimately has zero Executions and only refreshes
  *   `currentIntent`;
  * - the journal event is an audit/reference append, never the context store.
@@ -74,15 +76,22 @@ export function createWorkingContextPublisher(params: {
       const executions = artifacts.executions
         .filter(execution => execution.turnId === turn.id && execution.status === 'completed');
       const judgedExecutionIds: string[] = [];
+      const artifactRefs: DurableArtifactRef[] = [];
       for (const execution of executions) {
         if (execution.command !== 'judge') continue;
-        // Defined store lookup: a reference is created only when it resolves.
-        if (await db.judgments.getByRun(execution.id)) judgedExecutionIds.push(execution.id);
+        const resolved = await db.artifacts.getByExecution(execution.id);
+        if (resolved.length > 0) {
+          artifactRefs.push(...resolved.map(artifact => ({ kind: artifact.kind, artifactId: artifact.artifactId })));
+        } else if (await db.judgments.getByRun(execution.id)) {
+          // Defined legacy lookup: pre-PR-F rows keep their readable PR D ref.
+          judgedExecutionIds.push(execution.id);
+        }
       }
       const patch = deriveWorkingContextPatch({
         command: turn.command,
         executions: executions.map(execution => ({ executionId: execution.id, ticker: execution.ticker, command: execution.command })),
         judgedExecutionIds,
+        artifactRefs: artifactRefs.length > 0 ? artifactRefs : undefined,
       });
       const current = await db.workingContext.current(sessionId);
       if (isWorkingContextPatchNoOp(current, patch)) return { status: 'skipped', version: current?.version ?? null };
