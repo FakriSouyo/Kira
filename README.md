@@ -1,210 +1,483 @@
-# Financial Agent Harness
+# FinHarness
 
-![version](https://img.shields.io/badge/version-0.3.0-blue) ![CI](https://github.com/actions/workflows/ci.yml/badge.svg) ![node](https://img.shields.io/badge/node-%3E%3D22-green)
+[![version](https://img.shields.io/badge/version-0.3.1-blue)](./package.json)
+[![CI](https://github.com/FakriSouyo/finharness-sector.app/actions/workflows/ci.yml/badge.svg)](https://github.com/FakriSouyo/finharness-sector.app/actions/workflows/ci.yml)
+![Node](https://img.shields.io/badge/node-%3E%3D22-green)
 
-Evidence-based stock research harness with stateful sessions, structured context,
-and explicit financial workflows. `/judge` owns the Researcher -> Bull -> Bear ->
-Bull rebuttal -> Judge debate path; normal conversation runs through
-`MainFinHarnessAgent` and does not auto-execute `/judge` or other slash commands.
+**A stateful financial research agent harness for evidence-grounded stock analysis.**
 
-Spesifikasi lengkap: [`planning/addendum_v3.0.md`](planning/addendum_v3.0.md) (v3.1) ·
-Dokumentasi teknis: [`ARCHITECTURE.md`](ARCHITECTURE.md) · Changelog: [`CHANGELOG.md`](CHANGELOG.md)
+> LLMs propose. Data proves. Code verifies. Context persists. FinHarness decides.
 
-## Status: Phase 0→8 ✅ (0.3.0)
+FinHarness combines explicit financial workflows, durable session state, structured context, typed research artifacts, deterministic validation, and provider-backed market data.
 
-- **Phase 0** ✅ 3-agent flow **Researcher → Bull → Judge**
-- **Phase 1** ✅ Debate ronde Bear+Bull rebuttal + Market/News Researcher (§24-A)
-- **Phase 2** ✅ Advanced: session `history`/`resume`, streaming `streamText`, `export` md/html, skill-registry `--with`, replay fixture
-- **Phase 3** ✅ Orchestration: `Workflow` (LangGraph evaluated→not adopted), conditional `--conditional` (seq 5–7, upsert), `where` SQL-native
-- **Phase 4** ✅ Session UX + Web Preview: `/history`/`/session`/`/resume`, `/web` (3280, `/api/history`/`/api/run/:id`), conditional badge
-- **Phase 5** ✅ Version `0.3.0` + `/version`/`--version`, `formatDuration`, help lengkap
-- **Phase 6** ✅ Final RC `eval.md` agregat 0→6
-- **Phase 7** ✅ Future prototype: vector `mockEmbedding` + `cosineSimilarity`, `searchEvidence` + `/search`
-- **Phase 8** ✅ Release: CI (`pnpm check`), `CHANGELOG.md`, README distribusi
-- Sectors API client (v2, file cache TTL 24h/1h news, `where` native, error mapping)
-- LLM dua-tier (agent+router, `maxTokens` 2000/256, custom `baseURL`/`apiKey`, Vercel AI SDK)
-- 3 lapis validasi claim + `assertSeenEvidence` invariant
-- REPL interaktif: slash command, tab completion, history, Ctrl+C best-effort, natural language via MainFinHarnessAgent dengan structured context follow-up
-- Mock mode penuh (sectors+LLM) — **jalan offline tanpa API key**
-- Vector prototype (Phase 7) — `mockEmbedding` placeholder `pgvector`
+The current implementation is focused on IDX-oriented research and uses Sectors as its financial data provider.
 
-## Stateful Harness A-L ✅
+## Core idea
 
-The current runtime has completed the A-L stateful-context roadmap:
+FinHarness is not one giant agent that runs the same chain for every question.
+
+Different inputs use different paths:
 
 ```text
-Session -> Turn -> Execution
-              |
-              +-> /judge -> Evidence -> Bull/Bear/Judge -> typed artifacts
-              |
-              +-> conversation -> SessionWorkingContext
-                                  -> Resolver / Retrieval / Policy / Assembler
-                                  -> Token Budget / Compaction
-                                  -> ContextSnapshot
-                                  -> ModelCall
+User
+│
+├─ natural-language conversation
+│   └─ MainFinHarnessAgent
+│       └─ Context Engine
+│
+├─ /screen
+│   └─ screening workflow
+│
+├─ /search
+│   └─ evidence search
+│
+└─ /judge
+    └─ Research → Bull → Bear → Rebuttal → Judge → Verdict
 ```
 
-Key boundaries:
+The Bull/Bear/Judge debate belongs to `/judge` only.
 
-- `/judge` is the only workflow that owns the Bull/Bear/Judge debate.
-- Other commands keep independent workflow semantics and do not implicitly invoke the debate.
-- Natural-language conversation may answer from existing context or recommend a command, but does not auto-run commands.
-- PR L artifact reuse means reuse as prior context only, not workflow-output memoization.
-- Bull/Bear/Judge specialist context remains scoped to the current `/judge` execution and authoritative Evidence.
+Normal conversation does **not** silently auto-run `/judge`, `/research`, `/compare`, or `/screen`. Slash commands remain explicit workflow boundaries.
 
-## Requirements
+## What is implemented
 
-- Node.js ≥ 22 (built-in `fetch`)
-- pnpm ≥ 9
+### Stateful harness runtime
 
-## Quickstart (offline, tanpa API key)
+The A-L stateful-context roadmap is complete:
+
+```text
+Session
+└─ Turn
+   ├─ zero or more Executions
+   └─ ModelCalls
+
+SessionWorkingContext
+        ↓
+Reference Resolver
+        +
+bounded Artifact Retrieval
+        ↓
+Artifact Validity
+        ↓
+Context Policy
+        ↓
+Context Assembler
+        ↓
+Token Budget + Deterministic Compaction
+        ↓
+ContextSnapshot
+        ↓
+ModelCall
+```
+
+This gives FinHarness:
+
+- canonical `Session → Turn → Execution` lifecycle
+- append-only journal linkage
+- durable `SessionWorkingContext`
+- typed immutable research artifacts
+- same-session artifact retrieval
+- deterministic context selection
+- token budgeting and compaction
+- exact `ContextSnapshot → ModelCall` linkage
+- restart-safe conversational follow-up
+- execution-scoped specialist context for Bull/Bear/Judge
+
+Artifact reuse means **reuse as prior conversational context**, not workflow memoization. A new `/judge BBRI` still executes a new judge workflow.
+
+### Evidence-grounded `/judge`
+
+```text
+/judge BBRI
+↓
+create Turn + Execution
+↓
+WorkflowRunner
+↓
+identify company
+↓
+selectively fetch required financial data
+↓
+reuse provider cache when still valid
+↓
+persist Evidence
+↓
+select supporting evidence
+↓
+Bull thesis
+↓
+Bear challenge
+↓
+Bull rebuttal
+↓
+Judge evaluation
+↓
+optional extra challenge/rebuttal
+↓
+deterministic evidence check
+↓
+deterministic verdict synthesis
+↓
+persist typed artifacts
+↓
+publish SessionWorkingContext refs
+```
+
+The LLM produces structured reasoning, but important integrity rules remain code-enforced:
+
+- claim evidence IDs must exist
+- evidence must belong to the allowed execution set
+- Bear challenges must target valid claims
+- score and stance normalization are deterministic
+- specialist context is scoped to the current `/judge` execution
+- historical artifacts are never injected as authoritative evidence for a new judge run
+
+### Selective financial retrieval
+
+FinHarness avoids fetching every provider endpoint for every request.
+
+Current `/judge` data surface includes:
+
+- Company Report
+- Quarterly Financials
+- Daily Transaction when required
+- Foreign Flow when required
+- News when required
+- Filings when required
+- derived sentiment without a separate sentiment API call
+
+Provider cache freshness and artifact reuse are separate concerns.
+
+```text
+provider cache
+≠ Evidence
+≠ Artifact
+≠ Context
+≠ Memory
+```
+
+## Quickstart
+
+### Requirements
+
+- Node.js >= 22
+- pnpm 11.7.0
+
+The repository pins pnpm through:
+
+```json
+"packageManager": "pnpm@11.7.0"
+```
+
+### Offline development
+
+No API keys are required:
 
 ```bash
 pnpm install
 pnpm finharness --mock-sectors --mock-llm
 ```
 
-Lalu di REPL:
+Then try:
 
-```
-❯ /judge BBCA
-❯ Apakah BBRI layak dibeli?
-❯ /screen profitable growing
-❯ /history
-❯ /session <runId>
-❯ /search ROE
-❯ /export <runId> --format md
-❯ /web
-❯ /version
-❯ /help
-❯ /exit
+```text
+/judge BBCA
+Apakah BBRI layak dibeli?
+/screen profitable growing
+/history
+/session <runId>
+/search ROE
+/help
 ```
 
-## Quickstart (real API)
+Mock mode follows the same main contracts as the real runtime and is used by the offline E2E suite.
+
+### Real APIs
+
+Copy the example environment file and configure your keys:
 
 ```bash
-cp .env.example .env   # isi SECTORS_API_KEY + key LLM
+cp .env.example .env
 pnpm finharness
 ```
 
-Atau via `~/.finharness/config.json`:
+You can also run the interactive setup:
+
+```text
+/setup
+```
+
+or save credentials directly:
+
+```text
+/auth-set SECTORS=... LLM.AGENT=... LLM.ROUTER=...
+```
+
+Credentials are stored separately in:
+
+```text
+~/.finharness/.credentials.json
+```
+
+Configuration priority is:
+
+```text
+environment
+→ .credentials.json
+→ config.json legacy fallback
+→ defaults
+```
+
+## LLM configuration
+
+FinHarness currently exposes agent and router model tiers.
+
+Example `~/.finharness/config.json`:
 
 ```json
 {
   "llm": {
-    "agent":  { "provider": "openai", "model": "gpt-4o", "temperature": 0.2, "maxTokens": 2000 },
-    "router": { "provider": "openai", "model": "gpt-4o-mini", "temperature": 0.0, "maxTokens": 256 }
+    "agent": {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "temperature": 0.2,
+      "maxTokens": 2000
+    },
+    "router": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "temperature": 0,
+      "maxTokens": 256
+    }
   },
-  "sectors_api": { "key": "SECTORS_API_KEY", "base_url": "https://api.sectors.app/v2", "cache_ttl_hours": 24 },
-  "features": { "auto_sync": true, "mock_mode": false }
+  "sectors_api": {
+    "key": "SECTORS_API_KEY",
+    "base_url": "https://api.sectors.app/v2",
+    "cache_ttl_hours": 24
+  }
 }
 ```
 
-> **Kredensial terpisah (`.credentials.json`, opsional).** Untuk menghindari key mentah
-> nangkring di `config.json` (aman dibagikan/screenshot untuk debug), preferensi key:
-> **env → `~/.finharness/.credentials.json` → config.json (legacy) → default**.
->
-> ```json
-> // ~/.finharness/.credentials.json
-> {
->   "sectors_api": { "key": "..." },
->   "llm": { "agent": { "api_key": "..." }, "router": { "api_key": "..." } }
-> }
-> ```
->
-> `sectors_api.key` / `llm.*.api_key` di `config.json` (baris `"key"` di atas) tetap dibaca
-> sebagai **fallback legacy** agar tidak breaking. Untuk CI/headless cukup pakai env
-> (`SECTORS_API_KEY`, `LLM_API_KEY`) yang menggantikan keduanya.
->
-> Di dalam REPL langsung set lewat `/auth-set SECTORS=... LLM.AGENT=... LLM.ROUTER=...`
-> (menulis `.credentials.json` otomatis dengan mode `0600` di *nix).
+OpenAI-compatible endpoints can also be used through `base_url` / `api_key` or environment variables.
 
-Prioritas konfigurasi: **env → `.credentials.json` → config.json → default** (env menang bila ada).
-
-### Custom API provider (DeepSeek, OpenRouter, Ollama lokal, dsb.)
-
-Endpoint OpenAI-compatible apa pun bisa dipakai lewat `base_url` + `api_key`
-(di `config.json`, per-tier) atau env `LLM_BASE_URL` + `LLM_API_KEY` (kedua tier):
+Example:
 
 ```bash
-# DeepSeek
-LLM_PROVIDER=openai LLM_BASE_URL=https://api.deepseek.com/v1 LLM_API_KEY=sk-... LLM_MODEL=deepseek-chat pnpm finharness
-
-# Ollama lokal (tanpa internet)
-LLM_PROVIDER=openai LLM_BASE_URL=http://localhost:11434/v1 LLM_API_KEY=ollama LLM_MODEL=qwen2.5:14b pnpm finharness
+LLM_PROVIDER=openai \
+LLM_BASE_URL=https://api.deepseek.com/v1 \
+LLM_API_KEY=... \
+LLM_MODEL=deepseek-chat \
+pnpm finharness
 ```
 
-Router tier yang berbeda model/provider cukup diset di `config.json`
-(`llm.router.base_url` / `llm.router.api_key`).
-
-## CLI Options
-
-| Flag | Fungsi |
-|---|---|
-| `--home <dir>` | Direktori data (default `~/.finharness`) |
-| `--mock-sectors` | Data fiks Sectors API (offline) |
-| `--mock-llm` | LLM deterministik (offline) |
-| `--version` | Tampilkan versi (`0.3.0`) |
-| `-h, --help` | Tampilkan bantuan |
-
-Environment: lihat [`.env.example`](.env.example) — `SECTORS_API_KEY`, `LLM_PROVIDER`,
-`LLM_MODEL`, `LLM_ROUTER_*`, `LLM_BASE_URL`, `LLM_API_KEY`, `FINHARNESS_HOME`,
-`FINHARNESS_MOCK_SECTORS`, `FINHARNESS_MOCK_LLM`, `FINHARNESS_DEBUG`.
+Local OpenAI-compatible endpoints such as Ollama or LM Studio can be configured the same way.
 
 ## Commands
 
-| Command | Fungsi |
-|---|---|
-| `/judge [TICKER]` | Analisis penuh + Debate ronde: Researcher → Bull → Bear → Bull rebuttal → Judge (`--conditional` Phase 3) |
-| `/screen [CRITERIA]` | Screener (`profitable`/`growing`, `where` native Phase 3) — pola historis |
-| `/history [--limit N]` | List runs (Phase 4) |
-| `/session <runId>` | Show artifacts markdown (Phase 4) |
-| `/resume <runId>` | Alias session (Phase 4) |
-| `/search <query>` | Search evidence (keyword+vector prototype, Phase 7) |
-| `/export <runId> [--format json\|md\|html]` | Export audit trail (Phase 2) |
-| `/web [--port N]` | Tiny web preview `http://localhost:3280` (Phase 4) |
-| `/version` | Tampilkan versi (Phase 5) |
-| `/help` | Bantuan |
-| `/exit` | Keluar |
-| `/challenge`, `/compare`, `/research`, `/investigate` | Stub roadmap (Phase 1) |
+### Available now
 
-Natural language ditangani oleh `MainFinHarnessAgent`. Agent dapat menjawab dari
-context yang tersedia atau menyarankan slash command yang lebih sesuai, tetapi
-tidak mengeksekusi `/judge`, `/research`, `/compare`, atau `/screen` secara
-implisit. Command berjalan ketika dipanggil secara eksplisit.
+| Command | Purpose |
+|---|---|
+| `/judge TICKER [--conditional]` | Full evidence-backed debate and deterministic verdict |
+| `/screen [CRITERIA]` | Screen stocks using supported criteria |
+| `/history [--limit N]` | List recent runs |
+| `/session <runId>` | Show persisted run artifacts |
+| `/resume <runId>` | Display/resume-compatible session view |
+| `/search <query>` | Search persisted evidence using keyword + vector prototype |
+| `/export <runId> [--format json\|md\|html]` | Export a run and its audit trail |
+| `/web [--port N]` | Start the lightweight local web preview |
+| `/setup` | Open the interactive setup wizard |
+| `/status` | Show provider/config status with masked credentials |
+| `/providers` | List configured AI provider options |
+| `/auth-set KEY=VALUE` | Write credentials to `.credentials.json` |
+| `/new` | Start a new-session interaction path |
+| `/version` | Show the current version |
+| `/help` | Show CLI help |
+| `/exit` | Exit the harness |
+
+### Roadmap stubs
+
+These command names exist but their full workflows are not implemented yet:
+
+- `/research`
+- `/compare`
+- `/challenge`
+- `/investigate`
+
+They are intentionally separate from `/judge`. Future implementations should use only the capabilities and specialists they actually need.
+
+## Conversation behavior
+
+Natural-language input is handled by `MainFinHarnessAgent`.
+
+Example:
+
+```text
+/judge BBRI
+
+jadi menurutmu bagaimana?
+downside paling bahaya apa?
+balik ke thesis BBRI tadi
+```
+
+Follow-up turns can reuse structured same-session context without rerunning `/judge`.
+
+Historical artifacts may be recovered as **prior research context** when they are valid and relevant. They are not presented as newly refreshed financial data.
+
+## Architecture
+
+```text
+apps/cli
+  ├─ REPL
+  ├─ explicit commands
+  └─ composition/runtime wiring
+        │
+        ├───────────────┐
+        ▼               ▼
+packages/orchestrator   packages/command
+MainFinHarnessAgent     WorkflowRunner definitions
+        │               │
+        ▼               ▼
+packages/context        packages/subagent
+Context Engine          Bull / Bear / Judge / Researcher
+        │               │
+        └───────┬───────┘
+                ▼
+      session / execution / evidence
+                │
+                ▼
+          packages/database
+
+External seams:
+  packages/llm
+  packages/sectors-api
+```
+
+### Main packages
+
+```text
+packages/
+  command/       command/workflow contracts and /judge definition
+  context/       ContextPacket, retrieval, validity, policy, budget, snapshot
+  conversation/  durable conversation store contracts
+  database/      SQLite stores and migrations
+  evidence/      EvidenceStore, hashing, provenance
+  execution/     execution and validation contracts
+  llm/           LLM runtime contracts, clients, mocks
+  orchestrator/  MainFinHarnessAgent conversation orchestration
+  routing/       routing primitives
+  schemas/       shared domain/Zod schemas
+  sectors-api/   Sectors adapter, cache, freshness policy
+  session/       Session/Turn/Execution and SessionWorkingContext
+  shared/        shared utilities
+  skill/         skill contracts/providers
+  subagent/      specialist manifests and runtime
+
+apps/
+  cli/           REPL, workflow adapters, setup, local UI
+```
+
+For the detailed architecture and historical design decisions, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Persistence and auditability
+
+FinHarness uses SQLite for durable runtime state.
+
+Important persisted concepts include:
+
+- Sessions
+- Turns
+- Executions
+- Evidence
+- agent messages
+- claims
+- judgments
+- typed artifacts
+- SessionWorkingContext versions
+- ContextSnapshots
+- ModelCall linkage
+
+The journal is an append-only audit/replay source. It is not the owner of session context.
+
+## Cache and freshness
+
+The Sectors adapter uses file-backed provider caching with operation-specific freshness behavior.
+
+Key rules:
+
+- fetch only what the current task requires
+- reuse provider data while policy says it is still valid
+- refresh only stale, missing, incompatible, or explicitly refreshed data
+- keep `fetchedAt`, `dataAsOf`, and financial period semantics distinct
+- do not treat provider cache entries as durable research artifacts
 
 ## Development
 
+Run the full verification path:
+
 ```bash
-pnpm check         # typecheck + test — satu pintu verifikasi
-pnpm test          # seluruh suite (unit + E2E offline)
-pnpm typecheck     # tsc --noEmit
-pnpm lint          # oxlint (correctness)
-pnpm db:migrate    # jalankan migrasi DB saja
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm test
+pnpm lint
 ```
 
-Konvensi kontribusi & struktur: [`AGENTS.md`](AGENTS.md) · per-paket: lihat
-`README.md` di masing-masing `packages/*` dan `apps/cli`.
+Or use the repository check command:
 
-Struktur monorepo saat ini:
+```bash
+pnpm check
+```
 
+Current CI runs on Node 22 and installs the pnpm version declared by `packageManager`.
+
+## Current baseline
+
+The completed stateful harness roadmap is:
+
+```text
+A  Canonical Session → Turn → Execution
+B  Production lifecycle + journal linkage
+C  /judge through WorkflowRunner
+D  SessionWorkingContext
+E  Selective provider retrieval + freshness
+F  Durable typed artifacts
+G  Context Resolver + Policy + Assembler
+H  ContextSnapshot + ModelCall linkage
+I  Production conversation-context integration
+J  Token budgeting + deterministic compaction
+K  Specialist context for Bull/Bear/Judge
+L  Artifact-aware retrieval + validity + prior-context reuse
 ```
-packages/
-  command/      kontrak dan definisi workflow command, termasuk /judge
-  context/      ContextPacket, retrieval, validity, policy, budget, snapshot
-  conversation/ durable conversation store contracts
-  database/     SQLite stores + migrations
-  evidence/     EvidenceStore + hashing/provenance
-  execution/    lifecycle validators, claim/judgment store contracts
-  llm/          provider-facing LLM runtime contracts + mock
-  orchestrator/ MainFinHarnessAgent conversation orchestration
-  routing/      routing primitives
-  schemas/      shared Zod/domain schemas
-  sectors-api/  Sectors provider adapter + cache/freshness policy
-  session/      canonical Session/Turn/Execution + SessionWorkingContext
-  shared/       common utilities
-  skill/        skill contracts/providers
-  subagent/     Bull, Bear, Judge, Researcher, and shared specialist runtime
-apps/
-  cli/          REPL, composition, command adapters, workflow/runtime wiring
-```
+
+A-L is complete and merged into `master`.
+
+## Next architecture work
+
+The next planned architecture phase starts from the A-L baseline rather than replacing it.
+
+Current direction:
+
+1. financial provider abstraction
+2. Verified Financial Snapshot
+3. model/runtime generalization
+4. Capability Registry + typed capability/tool runtime
+5. checkpoint/resume
+6. Evidence Policy + Claim Graph
+7. reusable research subgraphs
+8. Risk Committee
+9. Research Graph
+10. Decision Journal, outcome tracking, and reflection
+11. UI integration and final polish
+
+This order may evolve as implementation constraints become clearer, but the A-L lifecycle/context foundation remains the baseline.
+
+## Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — current architecture plus historical deviations
+- [CHANGELOG.md](CHANGELOG.md) — release history
+- [planning/addendum_v3.0.md](planning/addendum_v3.0.md) — earlier detailed design specification
+- [AGENTS.md](AGENTS.md) — repository contribution/agent conventions
+
+## Scope
+
+FinHarness is a research and engineering tool. Its outputs are designed to make evidence, assumptions, provenance, and uncertainty inspectable rather than hide them behind a single model response.
