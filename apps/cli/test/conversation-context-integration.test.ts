@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { contextPacketFingerprint } from '@harness/context';
 import { openDb, type FinharnessDatabase } from '@harness/database';
 import { renderContextPacket } from '@harness/orchestrator';
-import type { SectorsApi } from '@harness/sectors-api';
+import type { FinancialDataProvider } from '@harness/financial-data';
 import { loadConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
 
@@ -24,24 +24,24 @@ describe('PR I conversational context integration', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  function providerSpies(sectors: SectorsApi) {
-    const methods: Array<keyof SectorsApi> = [
+  function providerSpies(financialData: FinancialDataProvider) {
+    const methods: Array<keyof FinancialDataProvider> = [
       'getCompanyReport', 'getQuarterlyFinancials', 'getDailyTransaction',
       'getForeignFlow', 'getNews', 'getFilings', 'getSentiment', 'screen',
     ];
-    return methods.map(method => vi.spyOn(sectors, method));
+    return methods.map(method => vi.spyOn(financialData, method));
   }
 
   it('reuses prior /judge artifacts for a generic follow-up without a provider call or rerun', async () => {
     const session = await createHarnessSession(db, loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true }), { write: () => {} });
-    const sectors = providerSpies(session.context.sectors);
+    const financialData = providerSpies(session.context.financialData);
     await session.commands.get('judge')!(['BBRI']);
-    const providerCallsBeforeFollowUp = sectors.map(spy => spy.mock.calls.length);
+    const providerCallsBeforeFollowUp = financialData.map(spy => spy.mock.calls.length);
     const respond = vi.spyOn(session.context.mainAgent, 'respond');
 
     await session.handleNaturalLanguage('jadi menurutmu bagaimana?');
 
-    expect(sectors.map(spy => spy.mock.calls.length)).toEqual(providerCallsBeforeFollowUp);
+    expect(financialData.map(spy => spy.mock.calls.length)).toEqual(providerCallsBeforeFollowUp);
     expect(respond).toHaveBeenCalledWith('jadi menurutmu bagaimana?', expect.objectContaining({
       context: expect.objectContaining({ rendered: expect.stringContaining('VERIFIED RESEARCH ARTIFACTS') }),
     }));
@@ -63,9 +63,9 @@ describe('PR I conversational context integration', () => {
 
   it('selects downside and thesis context without provider calls or fake thesis artifacts', async () => {
     const session = await createHarnessSession(db, loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true }), { write: () => {} });
-    const sectors = providerSpies(session.context.sectors);
+    const financialData = providerSpies(session.context.financialData);
     await session.commands.get('judge')!(['BBRI']);
-    const providerCallsAfterJudge = sectors.map(spy => spy.mock.calls.length);
+    const providerCallsAfterJudge = financialData.map(spy => spy.mock.calls.length);
 
     await session.handleNaturalLanguage('downside paling bahayanya apa?');
     await session.handleNaturalLanguage('balik ke thesis BBRI tadi');
@@ -79,21 +79,21 @@ describe('PR I conversational context integration', () => {
     expect(downsideSnapshot?.packet.artifacts.map(item => item.artifact.kind)).toEqual(['BEAR_CASE', 'VERDICT']);
     expect(thesisSnapshot?.packet.artifacts.map(item => item.artifact.kind)).toEqual(['BULL_CASE']);
     expect(thesisSnapshot?.packet.artifacts.some(item => item.artifact.kind === 'THESIS')).toBe(false);
-    expect(providerCallsAfterJudge).toEqual(sectors.map(spy => spy.mock.calls.length));
+    expect(providerCallsAfterJudge).toEqual(financialData.map(spy => spy.mock.calls.length));
     expect(artifacts.executions).toHaveLength(1);
     await session.close();
   });
 
   it('retrieves a prior same-session BBRI thesis after the active subject moves to BMRI', async () => {
     const session = await createHarnessSession(db, loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true }), { write: () => {} });
-    const sectors = providerSpies(session.context.sectors);
+    const financialData = providerSpies(session.context.financialData);
     await session.commands.get('judge')!(['BBRI']);
     await session.commands.get('judge')!(['BMRI']);
-    const providerCallsBeforeFollowUp = sectors.map(spy => spy.mock.calls.length);
+    const providerCallsBeforeFollowUp = financialData.map(spy => spy.mock.calls.length);
 
     await session.handleNaturalLanguage('balik ke thesis BBRI tadi');
 
-    expect(sectors.map(spy => spy.mock.calls.length)).toEqual(providerCallsBeforeFollowUp);
+    expect(financialData.map(spy => spy.mock.calls.length)).toEqual(providerCallsBeforeFollowUp);
     const artifacts = await db.sessions.getSessionArtifacts(session.conversation.id);
     const conversationTurn = artifacts.turns.find(turn => turn.command === 'conversation')!;
     const call = artifacts.modelCalls.find(modelCall => modelCall.turnId === conversationTurn.id)!;
@@ -115,7 +115,7 @@ describe('PR I conversational context integration', () => {
 
     db = openDb({ homeDir: dir });
     session = await createHarnessSession(db, loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true }), { write: () => {} });
-    const sectors = providerSpies(session.context.sectors);
+    const financialData = providerSpies(session.context.financialData);
     await session.handleNaturalLanguage('balik ke thesis BBRI tadi');
 
     const artifacts = await db.sessions.getSessionArtifacts(sessionId);
@@ -123,13 +123,13 @@ describe('PR I conversational context integration', () => {
     const call = artifacts.modelCalls.find(candidate => candidate.turnId === turn.id)!;
     const snapshot = await db.contextSnapshots.getById(call.contextSnapshotId!);
     expect(snapshot?.packet.artifacts.map(item => item.artifact.ticker)).toEqual(['BBRI']);
-    expect(sectors.every(spy => spy.mock.calls.length === 0)).toBe(true);
+    expect(financialData.every(spy => spy.mock.calls.length === 0)).toBe(true);
     await session.close();
   });
 
   it('keeps a context-free conversation unlinked and execution-free', async () => {
     const session = await createHarnessSession(db, loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true }), { write: () => {} });
-    const sectors = providerSpies(session.context.sectors);
+    const financialData = providerSpies(session.context.financialData);
 
     await session.handleNaturalLanguage('halo');
 
@@ -139,7 +139,7 @@ describe('PR I conversational context integration', () => {
     expect(artifacts.executions).toHaveLength(0);
     expect(call).toMatchObject({ turnId: turn.id, runId: null, stepId: null, contextSnapshotId: null });
     expect((db.raw.prepare('SELECT COUNT(*) AS count FROM context_snapshots').get() as { count: number }).count).toBe(0);
-    expect(sectors.every(spy => spy.mock.calls.length === 0)).toBe(true);
+    expect(financialData.every(spy => spy.mock.calls.length === 0)).toBe(true);
     await session.close();
   });
 
@@ -152,7 +152,7 @@ describe('PR I conversational context integration', () => {
 
     db = openDb({ homeDir: dir });
     session = await createHarnessSession(db, loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true }), { write: () => {} });
-    const sectors = providerSpies(session.context.sectors);
+    const financialData = providerSpies(session.context.financialData);
     await session.handleNaturalLanguage('jadi menurutmu bagaimana?');
 
     const artifacts = await db.sessions.getSessionArtifacts(sessionId);
@@ -161,7 +161,7 @@ describe('PR I conversational context integration', () => {
     const snapshot = await db.contextSnapshots.getById(call.contextSnapshotId!);
     expect(snapshot?.sessionId).toBe(sessionId);
     expect(snapshot?.packet.artifacts.map(item => item.artifact.kind)).toEqual(['BULL_CASE', 'BEAR_CASE', 'VERDICT']);
-    expect(sectors.every(spy => spy.mock.calls.length === 0)).toBe(true);
+    expect(financialData.every(spy => spy.mock.calls.length === 0)).toBe(true);
     await session.close();
   });
 

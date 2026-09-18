@@ -4,12 +4,13 @@ Client Sectors API (type-safe) + cache file + mock offline.
 
 | Modul | Isi |
 |---|---|
-| `types.ts` | `SectorsApi` interface, `CompanyReport`, `QuarterlyFinancials`, `ScreenerResult`, `SECTORS_SOURCES` |
+| `types.ts` | Compatibility re-exports for provider-neutral financial types, `SectorsApi` alias, and `SECTORS_SOURCES` |
+| `adapter.ts` | `SectorsFinancialDataProvider` — adapts the existing Sectors implementation to `FinancialDataProvider` |
 | `client.ts` | `SectorsClient` — read-through cache, error tidak pernah di-cache, `SectorsApiError` (NOT_FOUND/BAD_REQUEST/UNAUTHORIZED/RATE_LIMIT/TIMEOUT/SERVER_ERROR/NETWORK), `computeMatchScore` |
 | `cache.ts` | `FileCache` — TTL atau snapshot tanggal lokal, tulis atomik (tmp + rename), key di-sanitize, file korup = miss |
 | `policy.ts` | Normalized provider requirement identity dan inspectable `reuse`/`fetch` freshness decisions |
 | `mock.ts` | `MockSectorsApi` — fixture 5 bank (BBCA/BBRI/BMRI/BBNI/BJTM) konsisten; ticker tak dikenal → `NOT_FOUND` persis seperti client asli |
-| `index.ts` | `createSectorsApi(options & { mock? })` — satu titik pembuatan |
+| `index.ts` | `createSectorsApi` compatibility factory and `createSectorsFinancialDataProvider` composition factory |
 
 Catatan:
 - `fetchImpl` bisa di-inject (dipakai test); screener sengaja tidak di-cache.
@@ -18,3 +19,6 @@ Catatan:
 - Cache identity hanya memakai provider operation, normalized parameters, subject scope, temporal semantics, schema, dan adapter. Workflow/command/Turn/Execution/run tidak menjadi identity; provider hit tetap menghasilkan Evidence baru per Execution.
 - Daily/Foreign meminta range historis yang berakhir pada hari sebelumnya agar row trading-day yang masih berkembang tidak masuk cache; data historis selesai memakai validity calendar-day. News/Filings memakai TTL pendek yang dikonfigurasi. Shared/on-demand IDX endpoints dan screener tetap di luar normal `/judge` cache surface.
 - Skor screener (aturan eksak, teruji): profitable → ROE>0 +50; growing → revGrowth>0 +30, niGrowth>0 +20.
+- Canonical consumer-facing financial types and `FinancialDataProvider` live in
+  `@harness/financial-data`; this package contains the Sectors implementation
+  and keeps the old Sectors exports as a narrow compatibility surface.

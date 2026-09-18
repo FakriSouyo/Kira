@@ -39,7 +39,7 @@ export function mapToUserFriendly(error: unknown, fallbackSuggestion = 'Cek outp
   while (nested?.cause && !chain.has(nested.cause)) {
     chain.add(nested); error = nested.cause; nested = error as typeof nested;
   }
-  // SectorsApiError atau LLM error yang sudah berbentuk UserFriendly shape
+  // Provider/data error atau LLM error yang sudah berbentuk UserFriendly shape
   const maybeCode = (error as { code?: string; suggestion?: string } | null);
   if (maybeCode?.code && maybeCode?.suggestion && error instanceof Error) {
     return new UserFriendlyError(maybeCode.code, error.message, maybeCode.suggestion);

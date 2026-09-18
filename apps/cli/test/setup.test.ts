@@ -65,7 +65,7 @@ describe('setup service Slice 1 (no UI)', () => {
 
   it('testConnections success', async () => {
     const res = await testConnections({
-      sectors: { getCompanyReport: async () => ({}) },
+      financialData: { getCompanyReport: async () => ({}) },
       agentLlm: { generateText: async () => ({}) },
       routerLlm: { generateText: async () => ({}) },
     });
@@ -76,7 +76,7 @@ describe('setup service Slice 1 (no UI)', () => {
 
   it('testConnections failure returns errors without throw', async () => {
     const res = await testConnections({
-      sectors: { getCompanyReport: async () => { throw new Error('auth failed'); } },
+      financialData: { getCompanyReport: async () => { throw new Error('auth failed'); } },
       agentLlm: { generateText: async () => { throw new Error('rate limit'); } },
       routerLlm: { generateText: async () => ({}) },
     });

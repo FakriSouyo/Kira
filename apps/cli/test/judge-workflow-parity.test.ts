@@ -62,6 +62,43 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
     expect(evaluate).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps one provider operation per selected /judge source', async () => {
+    const context = ctx();
+    const methods = [
+      'getCompanyReport', 'getQuarterlyFinancials', 'getDailyTransaction',
+      'getForeignFlow', 'getNews', 'getFilings', 'getSentiment',
+    ] as const;
+    const calls = methods.map(method => vi.spyOn(context.financialData, method));
+
+    await judgeWorkflow(context, 'BBCA');
+
+    expect(calls.map(call => call.mock.calls.length)).toEqual([1, 1, 1, 1, 1, 1, 1]);
+  });
+
+  it('keeps quarterly financials as a required provider failure', async () => {
+    const context = ctx();
+    const events: AgentEvent[] = [];
+    vi.spyOn(context.financialData, 'getQuarterlyFinancials').mockRejectedValue(new Error('Quarterly data unavailable'));
+
+    await expect(judgeWorkflow(context, 'BBCA', () => {}, event => events.push(event)))
+      .rejects.toThrow('Quarterly data unavailable');
+    expect(events).toContainEqual(expect.objectContaining({ type: 'session.complete', status: 'failed' }));
+  });
+
+  it('keeps market data as optional enrichment when the provider fails', async () => {
+    const context = ctx();
+    const events: AgentEvent[] = [];
+    vi.spyOn(context.financialData, 'getDailyTransaction').mockRejectedValue(new Error('Market data unavailable'));
+
+    const artifacts = await judgeWorkflow(context, 'BBCA', () => {}, event => events.push(event));
+
+    expect(artifacts.run.status).toBe('completed');
+    expect(artifacts.marketAvailable).toBe(false);
+    expect(artifacts.marketEvidence).toEqual([]);
+    expect(artifacts.judgment.breakdown.marketMomentum).toBeNull();
+    expect(steps(events).filter(event => event.status === 'failed').map(event => event.nodeId)).toEqual(['fetch-market-data']);
+  });
+
   it('projects every declared node into the canonical step stream and persists the trace', async () => {
     const context = ctx();
     const events: AgentEvent[] = [];
@@ -189,7 +226,7 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
   it('degrades an optional enrichment failure visibly without failing the run', async () => {
     const context = ctx();
     const events: AgentEvent[] = [];
-    vi.spyOn(context.sectors, 'getNews').mockRejectedValue(new Error('News unavailable'));
+    vi.spyOn(context.financialData, 'getNews').mockRejectedValue(new Error('News unavailable'));
 
     const artifacts = await judgeWorkflow(context, 'BBCA', () => {}, (event) => events.push(event));
 
@@ -369,7 +406,7 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
     });
     const turn = await db.sessions.createTurn({ sessionId: session.id, input: '/judge ZZZZ', command: 'judge' });
     const settle = vi.spyOn(db.sessions, 'settleExecution');
-    vi.spyOn(context.sectors, 'getCompanyReport').mockRejectedValue(new Error('Company report unavailable'));
+    vi.spyOn(context.financialData, 'getCompanyReport').mockRejectedValue(new Error('Company report unavailable'));
 
     await expect(judgeWorkflow(context, 'ZZZZ', () => {}, (event) => events.push(event), { lifecycle: { sessionId: session.id, turnId: turn.id } }))
       .rejects.toThrow('Company report unavailable');

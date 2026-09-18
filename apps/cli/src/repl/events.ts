@@ -12,7 +12,7 @@ import type { ConversationSession } from '@harness/session-core';
  *   evidence.found per save → (phase bull/bear/judge) → session.complete.
  */
 
-/** Nama tool/fase — lihat sumber SECTORS_SOURCES di @harness/sectors-api. */
+/** Nama tool/fase — source provenance tetap dicatat oleh provider adapter. */
 export type AgentToolName =
   | 'company_report'
   | 'quarterly_financials'

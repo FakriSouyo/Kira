@@ -10,7 +10,7 @@
 
 FinHarness combines explicit financial workflows, durable session state, structured context, typed research artifacts, deterministic validation, and provider-backed market data.
 
-The current implementation is focused on IDX-oriented research and uses Sectors as its financial data provider.
+The current implementation is focused on IDX-oriented research and uses a provider-neutral financial data seam with Sectors as its current provider.
 
 ## Core idea
 
@@ -350,6 +350,7 @@ Context Engine          Bull / Bear / Judge / Researcher
 
 External seams:
   packages/llm
+  packages/financial-data  FinancialDataProvider contract
   packages/sectors-api
 ```
 
@@ -363,6 +364,7 @@ packages/
   database/      SQLite stores and migrations
   evidence/      EvidenceStore, hashing, provenance
   execution/     execution and validation contracts
+  financial-data provider-neutral financial data contracts
   llm/           LLM runtime contracts, clients, mocks
   orchestrator/  MainFinHarnessAgent conversation orchestration
   routing/       routing primitives
@@ -401,7 +403,8 @@ The journal is an append-only audit/replay source. It is not the owner of sessio
 
 ## Cache and freshness
 
-The Sectors adapter uses file-backed provider caching with operation-specific freshness behavior.
+Consumers use `FinancialDataProvider`; the current Sectors adapter uses file-backed
+provider caching with operation-specific freshness behavior.
 
 Key rules:
 
@@ -451,23 +454,30 @@ L  Artifact-aware retrieval + validity + prior-context reuse
 
 A-L is complete and merged into `master`.
 
+PR M adds the Financial Data Provider Seam:
+
+```text
+A-L  Stateful lifecycle/context foundation  COMPLETE
+ M   Financial Data Provider Seam           CURRENT / COMPLETE
+ N   Verified Financial Snapshot             NEXT
+```
+
 ## Next architecture work
 
-The next planned architecture phase starts from the A-L baseline rather than replacing it.
+The next planned architecture phase starts from the PR M seam rather than replacing the A-L foundation.
 
-Current direction:
+Current direction after PR M:
 
-1. financial provider abstraction
-2. Verified Financial Snapshot
-3. model/runtime generalization
-4. Capability Registry + typed capability/tool runtime
-5. checkpoint/resume
-6. Evidence Policy + Claim Graph
-7. reusable research subgraphs
-8. Risk Committee
-9. Research Graph
-10. Decision Journal, outcome tracking, and reflection
-11. UI integration and final polish
+1. Verified Financial Snapshot
+2. model/runtime generalization
+3. Capability Registry + typed capability/tool runtime
+4. checkpoint/resume
+5. Evidence Policy + Claim Graph
+6. reusable research subgraphs
+7. Risk Committee
+8. Research Graph
+9. Decision Journal, outcome tracking, and reflection
+10. UI integration and final polish
 
 This order may evolve as implementation constraints become clearer, but the A-L lifecycle/context foundation remains the baseline.
 

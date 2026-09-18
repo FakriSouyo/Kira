@@ -1,7 +1,8 @@
-# ARCHITECTURE - FinHarness Stateful Financial Agent Harness (A-L baseline)
+# ARCHITECTURE - FinHarness Stateful Financial Agent Harness (A-L baseline + PR M seam)
 
 Dokumen teknis untuk current runtime, keputusan desain, dan historical deviations.
-PR A-L adalah baseline stateful harness saat ini. Bagian phase/addendum yang lebih
+PR A-L adalah baseline stateful harness saat ini. PR M menambahkan seam provider
+financial yang tetap mempertahankan perilaku A-L. Bagian phase/addendum yang lebih
 lama tetap dipertahankan di bawah sebagai audit trail keputusan sebelumnya.
 
 ## 1. Current Runtime Layers & Invariants
@@ -35,6 +36,7 @@ WorkflowRunner definitions          Bull / Bear / Judge runtime
 
 External provider seams:
   packages/llm
+  packages/financial-data (provider-neutral financial contract)
   packages/sectors-api
 ```
 
@@ -59,6 +61,74 @@ Current invariants:
   separate concerns and must not be treated as interchangeable storage layers.
 - Specialist reasoning remains Evidence-grounded and typed. Persistence remains
   owned by workflow/composition boundaries rather than model-generated side effects.
+
+## PR M — Financial Data Provider Seam
+
+PR M inverts the financial-data dependency without changing the `/judge` graph,
+the lifecycle/context engine, or the provider retrieval policy.
+
+Before:
+
+```text
+consumer
+    ↓
+SectorsApi
+    ↓
+SectorsClient / MockSectorsApi
+```
+
+After:
+
+```text
+consumer
+    ↓
+FinancialDataProvider
+    ↓
+SectorsFinancialDataProvider
+    ↓
+existing Sectors client / cache / freshness policy
+```
+
+`packages/financial-data` owns the provider-neutral domain shapes and the
+`FinancialDataProvider` contract. `packages/sectors-api` retains the Sectors
+HTTP client, response normalization, authentication, cache, freshness policy,
+derived sentiment, error mapping, and deterministic mock. The composition root
+selects the current Sectors-backed implementation and injects it as
+`HarnessContext.financialData`.
+
+PR M invariants:
+
+- workflows and consumers no longer own Sectors provider identity;
+- Sectors remains the only current real provider;
+- provider cache/freshness authority remains in the provider/cache layer;
+- provider response, provider cache, Evidence, Artifact, Context, and Memory
+  remain separate layers;
+- `/judge` behavior and provider request counts remain unchanged;
+- Bull/Bear/Judge remain provider-blind and receive current-Execution Evidence
+  plus typed specialist context only;
+- required financial failures remain fatal, while optional market/news failures
+  retain their existing degrade behavior;
+- natural-language conversation does not auto-run `/judge`;
+- no database migration is needed because provider selection is runtime
+  composition, not durable business state;
+- Verified Financial Snapshot, Capability Registry, and model-runtime
+  generalization are not implemented in PR M.
+
+The architecture transition is:
+
+```text
+A-L complete
+    ↓
+M  Financial Data Provider Seam
+    ↓
+N  Verified Financial Snapshot
+    ↓
+model/runtime generalization
+    ↓
+capability/tool runtime
+    ↓
+later financial intelligence layers
+```
 
 ## 2. Evidence-First Flow (/judge, termasuk Debate ronde Phase 1)
 

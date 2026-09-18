@@ -91,11 +91,11 @@ export interface ConnectionResult {
 }
 
 /**
- * Test connections — calls sectors.getCompanyReport + llm.generateText for both tiers.
+ * Test connections — calls financialData.getCompanyReport + llm.generateText for both tiers.
  * Passed impls are injected for testability; on failure returns error strings, no throws.
  */
 export async function testConnections(deps: {
-  sectors: { getCompanyReport: (ticker: string) => Promise<unknown> };
+  financialData: { getCompanyReport: (ticker: string) => Promise<unknown> };
   agentLlm: { generateText: (p: { prompt: string }) => Promise<unknown> };
   routerLlm: { generateText: (p: { prompt: string }) => Promise<unknown> };
 }): Promise<ConnectionResult> {
@@ -105,7 +105,7 @@ export async function testConnections(deps: {
     router: { ok: false },
   };
   try {
-    await deps.sectors.getCompanyReport('BBCA');
+    await deps.financialData.getCompanyReport('BBCA');
     out.sectors.ok = true;
   } catch (e) {
     out.sectors.error = e instanceof Error ? e.message : String(e);

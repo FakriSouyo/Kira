@@ -1,6 +1,6 @@
 import { openDb } from '@harness/database';
 import { createLLMClient } from '@harness/llm';
-import { createSectorsApi } from '@harness/sectors-api';
+import { createSectorsFinancialDataProvider } from '@harness/sectors-api';
 import { failToUserFriendly } from './commands';
 import { loadConfig } from './config';
 import { startRepl } from './repl/loop';
@@ -72,7 +72,7 @@ async function main(): Promise<void> {
     needsSetup(config);
 
   if (shouldWizard) {
-    const sectors = createSectorsApi({
+    const financialData = createSectorsFinancialDataProvider({
       mock: false,
       apiKey: config.sectors.apiKey || undefined,
       baseUrl: config.sectors.baseUrl,
@@ -90,7 +90,7 @@ async function main(): Promise<void> {
         // @ts-ignore dynamic
         React.createElement(SetupWizard, {
           homeDir: config.homeDir,
-          deps: { sectors, agentLlm, routerLlm },
+          deps: { financialData, agentLlm, routerLlm },
           onDone: () => {
             try {
               (instance as unknown as { unmount: () => void }).unmount();
