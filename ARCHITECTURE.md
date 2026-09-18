@@ -238,10 +238,21 @@ summary ref) dibiarkan kosong — bukan diarang; PR F/G yang mengisinya. PR E
 (freshness/reuse provider) sengaja tidak ada di sini: working context hanya
 mereferensikan, tidak pernah mengotorisasi reuse data eksternal.
 
+### ContextPacket (PR G)
+
+`@harness/context` projects the captured `SessionWorkingContext` into one
+immutable, invocation-scoped `ContextPacket`; it is not journal history or a
+provider-cache payload. The Reference Resolver resolves only explicit active or
+pinned artifact refs, the deterministic Context Policy selects eligible
+candidates, and the Context Assembler emits stable thesis/Bull/Bear/Verdict/
+pinned ordering with artifact-ID deduplication and provenance. PR G does not
+persist snapshots, render prompts, expand Evidence, call providers, or attach
+context to model calls; those boundaries remain for later PRs.
+
 ### Rencana PR berikutnya (Core Refactor Plan)
 
 Urutan PR dan definisinya yang mengikat ada di `docs/core/03-CONTEXT-AND-MEMORY.md`
-§21 (PR A–PR L) dan `docs/core/13-CORE-REFACTOR-PLAN.md` §8. PR A–PR D selesai;
+§21 (PR A–PR L) dan `docs/core/13-CORE-REFACTOR-PLAN.md` §8. PR A–PR G selesai;
 **PR E = selective provider retrieval + freshness policy** disisipkan setelah PR D
 dan sebelum integrasi Context Engine pertama:
 permintaan Sectors menjadi demand-driven per requirement node, data yang masih

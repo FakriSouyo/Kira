@@ -1,0 +1,14 @@
+{
+  "name": "@harness/context",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@harness/schemas": "workspace:*",
+    "@harness/session-core": "workspace:*",
+    "zod": "^3.25.0"
+  }
+}

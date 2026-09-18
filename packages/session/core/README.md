@@ -46,9 +46,10 @@ relevant.
   provenance so user claims can never stand in for verified evidence.
 
 Responsibility boundaries this contract deliberately does not cross: provider
-freshness/cache decisions belong to PR E, and packet assembly/prompt rendering
-belong to the later Context Engine. A working context may reference something; it
-never authorizes reusing external data.
+freshness/cache decisions belong to PR E, packet assembly belongs to the
+provider-neutral `@harness/context` Context Engine (PR G), and prompt rendering
+belongs to a later PR. A working context may reference something; it never
+authorizes reusing external data.
 
 `WorkingContextStore` is the persistence boundary (`current`, `at`, `history`,
 `commit`); the SQLite implementation lives in `@harness/database`.

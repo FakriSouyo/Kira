@@ -124,6 +124,18 @@ importers:
         specifier: workspace:*
         version: link:../../subagent/researcher
 
+  packages/context:
+    dependencies:
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+      '@harness/session-core':
+        specifier: workspace:*
+        version: link:../session/core
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+
   packages/conversation:
     dependencies:
       '@harness/shared':
