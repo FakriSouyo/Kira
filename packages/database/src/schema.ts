@@ -149,10 +149,23 @@ export const workflowSteps = sqliteTable('workflow_steps', {
   completedAt: text('completed_at'),
 }, (table) => [unique('workflow_steps_run_node_uniq').on(table.runId, table.nodeId)]);
 
+/** PR H: immutable, invocation-scoped structured context records. */
+export const contextSnapshots = sqliteTable('context_snapshots', {
+  snapshotId: text('snapshot_id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => researchSessions.id, { onDelete: 'cascade' }),
+  turnId: text('turn_id').notNull().references(() => researchTurns.id, { onDelete: 'cascade' }),
+  workingContextVersion: integer('working_context_version').notNull(),
+  schemaVersion: integer('schema_version').notNull(),
+  packetFingerprint: text('packet_fingerprint').notNull(),
+  packetJson: text('packet_json').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
 export const modelCalls = sqliteTable('model_calls', {
   id: text('id').primaryKey(),
   runId: text('run_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
   stepId: text('step_id').notNull().references(() => workflowSteps.id, { onDelete: 'cascade' }),
+  contextSnapshotId: text('context_snapshot_id').references(() => contextSnapshots.snapshotId, { onDelete: 'restrict' }),
   subagent: text('subagent').notNull(),
   provider: text('provider').notNull(),
   model: text('model').notNull(),

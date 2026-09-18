@@ -249,6 +249,17 @@ pinned ordering with artifact-ID deduplication and provenance. PR G does not
 persist snapshots, render prompts, expand Evidence, call providers, or attach
 context to model calls; those boundaries remain for later PRs.
 
+### ContextSnapshot (PR H)
+
+`ContextSnapshot` is the immutable durable record of the exact structured
+`ContextPacket` used for one invocation. Its canonical SHA-256 fingerprint
+excludes only operational creation time; packet trust distinctions, provenance,
+source refs, selected artifact IDs, diagnostics, and stable ordering are
+preserved. `ModelCall.contextSnapshotId` is nullable for existing/transitional
+calls that did not consume a ContextPacket; explicitly supplied context cannot
+silently degrade to a null link. PR H does not inject context into agents,
+render prompts, count tokens, or change provider behavior.
+
 ### Rencana PR berikutnya (Core Refactor Plan)
 
 Urutan PR dan definisinya yang mengikat ada di `docs/core/03-CONTEXT-AND-MEMORY.md`

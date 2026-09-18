@@ -132,6 +132,9 @@ importers:
       '@harness/session-core':
         specifier: workspace:*
         version: link:../session/core
+      '@harness/shared':
+        specifier: workspace:*
+        version: link:../shared
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -144,6 +147,9 @@ importers:
 
   packages/database:
     dependencies:
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../context
       '@harness/conversation':
         specifier: workspace:*
         version: link:../conversation

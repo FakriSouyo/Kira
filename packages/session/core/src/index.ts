@@ -113,6 +113,8 @@ export interface ModelCallRecord extends ModelUsage {
   attempt: number;
   latencyMs: number;
   finishReason: string | null;
+  /** Null for transitional calls that did not consume a ContextPacket. */
+  contextSnapshotId: string | null;
   createdAt: string;
 }
 
@@ -137,7 +139,7 @@ export interface ResearchSessionStore {
     result?: { executionTimeSeconds?: number; error?: string; completedAt?: string },
   ): Promise<ResearchExecution>;
   saveStep(params: { stepId?: string; runId: string; nodeId: string; parentNodeIds: string[]; subagent?: string; skills: SkillAuditReference[]; status: WorkflowStepStatus; durationMs?: number; summary?: string; error?: string }): Promise<WorkflowStepRecord>;
-  recordModelCall(params: { callId?: string; runId: string; stepId: string; subagent: string; provider: string; model: string; attempt: number; inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; totalTokens: number | null; latencyMs: number; finishReason: string | null; cost: number | null; currency: string | null }): Promise<ModelCallRecord>;
+  recordModelCall(params: { callId?: string; runId: string; stepId: string; subagent: string; provider: string; model: string; attempt: number; inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; totalTokens: number | null; latencyMs: number; finishReason: string | null; cost: number | null; currency: string | null; contextSnapshotId?: string | null }): Promise<ModelCallRecord>;
   getSessionArtifacts(sessionId: string): Promise<ResearchSessionArtifacts>;
 }
 

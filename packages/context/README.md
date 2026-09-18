@@ -22,5 +22,7 @@ journal replay, provider cache, prompt string, or persisted snapshot.
 
 The package has no Sectors/provider dependency and performs no writes, workflow
 execution, Evidence expansion, freshness decisions, prompt rendering, or model
-call integration. ContextSnapshot persistence and model-call linkage belong to
-PR H.
+call integration. PR H adds the immutable `ContextSnapshot` envelope and
+fingerprint, persists it through `@harness/database`, and gives existing
+`ModelCall` rows nullable `contextSnapshotId` linkage. Calls not yet supplied a
+PR G packet remain explicitly unlinked; no empty snapshots are fabricated.

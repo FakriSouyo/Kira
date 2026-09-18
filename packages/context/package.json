@@ -9,6 +9,7 @@
   "dependencies": {
     "@harness/schemas": "workspace:*",
     "@harness/session-core": "workspace:*",
+    "@harness/shared": "workspace:*",
     "zod": "^3.25.0"
   }
 }

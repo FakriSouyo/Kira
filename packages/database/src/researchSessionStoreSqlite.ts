@@ -10,8 +10,9 @@ import type {
   WorkflowStepRecord,
 } from '@harness/session-core';
 import { transitionTurn } from '@harness/session-core';
+import { ContextSnapshotIdSchema } from '@harness/context';
 import type { Orm } from './client';
-import { executions, modelCalls, researchSessions, researchTurns, workflowSteps } from './schema';
+import { contextSnapshots, executions, modelCalls, researchSessions, researchTurns, workflowSteps } from './schema';
 
 function toExecution(row: typeof executions.$inferSelect): ResearchExecution {
   if (row.sessionId === null || row.turnId === null || row.attempt === null) {
@@ -212,6 +213,17 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
   }
 
   async recordModelCall(params: Parameters<ResearchSessionStore['recordModelCall']>[0]): Promise<ModelCallRecord> {
+    const execution = await this.db.select().from(executions).where(eq(executions.id, params.runId)).limit(1);
+    if (!execution[0]) throw new Error(`Execution ${params.runId} not found`);
+    if (params.contextSnapshotId !== undefined && params.contextSnapshotId !== null) {
+      ContextSnapshotIdSchema.parse(params.contextSnapshotId);
+      const snapshot = await this.db.select().from(contextSnapshots)
+        .where(eq(contextSnapshots.snapshotId, params.contextSnapshotId)).limit(1);
+      if (!snapshot[0]) throw new Error(`ContextSnapshot ${params.contextSnapshotId} not found`);
+      if (snapshot[0].sessionId !== execution[0].sessionId || snapshot[0].turnId !== execution[0].turnId) {
+        throw new Error(`ContextSnapshot ${params.contextSnapshotId} session/turn does not belong to execution ${params.runId}`);
+      }
+    }
     const call: ModelCallRecord = {
       id: params.callId ?? `call_${randomUUID().slice(0, 8)}`,
       runId: params.runId,
@@ -226,6 +238,7 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
       totalTokens: params.totalTokens,
       latencyMs: params.latencyMs,
       finishReason: params.finishReason,
+      contextSnapshotId: params.contextSnapshotId ?? null,
       cost: params.cost,
       currency: params.currency,
       createdAt: new Date().toISOString(),
