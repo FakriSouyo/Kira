@@ -273,6 +273,20 @@ memuat operation/argumen/asOf/period. PR E tidak mengimplementasikan ContextPack
 Context Engine, capability registry, atau provider abstraction generik; boundary
 Context Engine ↔ provider dicatat di `03-CONTEXT-AND-MEMORY.md` §12.
 
+### Context Budget (PR J)
+
+After assembly, the CLI budgets the rendered `ContextPacket` against the
+selected agent's configured context-window capability, output reserve, prompt
+components, and deterministic safety margin. Structural compaction proceeds in
+stable trust-preserving stages (open questions, assumptions, assertions,
+typed artifact projections, then lower-priority artifacts according to focus).
+It does not mutate durable artifacts or working context and makes no provider or
+LLM calls. Only the final packet that fits is persisted as `ContextSnapshot` and
+sent to `MainFinHarnessAgent`; an impossible required context fails before
+snapshot/model invocation. Counts are explicitly conservative estimates, and
+the existing model usage metadata remains authoritative for actual provider
+accounting.
+
 ## 10. Pengujian
 
 ```

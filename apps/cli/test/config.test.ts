@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { DEFAULT_CONTEXT_WINDOW_TOKENS } from '@harness/llm';
 import { loadConfig, writeCredentialsFile } from '../src/config';
 
 const SAVED_ENV = new Map<string, string | undefined>();
@@ -25,6 +26,7 @@ describe('loadConfig (addendum §12)', () => {
     const config = loadConfig({ homeDir: '/tmp/never-created' });
     expect(config.llm.agent.model).toBe('gpt-4o');
     expect(config.llm.agent.maxTokens).toBe(2000);
+    expect(config.llm.agent.contextWindowTokens).toBe(DEFAULT_CONTEXT_WINDOW_TOKENS);
     expect(config.llm.router.model).toBe('gpt-4o-mini');
     expect(config.llm.router.maxTokens).toBe(256);
     expect(config.sectors.cacheTtlHours).toBe(24);
@@ -53,7 +55,7 @@ describe('loadConfig (addendum §12)', () => {
       writeFileSync(
         join(home, 'config.json'),
         JSON.stringify({
-          llm: { agent: { model: 'claude-3-5-sonnet', provider: 'anthropic', maxTokens: 4096 } },
+          llm: { agent: { model: 'claude-3-5-sonnet', provider: 'anthropic', maxTokens: 4096, context_window_tokens: 8192 } },
           sectors_api: { key: 'sk-file', base_url: 'http://localhost:8080/v1', cache_ttl_hours: 6 },
           features: { mock_mode: true },
         }),
@@ -63,6 +65,7 @@ describe('loadConfig (addendum §12)', () => {
       expect(config.llm.agent.model).toBe('claude-3-5-sonnet');
       expect(config.llm.agent.provider).toBe('anthropic');
       expect(config.llm.agent.maxTokens).toBe(4096);
+      expect(config.llm.agent.contextWindowTokens).toBe(8192);
       expect(config.sectors.apiKey).toBe('sk-file');
       expect(config.sectors.baseUrl).toBe('http://localhost:8080/v1');
       expect(config.sectors.cacheTtlHours).toBe(6);

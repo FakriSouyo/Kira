@@ -1,7 +1,8 @@
 import type { FinharnessDatabase } from '@harness/database';
 import { fileURLToPath } from 'node:url';
 import { ClaimValidator } from '@harness/execution';
-import { createLLMClient } from '@harness/llm';
+import { createLLMClient, DEFAULT_CONTEXT_WINDOW_TOKENS } from '@harness/llm';
+import { DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS } from '@harness/context';
 import { IntentRouter } from '@harness/routing';
 import { MainFinHarnessAgent } from '@harness/orchestrator';
 import { createSectorsApi, type SectorsApi } from '@harness/sectors-api';
@@ -54,7 +55,13 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
     judge: new JudgeAgent(specialist('judge')),
     router: new IntentRouter(routerLlm),
     mainAgent: new MainFinHarnessAgent(agentLlm),
-    conversationContext: createConversationContextCoordinator(db),
+    conversationContext: createConversationContextCoordinator(db, {
+      modelCapabilities: {
+        contextWindowTokens: config.llm.agent.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
+      },
+      reservedOutputTokens: config.llm.agent.maxTokens,
+      safetyMarginTokens: DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS,
+    }),
     validator: new ClaimValidator(db.evidence),
     researchers: config.researchers,
     homeDir: config.homeDir,

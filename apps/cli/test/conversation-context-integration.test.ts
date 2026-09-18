@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { contextPacketFingerprint } from '@harness/context';
 import { openDb, type FinharnessDatabase } from '@harness/database';
 import { renderContextPacket } from '@harness/orchestrator';
 import type { SectorsApi } from '@harness/sectors-api';
@@ -129,6 +130,56 @@ describe('PR I conversational context integration', () => {
 
     await expect(session.handleNaturalLanguage('jadi menurutmu bagaimana?')).rejects.toThrow('snapshot unavailable');
     expect(respond).not.toHaveBeenCalled();
+    await session.close();
+  });
+
+  it('snapshots the post-compaction packet and keeps protected downside context', async () => {
+    const config = loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true });
+    config.llm.agent = { ...config.llm.agent, contextWindowTokens: 1100, maxTokens: 64 };
+    const session = await createHarnessSession(db, config, { write: () => {} });
+    await session.commands.get('judge')!(['BBRI']);
+
+    const current = await db.workingContext.current(session.conversation.id);
+    expect(current).not.toBeNull();
+    const assertions = Array.from({ length: 12 }, (_, index) => ({
+      kind: 'USER_ASSERTION' as const,
+      id: `assertion-budget-${index}`,
+      text: `User assertion ${index} about the long-term margin of safety and downside sensitivity.`,
+      turnId: 'turn-previous',
+    }));
+    await db.workingContext.commit({
+      sessionId: session.conversation.id,
+      expectedVersion: current!.version,
+      sourceSequence: current!.sourceSequence + 1,
+      updatedByTurnId: current!.updatedByTurnId!,
+      patch: { userAssertions: assertions },
+    });
+
+    const respond = vi.spyOn(session.context.mainAgent, 'respond');
+    await session.handleNaturalLanguage('downside paling bahayanya apa?');
+
+    const artifacts = await db.sessions.getSessionArtifacts(session.conversation.id);
+    const turn = artifacts.turns.find(candidate => candidate.command === 'conversation')!;
+    const call = artifacts.modelCalls.find(candidate => candidate.turnId === turn.id)!;
+    const snapshot = await db.contextSnapshots.getById(call.contextSnapshotId!);
+    expect(snapshot?.packet.userAssertions).toHaveLength(0);
+    expect(snapshot?.packet.artifacts.map(item => item.artifact.kind)).toEqual(['BEAR_CASE', 'VERDICT']);
+    expect(snapshot?.packet.provenance.workingContextVersion).toBe(2);
+    expect(snapshot?.packetFingerprint).toBe(contextPacketFingerprint(snapshot!.packet));
+    expect(renderContextPacket(snapshot!.packet)).toBe(respond.mock.calls[0]?.[1]?.context?.rendered);
+    await session.close();
+  });
+
+  it('fails before snapshot/model invocation when the protected context cannot fit', async () => {
+    const config = loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true });
+    config.llm.agent = { ...config.llm.agent, contextWindowTokens: 128, maxTokens: 64 };
+    const session = await createHarnessSession(db, config, { write: () => {} });
+    await session.commands.get('judge')!(['BBRI']);
+    const respond = vi.spyOn(session.context.mainAgent, 'respond');
+
+    await expect(session.handleNaturalLanguage('jadi menurutmu bagaimana?')).rejects.toMatchObject({ code: 'CONTEXT_BUDGET_EXCEEDED' });
+    expect(respond).not.toHaveBeenCalled();
+    expect((db.raw.prepare('SELECT COUNT(*) AS count FROM context_snapshots').get() as { count: number }).count).toBe(0);
     await session.close();
   });
 });

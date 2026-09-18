@@ -1,12 +1,20 @@
 import { ENV } from '@harness/shared';
 import type { LLMModelConfig } from './types';
 
+/**
+ * Explicit conservative fallback when a selected model does not publish a
+ * usable context-window capability. This is planning metadata, not a claim
+ * about the provider's maximum window.
+ */
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 16_384;
+
 /** Default dua-tier (addendum §17). */
 export const DEFAULT_AGENT_CONFIG: LLMModelConfig = {
   provider: 'openai',
   model: 'gpt-4o',
   temperature: 0.2,
   maxTokens: 2000,
+  contextWindowTokens: DEFAULT_CONTEXT_WINDOW_TOKENS,
 };
 
 export const DEFAULT_ROUTER_CONFIG: LLMModelConfig = {
@@ -14,6 +22,7 @@ export const DEFAULT_ROUTER_CONFIG: LLMModelConfig = {
   model: 'gpt-4o-mini',
   temperature: 0.0,
   maxTokens: 256,
+  contextWindowTokens: DEFAULT_CONTEXT_WINDOW_TOKENS,
 };
 
 type EnvLike = Record<string, string | undefined>;

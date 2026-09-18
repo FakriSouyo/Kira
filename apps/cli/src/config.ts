@@ -13,6 +13,7 @@ interface LLMModelFile {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  context_window_tokens?: number;
   /** Endpoint kustom (DeepSeek/OpenRouter/Ollama...); kosong = default provider. */
   base_url?: string;
   api_key?: string;
@@ -220,6 +221,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
     model: envAgentModel ?? fileAgent?.model ?? DEFAULT_AGENT_CONFIG.model,
     temperature: fileAgent?.temperature ?? DEFAULT_AGENT_CONFIG.temperature,
     maxTokens: fileAgent?.maxTokens ?? DEFAULT_AGENT_CONFIG.maxTokens,
+    contextWindowTokens: fileAgent?.context_window_tokens ?? DEFAULT_AGENT_CONFIG.contextWindowTokens,
     baseURL: envBaseUrl ?? fileAgent?.base_url,
     apiKey: envApiKey ?? (selected ? scopedCredentials?.agent?.api_key : cred?.llm?.agent?.api_key ?? fileAgent?.api_key),
     api: fileAgent?.api,
@@ -234,6 +236,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
     model: envRouterModel ?? fileRouter?.model ?? DEFAULT_ROUTER_CONFIG.model,
     temperature: fileRouter?.temperature ?? DEFAULT_ROUTER_CONFIG.temperature,
     maxTokens: fileRouter?.maxTokens ?? DEFAULT_ROUTER_CONFIG.maxTokens,
+    contextWindowTokens: fileRouter?.context_window_tokens ?? DEFAULT_ROUTER_CONFIG.contextWindowTokens,
     baseURL: envBaseUrl ?? fileRouter?.base_url,
     apiKey: envApiKey ?? (selected ? scopedCredentials?.router?.api_key : cred?.llm?.router?.api_key ?? fileRouter?.api_key),
     api: fileRouter?.api,

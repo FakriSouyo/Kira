@@ -15,7 +15,7 @@ const CLEARLY_OFF_TOPIC = /\b(resep|masak|cuaca|sepak bola|football|film|musik|g
 const IDENTITY_ANSWER = 'Saya FinHarness, agent riset finansial yang membantu menjelaskan konsep, menata pertanyaan, dan menjalankan workflow berbasis evidence. Untuk analisis perusahaan gunakan /judge [TICKER], atau mulai riset umum dengan /research [QUESTION].';
 const OFF_TOPIC_ANSWER = 'Saya hanya membantu topik finansial, investasi, perusahaan, pasar, dan riset berbasis evidence. Silakan ajukan pertanyaan finansial atau tekan Ctrl+P untuk memilih workflow.';
 
-function buildPrompt(question: string): string {
+export function buildMainAgentPrompt(question: string): string {
   return `User question: ${question}\nAnswer as the bounded FinHarness financial assistant.`;
 }
 
@@ -49,7 +49,7 @@ export class MainFinHarnessAgent {
     }
     const answer = await this.llm.generateText({
       system: systemPrompt(options.context),
-      prompt: buildPrompt(question),
+      prompt: buildMainAgentPrompt(question),
       abortSignal: options.abortSignal,
     });
     await options.onModelCall?.();
@@ -71,7 +71,7 @@ export class MainFinHarnessAgent {
       yield OFF_TOPIC_ANSWER;
       return;
     }
-    for await (const chunk of this.llm.streamText({ system: systemPrompt(options.context), prompt: buildPrompt(question) })) yield chunk;
+    for await (const chunk of this.llm.streamText({ system: systemPrompt(options.context), prompt: buildMainAgentPrompt(question) })) yield chunk;
     await options.onModelCall?.();
   }
 }

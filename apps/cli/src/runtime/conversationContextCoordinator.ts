@@ -1,14 +1,23 @@
 import {
   assembleContext,
+  budgetContext,
   createContextSnapshot,
   resolveContextCandidates,
   selectContextCandidates,
   type ContextPacket,
   type ContextSnapshot,
   type ContextFocus,
+  type ContextBudgetReport,
+  type ContextModelCapabilities,
 } from '@harness/context';
 import type { FinharnessDatabase } from '@harness/database';
-import { classifyConversationFocus, renderContextPacket, type ConversationFocus } from '@harness/orchestrator';
+import {
+  buildMainAgentPrompt,
+  classifyConversationFocus,
+  MAIN_FINHARNESS_PROMPT,
+  renderContextPacket,
+  type ConversationFocus,
+} from '@harness/orchestrator';
 
 export interface PreparedConversationContext {
   readonly packet: ContextPacket;
@@ -20,11 +29,18 @@ export interface PreparedConversationContext {
     readonly focus: ContextFocus;
     readonly selectedArtifactIds: readonly string[];
     readonly snapshotId: string;
+    readonly budget: ContextBudgetReport;
   };
 }
 
 export interface ConversationContextCoordinator {
   prepare(params: { sessionId: string; turnId: string; message: string }): Promise<PreparedConversationContext | null>;
+}
+
+export interface ConversationContextBudgetOptions {
+  readonly modelCapabilities: ContextModelCapabilities;
+  readonly reservedOutputTokens: number;
+  readonly safetyMarginTokens: number;
 }
 
 function hasMeaningfulContext(packet: ContextPacket): boolean {
@@ -36,7 +52,10 @@ function hasMeaningfulContext(packet: ContextPacket): boolean {
 }
 
 /** Composes the PR G pipeline once for one conversational Turn. */
-export function createConversationContextCoordinator(db: FinharnessDatabase): ConversationContextCoordinator {
+export function createConversationContextCoordinator(
+  db: FinharnessDatabase,
+  budgetOptions: ConversationContextBudgetOptions,
+): ConversationContextCoordinator {
   return {
     async prepare({ sessionId, turnId, message }) {
       const workingContext = await db.workingContext.current(sessionId);
@@ -60,23 +79,36 @@ export function createConversationContextCoordinator(db: FinharnessDatabase): Co
       });
       if (!hasMeaningfulContext(assembly.packet)) return null;
 
-      // Persist first so a context-aware model invocation can never run without audit linkage.
+      const budgeted = budgetContext({
+        packet: assembly.packet,
+        render: renderContextPacket,
+        focus,
+        modelCapabilities: budgetOptions.modelCapabilities,
+        basePrompt: MAIN_FINHARNESS_PROMPT,
+        // PR I does not pass retained conversation history into this model call.
+        conversationHistory: '',
+        currentUserMessage: buildMainAgentPrompt(message),
+        reservedOutputTokens: budgetOptions.reservedOutputTokens,
+        safetyMarginTokens: budgetOptions.safetyMarginTokens,
+      });
+
+      // Persist only after budgeting so the snapshot is exactly what the model receives.
       const snapshot = await db.contextSnapshots.save(createContextSnapshot({
         sessionId,
         turnId,
-        packet: assembly.packet,
+        packet: budgeted.finalPacket,
       }));
-      const rendered = renderContextPacket(snapshot.packet);
       return {
         packet: snapshot.packet,
         snapshot,
-        rendered,
+        rendered: budgeted.renderedContext,
         focus,
         diagnostics: {
           workingContextVersion: workingContext.version,
           focus,
           selectedArtifactIds: snapshot.packet.provenance.selectedArtifactIds,
           snapshotId: snapshot.snapshotId,
+          budget: budgeted.report,
         },
       };
     },

@@ -13,6 +13,8 @@ export interface LLMModelConfig {
   temperature: number;
   /** Batas output per panggilan — kontrol biaya (addendum §17). */
   maxTokens: number;
+  /** Conservative input context window used by the local budget policy. */
+  contextWindowTokens?: number;
   /**
    * Endpoint kustom (OpenAI-compatible: DeepSeek, OpenRouter, Groq,
    * Ollama/LM Studio lokal, dll). `undefined` = endpoint default provider.
