@@ -12,6 +12,7 @@ import { SubagentRuntime } from '@harness/subagent-core';
 import { JudgeAgent } from '@harness/subagent-judge';
 import { ResearcherAgent } from '@harness/subagent-researcher';
 import type { FinharnessConfig } from './config';
+import { createConversationContextCoordinator, type ConversationContextCoordinator } from './runtime/conversationContextCoordinator';
 
 export interface HarnessContext {
   db: FinharnessDatabase;
@@ -22,6 +23,7 @@ export interface HarnessContext {
   judge: JudgeAgent;
   router: IntentRouter;
   mainAgent: MainFinHarnessAgent;
+  conversationContext: ConversationContextCoordinator;
   validator: ClaimValidator;
   researchers: { market: boolean; news: boolean };
   homeDir: string;
@@ -52,6 +54,7 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
     judge: new JudgeAgent(specialist('judge')),
     router: new IntentRouter(routerLlm),
     mainAgent: new MainFinHarnessAgent(agentLlm),
+    conversationContext: createConversationContextCoordinator(db),
     validator: new ClaimValidator(db.evidence),
     researchers: config.researchers,
     homeDir: config.homeDir,

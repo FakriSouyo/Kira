@@ -18,3 +18,20 @@ it('grounds general financial chat in a bounded main-agent prompt', async () => 
     system: expect.stringMatching(/Main FinHarness Agent.*financial-only/s),
   }));
 });
+
+it('passes stable structured context to the model and records the call after success', async () => {
+  const onModelCall = vi.fn().mockResolvedValue(undefined);
+  const llm = { generateText: vi.fn().mockResolvedValue('jawaban') };
+  const agent = new MainFinHarnessAgent(llm as never);
+  const rendered = '<FINHARNESS_CONTEXT>\nVERIFIED RESEARCH ARTIFACTS\n</FINHARNESS_CONTEXT>';
+
+  await agent.respond('jadi menurutmu bagaimana?', {
+    context: { snapshotId: 'snapshot_a', rendered },
+    onModelCall,
+  });
+
+  expect(llm.generateText).toHaveBeenCalledWith(expect.objectContaining({
+    system: expect.arrayContaining([expect.stringContaining('Main FinHarness Agent'), rendered]),
+  }));
+  expect(onModelCall).toHaveBeenCalledTimes(1);
+});

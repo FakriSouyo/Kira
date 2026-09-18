@@ -4,5 +4,5 @@
   "type": "module",
   "private": true,
   "exports": { ".": "./src/index.ts" },
-  "dependencies": { "@harness/llm": "workspace:*" }
+  "dependencies": { "@harness/context": "workspace:*", "@harness/llm": "workspace:*", "@harness/schemas": "workspace:*" }
 }

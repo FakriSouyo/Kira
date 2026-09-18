@@ -6,6 +6,7 @@
   "dependencies": {
     "@harness/command-core": "workspace:*",
     "@harness/command-judge": "workspace:*",
+    "@harness/context": "workspace:*",
     "@harness/database": "workspace:*",
     "@harness/execution": "workspace:*",
     "@harness/llm": "workspace:*",

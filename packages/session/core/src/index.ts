@@ -105,8 +105,9 @@ export interface WorkflowStepRecord {
 
 export interface ModelCallRecord extends ModelUsage {
   id: string;
-  runId: string;
-  stepId: string;
+  runId: string | null;
+  turnId: string | null;
+  stepId: string | null;
   subagent: string;
   provider: string;
   model: string;
@@ -139,7 +140,7 @@ export interface ResearchSessionStore {
     result?: { executionTimeSeconds?: number; error?: string; completedAt?: string },
   ): Promise<ResearchExecution>;
   saveStep(params: { stepId?: string; runId: string; nodeId: string; parentNodeIds: string[]; subagent?: string; skills: SkillAuditReference[]; status: WorkflowStepStatus; durationMs?: number; summary?: string; error?: string }): Promise<WorkflowStepRecord>;
-  recordModelCall(params: { callId?: string; runId: string; stepId: string; subagent: string; provider: string; model: string; attempt: number; inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; totalTokens: number | null; latencyMs: number; finishReason: string | null; cost: number | null; currency: string | null; contextSnapshotId?: string | null }): Promise<ModelCallRecord>;
+  recordModelCall(params: { callId?: string; runId?: string; turnId?: string; stepId?: string; subagent: string; provider: string; model: string; attempt: number; inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; totalTokens: number | null; latencyMs: number; finishReason: string | null; cost: number | null; currency: string | null; contextSnapshotId?: string | null }): Promise<ModelCallRecord>;
   getSessionArtifacts(sessionId: string): Promise<ResearchSessionArtifacts>;
 }
 

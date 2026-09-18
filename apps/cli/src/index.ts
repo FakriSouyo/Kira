@@ -1,14 +1,11 @@
 import { openDb } from '@harness/database';
 import { createLLMClient } from '@harness/llm';
 import { createSectorsApi } from '@harness/sectors-api';
-import type { Intent } from '@harness/schemas';
-import { UserFriendlyError } from '@harness/shared';
-import { buildCommands, failToUserFriendly } from './commands';
+import { failToUserFriendly } from './commands';
 import { loadConfig } from './config';
-import { buildContext, type HarnessContext } from './context';
-import type { CommandHandler } from './repl/loop';
 import { startRepl } from './repl/loop';
-import { renderBanner, renderError, renderStub } from './repl/renderer';
+import { renderBanner, renderError } from './repl/renderer';
+import { createHarnessSession } from './repl/session';
 import { VERSION } from './commands/version';
 import { needsSetup } from './setup/service';
 import { statusLine } from './setup/components/StatusLine';
@@ -49,57 +46,6 @@ function parseCliArgs(argv: string[]): CliArgs {
     else if (a === '--help' || a === '-h') args.help = true;
   }
   return args;
-}
-
-/** Natural language → Intent Router → command (addendum §20). */
-async function handleNaturalLanguage(
-  ctx: HarnessContext,
-  commands: Map<string, CommandHandler>,
-  text: string,
-): Promise<void> {
-  let intent: Intent;
-  try {
-    intent = await ctx.router.route(text);
-  } catch (error) {
-    process.stdout.write(`${renderError(failToUserFriendly(error))}\n`);
-    return;
-  }
-
-  if (intent.type === 'clarification') {
-    process.stdout.write(`⚠️  Not sure what you mean. Did you mean:\n${intent.question ?? ''}\n\n`);
-    return;
-  }
-
-  if (intent.type === 'judge') {
-    if (!intent.ticker) {
-      process.stdout.write('Which ticker should I analyze? Try: /judge BBCA\n\n');
-      return;
-    }
-    process.stdout.write(`↳ Routing to /judge ${intent.ticker}...\n`);
-    await runCommand(commands, 'judge', [intent.ticker]);
-    return;
-  }
-
-  if (intent.type === 'screen') {
-    const criteria = intent.criteria ?? text;
-    process.stdout.write(`↳ Routing to /screen "${criteria}"...\n`);
-    await runCommand(commands, 'screen', [criteria]);
-    return;
-  }
-
-  // challenge / compare → stub roadmap (Phase 1)
-  process.stdout.write(`↳ Routing to /${intent.type}...\n`);
-  process.stdout.write(`${renderStub(intent.type)}\n\n`);
-}
-
-async function runCommand(
-  commands: Map<string, CommandHandler>,
-  name: string,
-  args: string[],
-): Promise<void> {
-  const handler = commands.get(name);
-  if (!handler) throw new UserFriendlyError('UNKNOWN_COMMAND', `Unknown command /${name}`, 'Try /help');
-  await handler(args);
 }
 
 async function main(): Promise<void> {
@@ -159,8 +105,7 @@ async function main(): Promise<void> {
   }
 
   const db = openDb({ homeDir: config.homeDir, verbose: config.debug });
-  const ctx = buildContext(db, config);
-  const commands = buildCommands(ctx);
+  const session = await createHarnessSession(db, config);
 
   if (config.debug) {
     process.stdout.write(`${renderBanner(config.homeDir, config.sectors.mock, config.mockLlm, VERSION)}\n\n`);
@@ -169,12 +114,15 @@ async function main(): Promise<void> {
     process.stdout.write(`⚡ FinHarness\nEvidence-based financial research\n${line}\n────────────────────────────────────────────\n\n`);
   }
 
-  await startRepl({
-    commands,
-    handleNaturalLanguage: (text) => handleNaturalLanguage(ctx, commands, text),
-  });
-
-  db.raw.close();
+  try {
+    await startRepl({
+      commands: session.commands,
+      handleNaturalLanguage: session.handleNaturalLanguage,
+    });
+  } finally {
+    await session.close();
+    db.raw.close();
+  }
 }
 
 main().catch((error: unknown) => {

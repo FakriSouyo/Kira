@@ -252,7 +252,7 @@ describe('session working context (PR D)', () => {
     await session.close();
   });
 
-  it('does not change model prompt behavior', async () => {
+  it('injects the captured structured context into a conversational model call', async () => {
     const session = await createHarnessSession(db, config(), { write: () => {} });
     await session.commands.get('judge')!(['BBRI']);
     const respond = vi.spyOn(session.context.mainAgent, 'respond');
@@ -261,8 +261,12 @@ describe('session working context (PR D)', () => {
 
     expect(respond).toHaveBeenCalledTimes(1);
     expect(respond.mock.calls[0][0]).toBe('apa risikonya?');
-    // Working context is not injected into the model invocation yet.
-    expect(JSON.stringify(respond.mock.calls[0])).not.toContain('activeSubjects');
+    expect(respond.mock.calls[0][1]).toMatchObject({
+      context: {
+        snapshotId: expect.stringMatching(/^snapshot_[0-9a-f]{64}$/),
+        rendered: expect.stringContaining('VERIFIED RESEARCH ARTIFACTS'),
+      },
+    });
     await session.close();
   });
 

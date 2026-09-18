@@ -156,16 +156,51 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
         controller.user(question);
         emit({ type: 'conversation.user', id, content: question, createdAt: Date.now() });
         emit({ type: 'conversation.start', id, mode: 'conversation' });
+        const preparedContext = await context.conversationContext.prepare({
+          sessionId: turn.sessionId,
+          turnId: turn.id,
+          message: question,
+        });
+        const modelCallStarted = performance.now();
+        const recordConversationModelCall = async () => {
+          await db.sessions.recordModelCall({
+            callId: `call_${turn.id}`,
+            turnId: turn.id,
+            subagent: 'conversation',
+            provider: config.llm.agent.provider,
+            model: config.llm.agent.model,
+            attempt: 1,
+            inputTokens: null,
+            outputTokens: null,
+            cachedInputTokens: null,
+            totalTokens: null,
+            latencyMs: Math.max(0, Math.round(performance.now() - modelCallStarted)),
+            finishReason: 'stop',
+            cost: null,
+            currency: null,
+            contextSnapshotId: preparedContext?.snapshot.snapshotId ?? null,
+          });
+        };
+        const modelOptions = {
+          abortSignal: execution?.signal,
+          ...(preparedContext ? {
+            context: {
+              snapshotId: preparedContext.snapshot.snapshotId,
+              rendered: preparedContext.rendered,
+            },
+          } : {}),
+          onModelCall: recordConversationModelCall,
+        } as const;
         if (options.events) {
           // TTY: alirkan token ke transcript conversation supaya tampil streaming.
-          for await (const chunk of context.mainAgent.stream(question)) {
+          for await (const chunk of context.mainAgent.stream(question, modelOptions)) {
             if (execution?.signal?.aborted) throw new UserFriendlyError('ABORTED', 'Response cancelled', 'Enter another message when ready.');
             emit({ type: 'conversation.delta', id, content: chunk });
           }
           emit({ type: 'conversation.complete', id });
         } else {
           // Non-TTY/readline: jawaban utuh, tulis langsung.
-          const answer = await context.mainAgent.respond(question, { abortSignal: execution?.signal });
+          const answer = await context.mainAgent.respond(question, modelOptions);
           emit({ type: 'conversation.delta', id, content: answer });
           emit({ type: 'conversation.complete', id });
           rawWrite(`${controller.publicText(answer)}\n\n`);

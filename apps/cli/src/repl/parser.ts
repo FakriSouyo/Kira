@@ -1,7 +1,7 @@
 /**
  * Parsing input REPL (addendum §09/§16):
  *   "/judge BBCA"   → command
- *   "apakah BBCA..." → natural language (→ Intent Router)
+ *   "apakah BBCA..." → natural language (→ MainFinHarnessAgent)
  */
 export type ParsedInput =
   | { type: 'command'; command: string; args: string[] }

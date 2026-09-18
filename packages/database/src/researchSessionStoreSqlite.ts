@@ -213,21 +213,36 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
   }
 
   async recordModelCall(params: Parameters<ResearchSessionStore['recordModelCall']>[0]): Promise<ModelCallRecord> {
-    const execution = await this.db.select().from(executions).where(eq(executions.id, params.runId)).limit(1);
-    if (!execution[0]) throw new Error(`Execution ${params.runId} not found`);
+    const hasRun = params.runId !== undefined;
+    const hasTurn = params.turnId !== undefined;
+    if (hasRun === hasTurn) throw new Error('ModelCall must belong to exactly one execution or turn');
+    const execution = hasRun
+      ? await this.db.select().from(executions).where(eq(executions.id, params.runId!)).limit(1)
+      : [];
+    const turn = hasTurn
+      ? await this.db.select().from(researchTurns).where(eq(researchTurns.id, params.turnId!)).limit(1)
+      : [];
+    if (hasRun && !execution[0]) throw new Error(`Execution ${params.runId} not found`);
+    if (hasTurn && !turn[0]) throw new Error(`Turn ${params.turnId} not found`);
+    if (hasRun && !params.stepId) throw new Error(`ModelCall ${params.runId} requires a workflow step`);
+    if (hasTurn && params.stepId !== undefined) throw new Error(`Turn-owned ModelCall ${params.turnId} cannot reference a workflow step`);
     if (params.contextSnapshotId !== undefined && params.contextSnapshotId !== null) {
       ContextSnapshotIdSchema.parse(params.contextSnapshotId);
       const snapshot = await this.db.select().from(contextSnapshots)
         .where(eq(contextSnapshots.snapshotId, params.contextSnapshotId)).limit(1);
       if (!snapshot[0]) throw new Error(`ContextSnapshot ${params.contextSnapshotId} not found`);
-      if (snapshot[0].sessionId !== execution[0].sessionId || snapshot[0].turnId !== execution[0].turnId) {
-        throw new Error(`ContextSnapshot ${params.contextSnapshotId} session/turn does not belong to execution ${params.runId}`);
+      const ownerSessionId = execution[0]?.sessionId ?? turn[0]?.sessionId;
+      const ownerTurnId = execution[0]?.turnId ?? turn[0]?.id;
+      if (snapshot[0].sessionId !== ownerSessionId || snapshot[0].turnId !== ownerTurnId) {
+        const owner = hasRun ? `execution ${params.runId}` : `turn ${params.turnId}`;
+        throw new Error(`ContextSnapshot ${params.contextSnapshotId} session/turn does not belong to ${owner}`);
       }
     }
     const call: ModelCallRecord = {
       id: params.callId ?? `call_${randomUUID().slice(0, 8)}`,
-      runId: params.runId,
-      stepId: params.stepId,
+      runId: params.runId ?? null,
+      turnId: params.turnId ?? null,
+      stepId: params.stepId ?? null,
       subagent: params.subagent,
       provider: params.provider,
       model: params.model,
@@ -262,7 +277,8 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
       skills: JSON.parse(step.skills) as WorkflowStepRecord['skills'],
     })) as WorkflowStepRecord[];
     const allCalls = await this.db.select().from(modelCalls).orderBy(asc(modelCalls.createdAt));
-    const calls = allCalls.filter((call) => runIds.has(call.runId)) as ModelCallRecord[];
+    const turnIds = new Set(turns.map((turn) => turn.id));
+    const calls = allCalls.filter((call) => (call.runId !== null && runIds.has(call.runId)) || (call.turnId !== null && turnIds.has(call.turnId))) as ModelCallRecord[];
     return {
       session: sessionRows[0] as ResearchSession,
       turns: turns as ResearchTurn[],

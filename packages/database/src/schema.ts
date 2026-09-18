@@ -163,8 +163,9 @@ export const contextSnapshots = sqliteTable('context_snapshots', {
 
 export const modelCalls = sqliteTable('model_calls', {
   id: text('id').primaryKey(),
-  runId: text('run_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
-  stepId: text('step_id').notNull().references(() => workflowSteps.id, { onDelete: 'cascade' }),
+  runId: text('run_id').references(() => executions.id, { onDelete: 'cascade' }),
+  turnId: text('turn_id').references(() => researchTurns.id, { onDelete: 'cascade' }),
+  stepId: text('step_id').references(() => workflowSteps.id, { onDelete: 'cascade' }),
   contextSnapshotId: text('context_snapshot_id').references(() => contextSnapshots.snapshotId, { onDelete: 'restrict' }),
   subagent: text('subagent').notNull(),
   provider: text('provider').notNull(),

@@ -1,5 +1,7 @@
 import type { LLMClientLike } from '@harness/llm';
 
+export * from './conversationContext.js';
+
 export const MAIN_FINHARNESS_PROMPT = `Main FinHarness Agent — financial-only conversational host.
 You explain financial concepts, discuss investment reasoning, and help the user choose the right evidence workflow.
 You are not a market-data source and must not invent current prices, filings, news, or company facts.
@@ -17,11 +19,27 @@ function buildPrompt(question: string): string {
   return `User question: ${question}\nAnswer as the bounded FinHarness financial assistant.`;
 }
 
+export interface MainAgentContext {
+  readonly snapshotId: string;
+  readonly rendered: string;
+}
+
+export interface MainAgentCallOptions {
+  readonly abortSignal?: AbortSignal;
+  readonly context?: MainAgentContext;
+  /** Called only after an external model call succeeds. */
+  readonly onModelCall?: () => Promise<void>;
+}
+
+function systemPrompt(context?: MainAgentContext): string | string[] {
+  return context ? [MAIN_FINHARNESS_PROMPT, context.rendered] : MAIN_FINHARNESS_PROMPT;
+}
+
 /** Conversational host. Commands still own workflows and selectively invoke specialist subagents. */
 export class MainFinHarnessAgent {
   constructor(private readonly llm: Pick<LLMClientLike, 'generateText' | 'streamText'>) {}
 
-  async respond(input: string, options: { abortSignal?: AbortSignal } = {}): Promise<string> {
+  async respond(input: string, options: MainAgentCallOptions = {}): Promise<string> {
     const question = input.trim();
     if (IDENTITY.test(question)) {
       return IDENTITY_ANSWER;
@@ -29,11 +47,13 @@ export class MainFinHarnessAgent {
     if (CLEARLY_OFF_TOPIC.test(question)) {
       return OFF_TOPIC_ANSWER;
     }
-    return this.llm.generateText({
-      system: MAIN_FINHARNESS_PROMPT,
+    const answer = await this.llm.generateText({
+      system: systemPrompt(options.context),
       prompt: buildPrompt(question),
       abortSignal: options.abortSignal,
     });
+    await options.onModelCall?.();
+    return answer;
   }
 
   /**
@@ -41,7 +61,7 @@ export class MainFinHarnessAgent {
    * kembalikan AsyncIterable<string> token-per-token. Fast-path identitas/
    * off-topic menghasilkan jawaban kanonik sekali; sisanya dialirkan dari LLM.
    */
-  async *stream(input: string): AsyncIterable<string> {
+  async *stream(input: string, options: MainAgentCallOptions = {}): AsyncIterable<string> {
     const question = input.trim();
     if (IDENTITY.test(question)) {
       yield IDENTITY_ANSWER;
@@ -51,6 +71,7 @@ export class MainFinHarnessAgent {
       yield OFF_TOPIC_ANSWER;
       return;
     }
-    yield* this.llm.streamText({ system: MAIN_FINHARNESS_PROMPT, prompt: buildPrompt(question) });
+    for await (const chunk of this.llm.streamText({ system: systemPrompt(options.context), prompt: buildPrompt(question) })) yield chunk;
+    await options.onModelCall?.();
   }
 }

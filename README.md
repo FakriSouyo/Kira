@@ -23,7 +23,7 @@ Dokumentasi teknis: [`ARCHITECTURE.md`](ARCHITECTURE.md) · Changelog: [`CHANGEL
 - Sectors API client (v2, file cache TTL 24h/1h news, `where` native, error mapping)
 - LLM dua-tier (agent+router, `maxTokens` 2000/256, custom `baseURL`/`apiKey`, Vercel AI SDK)
 - 3 lapis validasi claim + `assertSeenEvidence` invariant
-- REPL interaktif: slash command, tab completion, history, Ctrl+C best-effort, natural language via Intent Router
+- REPL interaktif: slash command, tab completion, history, Ctrl+C best-effort, natural language via MainFinHarnessAgent dengan structured context follow-up
 - Mock mode penuh (sectors+LLM) — **jalan offline tanpa API key**
 - Vector prototype (Phase 7) — `mockEmbedding` placeholder `pgvector`
 

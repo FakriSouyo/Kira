@@ -58,6 +58,9 @@ importers:
       '@harness/command-judge':
         specifier: workspace:*
         version: link:../../packages/command/judge
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@harness/database':
         specifier: workspace:*
         version: link:../../packages/database
@@ -226,9 +229,15 @@ importers:
 
   packages/orchestrator:
     dependencies:
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../context
       '@harness/llm':
         specifier: workspace:*
         version: link:../llm
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../schemas
 
   packages/routing:
     dependencies:
