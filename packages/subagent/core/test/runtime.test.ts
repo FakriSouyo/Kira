@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { GenerateObjectParams, LLMClientLike, LLMResult } from '@harness/llm';
 import type { LoadedSkill, SkillProvider } from '@harness/skill-core';
+import { assembleSpecialistContext, renderSpecialistContext, type ContextSnapshot } from '@harness/context';
+import type { Evidence } from '@harness/schemas';
 import { SubagentRuntime, type SubagentManifest } from '../src/index.js';
 
 const skill: LoadedSkill = {
@@ -114,5 +116,51 @@ describe('SubagentRuntime', () => {
     });
 
     expect(result.modelCall).toEqual(expect.objectContaining({ model: 'usage-model', totalTokens: 33 }));
+  });
+
+  it('budgets and snapshots specialist context before a mock model call with truthful null usage', async () => {
+    const evidence: Evidence[] = [{
+      id: '11111111-1111-4111-8111-111111111111', runId: 'execution-1', ticker: 'BBCA', source: 'sectors.company_report',
+      sourceType: 'api', contentHash: 'hash-a', retrievedAt: '2026-09-18T00:00:00.000Z', data: { financials: { roe: 18.4 } },
+    }];
+    const context = assembleSpecialistContext({
+      sessionId: 'session-1', turnId: 'turn-1', executionId: 'execution-1', ticker: 'BBCA', roundNumber: 1,
+      evidence, role: 'BULL', phase: 'THESIS',
+    });
+    const rendered = renderSpecialistContext(context);
+    const order: string[] = [];
+    const snapshots: ContextSnapshot[] = [];
+    let capturedSystem: string | string[] | undefined;
+    const llm = {
+      async generateObject(params) {
+        order.push('model');
+        capturedSystem = params.system;
+        return { summary: 'specialist complete' };
+      },
+    } as LLMClientLike;
+    const runtime = new SubagentRuntime(llm, new FixedSkillProvider(), {
+      contextSnapshotStore: {
+        async save(snapshot) { order.push('snapshot'); snapshots.push(snapshot); return snapshot; },
+        async getById() { return snapshots[0] ?? null; },
+      },
+      budget: { modelCapabilities: { contextWindowTokens: 8192 }, reservedOutputTokens: 128, safetyMarginTokens: 32 },
+      modelIdentity: { provider: 'mock', model: 'mock-specialist' },
+    });
+
+    const result = await runtime.runObject({
+      manifest: manifest('You are the Bull Agent.'), specialistContext: context, prompt: 'Analyze.',
+      schema: z.object({ summary: z.string() }),
+    });
+
+    expect(order).toEqual(['snapshot', 'model']);
+    expect(snapshots).toHaveLength(1);
+    expect(capturedSystem).toEqual([
+      rendered.evidenceZone,
+      expect.stringContaining(rendered.roleZone),
+    ]);
+    expect(result.contextSnapshotId).toBe(snapshots[0]!.snapshotId);
+    expect(result.modelCall).toEqual(expect.objectContaining({
+      provider: 'mock', model: 'mock-specialist', inputTokens: null, outputTokens: null, totalTokens: null,
+    }));
   });
 });

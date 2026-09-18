@@ -37,6 +37,22 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
   const specialist = (directory: string) => new SubagentRuntime(
     agentLlm,
     new FilesystemSkillProvider(fileURLToPath(new URL(`../../../packages/subagent/${directory}/`, import.meta.url))),
+    {
+      contextSnapshotStore: db.contextSnapshots,
+      budget: {
+        modelCapabilities: {
+          // The deterministic mock has no provider-side context limit. Keep
+          // PR J's deliberately small window available to conversation tests;
+          // real lifecycle calls use the configured agent capability exactly.
+          contextWindowTokens: config.mockLlm
+            ? DEFAULT_CONTEXT_WINDOW_TOKENS
+            : config.llm.agent.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
+        },
+        reservedOutputTokens: config.llm.agent.maxTokens,
+        safetyMarginTokens: DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS,
+      },
+      modelIdentity: { provider: config.llm.agent.provider, model: config.llm.agent.model },
+    },
   );
   return {
     config,

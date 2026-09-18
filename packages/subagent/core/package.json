@@ -7,8 +7,10 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@harness/context": "workspace:*",
     "@harness/llm": "workspace:*",
     "@harness/skill-core": "workspace:*",
+    "@harness/schemas": "workspace:*",
     "zod": "^3.25.0"
   }
 }

@@ -28,6 +28,7 @@ interface TraceStore {
     callId?: string; runId: string; stepId: string; subagent: string; provider: string; model: string; attempt: number;
     inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; totalTokens: number | null;
     latencyMs: number; finishReason: string | null; cost: number | null; currency: string | null;
+    contextSnapshotId?: string | null;
   }): Promise<unknown>;
 }
 
@@ -83,16 +84,21 @@ export class WorkflowTraceRecorder {
       stepId: this.stepId(nodeId), runId: this.options.runId, nodeId, parentNodeIds: node.dependsOn ?? [],
       subagent: result.subagent, skills: result.skills, status: 'running', ...(summary ? { summary } : {}),
     });
-    if (!result.modelCall) return;
-    const pricing = this.options.pricingFor?.(result.modelCall.provider, result.modelCall.model) ?? null;
-    const billed = calculateModelCost(result.modelCall, pricing);
+    if (!result.modelCall && result.contextSnapshotId === undefined) return;
+    const modelCall = result.modelCall ?? {
+      provider: 'mock' as const, model: 'unknown', inputTokens: null, outputTokens: null,
+      cachedInputTokens: null, totalTokens: null, latencyMs: 0, finishReason: null,
+    };
+    const pricing = this.options.pricingFor?.(modelCall.provider, modelCall.model) ?? null;
+    const billed = calculateModelCost(modelCall, pricing);
     await this.options.store.recordModelCall({
       callId: `call_${randomUUID()}`, runId: this.options.runId, stepId: this.stepId(nodeId), subagent: result.subagent,
-      provider: result.modelCall.provider, model: result.modelCall.model, attempt: 1,
-      inputTokens: result.modelCall.inputTokens, outputTokens: result.modelCall.outputTokens,
-      cachedInputTokens: result.modelCall.cachedInputTokens, totalTokens: result.modelCall.totalTokens,
-      latencyMs: result.modelCall.latencyMs, finishReason: result.modelCall.finishReason,
+      provider: modelCall.provider, model: modelCall.model, attempt: 1,
+      inputTokens: modelCall.inputTokens, outputTokens: modelCall.outputTokens,
+      cachedInputTokens: modelCall.cachedInputTokens, totalTokens: modelCall.totalTokens,
+      latencyMs: modelCall.latencyMs, finishReason: modelCall.finishReason,
       cost: billed.cost, currency: billed.currency,
+      contextSnapshotId: result.contextSnapshotId ?? null,
     });
   }
 

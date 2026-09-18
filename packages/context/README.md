@@ -10,6 +10,14 @@ SessionWorkingContext → Reference Resolver → Context Policy → Context Asse
 an immutable, invocation-scoped structured projection of that state; it is not a
 journal replay, provider cache, prompt string, or persisted snapshot.
 
+PR K also defines an explicit `SPECIALIST` packet for lifecycle-backed `/judge`
+calls. It carries execution-owned Evidence plus typed upstream Bull claims, Bear
+counterpoints, rebuttal claims, and Judge discussion for the role/phase. It is
+assembled from the current execution only: it creates no Evidence, calls no
+provider, reads no history, and shares no cross-session memory. All specialist
+roles render the same canonical Evidence zone; debate state is a separately
+labelled role zone.
+
 - `resolveContextCandidates` resolves only explicit active/pinned references
   through the `ArtifactStore` boundary and reports legacy, missing, and skipped
   references with structured diagnostics. A typed `activeThesisRef` uses the
@@ -38,3 +46,11 @@ trust classes, or chops financial text. If the required focus context cannot fit
 always contains the final post-budget packet, and the coordinator retains the
 budget report as operational diagnostics rather than adding it to model-visible
 context.
+
+PR K reuses that accounting for specialist packets. Evidence and typed claims
+are authoritative; Judge discussion is the first lower-priority material that
+may be removed structurally. If required Evidence cannot fit, budgeting fails
+before the model call or snapshot. Specialist snapshots use
+`workingContextVersion: 0` as an explicit sentinel because they are
+execution-scoped and do not represent a `SessionWorkingContext` version;
+conversation packets retain their existing version semantics.

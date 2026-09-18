@@ -4,7 +4,8 @@ import { sortKeys } from './canonical';
 export interface EvidenceLike {
   id: string;
   source: string;
-  data: Record<string, unknown>;
+  /** Provider payloads may be object or array; rendering remains canonical. */
+  data?: unknown;
 }
 
 export const EVIDENCE_PREAMBLE =

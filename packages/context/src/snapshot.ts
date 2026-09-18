@@ -25,21 +25,21 @@ export const ContextSnapshotSchema = z.object({
   createdAt: z.string().datetime({ offset: true }),
 }).strict();
 
-export interface ContextSnapshot {
+export interface ContextSnapshot<TPacket extends ContextPacket = ContextPacket> {
   readonly snapshotId: ContextSnapshotId;
   readonly schemaVersion: typeof CONTEXT_SNAPSHOT_SCHEMA_VERSION;
   readonly sessionId: string;
   readonly turnId: string;
   readonly workingContextVersion: number;
   readonly packetFingerprint: string;
-  readonly packet: ContextPacket;
+  readonly packet: TPacket;
   readonly createdAt: string;
 }
 
-export interface CreateContextSnapshotParams {
+export interface CreateContextSnapshotParams<TPacket extends ContextPacket = ContextPacket> {
   readonly sessionId: string;
   readonly turnId: string;
-  readonly packet: ContextPacket;
+  readonly packet: TPacket;
   readonly snapshotId?: ContextSnapshotId;
   readonly createdAt?: string;
 }
@@ -65,7 +65,7 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-export function freezeContextSnapshot(value: ContextSnapshot): ContextSnapshot {
+export function freezeContextSnapshot<TPacket extends ContextPacket>(value: ContextSnapshot<TPacket>): ContextSnapshot<TPacket> {
   return deepFreeze(value);
 }
 
@@ -78,7 +78,7 @@ export function contextPacketFingerprint(packet: ContextPacket): string {
 }
 
 /** Creates an immutable envelope without changing the ContextPacket instance. */
-export function createContextSnapshot(params: CreateContextSnapshotParams): ContextSnapshot {
+export function createContextSnapshot<TPacket extends ContextPacket>(params: CreateContextSnapshotParams<TPacket>): ContextSnapshot<TPacket> {
   const packet = ContextPacketSchema.parse(structuredClone(params.packet));
   if (packet.sessionId !== params.sessionId || packet.provenance.sessionId !== params.sessionId) {
     throw new Error(`ContextSnapshot packet belongs to session ${packet.sessionId}, not ${params.sessionId}`);
@@ -99,7 +99,7 @@ export function createContextSnapshot(params: CreateContextSnapshotParams): Cont
     packet,
     createdAt: params.createdAt ?? new Date().toISOString(),
   });
-  return freezeContextSnapshot(value as ContextSnapshot);
+  return freezeContextSnapshot(value as unknown as ContextSnapshot<TPacket>);
 }
 
 export function contextSnapshotSemanticJson(snapshot: ContextSnapshot): string {

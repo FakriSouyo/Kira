@@ -284,6 +284,9 @@ importers:
 
   packages/subagent/bear:
     dependencies:
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../../context
       '@harness/llm':
         specifier: workspace:*
         version: link:../../llm
@@ -299,6 +302,9 @@ importers:
 
   packages/subagent/bull:
     dependencies:
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../../context
       '@harness/llm':
         specifier: workspace:*
         version: link:../../llm
@@ -314,9 +320,15 @@ importers:
 
   packages/subagent/core:
     dependencies:
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../../context
       '@harness/llm':
         specifier: workspace:*
         version: link:../../llm
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../../schemas
       '@harness/skill-core':
         specifier: workspace:*
         version: link:../../skill/core
@@ -326,6 +338,9 @@ importers:
 
   packages/subagent/judge:
     dependencies:
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../../context
       '@harness/llm':
         specifier: workspace:*
         version: link:../../llm

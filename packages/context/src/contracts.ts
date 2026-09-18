@@ -15,6 +15,8 @@ import type {
   SessionWorkingContext,
   UserAssertionRef,
 } from '@harness/session-core';
+import { SpecialistContextPayloadSchema } from './specialistContracts.js';
+import type { SpecialistContextPayload } from './specialistContracts.js';
 
 export const CONTEXT_PACKET_SCHEMA_VERSION = 1 as const;
 
@@ -113,7 +115,7 @@ export const ContextPacketProvenanceSchema = z.object({
 }).strict();
 export type ContextPacketProvenance = z.infer<typeof ContextPacketProvenanceSchema>;
 
-export const ContextPacketSchema = z.object({
+const ContextPacketCommonShape = {
   schemaVersion: z.literal(CONTEXT_PACKET_SCHEMA_VERSION),
   sessionId: z.string().min(1),
   turnId: z.string().min(1),
@@ -125,7 +127,19 @@ export const ContextPacketSchema = z.object({
   assumptions: AssumptionSchema.array(),
   unresolvedQuestions: OpenQuestionSchema.array(),
   provenance: ContextPacketProvenanceSchema,
+};
+
+const ConversationContextPacketSchema = z.object(ContextPacketCommonShape).strict();
+export const SpecialistContextPacketSchema = z.object({
+  ...ContextPacketCommonShape,
+  contextKind: z.literal('SPECIALIST'),
+  specialist: SpecialistContextPayloadSchema,
 }).strict();
+
+export const ContextPacketSchema = z.union([
+  ConversationContextPacketSchema,
+  SpecialistContextPacketSchema,
+]);
 type ContextPacketValue = z.infer<typeof ContextPacketSchema>;
 type DeepReadonly<T> = T extends (...args: never[]) => unknown
   ? T
@@ -135,6 +149,8 @@ type DeepReadonly<T> = T extends (...args: never[]) => unknown
       ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
       : T;
 export type ContextPacket = DeepReadonly<ContextPacketValue>;
+export type SpecialistContextPacket = DeepReadonly<z.infer<typeof SpecialistContextPacketSchema>>;
+export type { SpecialistContextPayload };
 
 export type ContextFocus = 'generic' | 'downside' | 'thesis' | 'bull' | 'bear';
 

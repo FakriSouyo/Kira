@@ -1,6 +1,7 @@
-import type { BearLLMOutput, BullLLMOutput, Claim, Evidence, Judgment } from '@harness/schemas';
+import type { BearCounterpoint, BearLLMOutput, BullLLMOutput, Claim, Evidence, Judgment } from '@harness/schemas';
 import type { JudgeNodeExecutors, JudgeNodeId, JudgeRoundDecision } from '@harness/command-judge';
 import type { SubagentResult } from '@harness/subagent-core';
+import { assembleSpecialistContext, type SpecialistContextPacket, type SpecialistPhase, type SpecialistRole } from '@harness/context';
 import { SECTORS_SOURCES } from '@harness/sectors-api';
 import { buildEvidenceZone, normalizeJudgmentScore, stanceForScore, UserFriendlyError, ValidationError } from '@harness/shared';
 import type { AgentEvent, AgentToolName } from '../repl/events';
@@ -32,6 +33,7 @@ export interface JudgeRunDeps {
   reasoning: boolean;
   conditional: boolean;
   trace?: JudgeNodeTrace;
+  lifecycle?: { sessionId: string; turnId: string };
 }
 
 export interface CollectedSources {
@@ -158,23 +160,63 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
   };
 
   const saveEvidence = async (source: string, data: unknown): Promise<Evidence> => {
-    const evidence = await ctx.db.evidence.save({ runId, ticker, source, data: data as Record<string, unknown> });
-    events({ type: 'evidence.found', id: evidence.id, source });
-    return evidence;
+    const persisted = await ctx.db.evidence.save({ runId, ticker, source, data: data as Record<string, unknown> });
+    events({ type: 'evidence.found', id: persisted.id, source });
+    // A deduplicated immutable provider row may retain its original owner run;
+    // the runEvidence membership still makes it current execution Evidence.
+    return persisted.runId === runId ? persisted : { ...persisted, runId };
   };
 
   const record = async (nodeId: JudgeNodeId, result: SubagentResult<unknown>): Promise<void> => {
     if (deps.trace) await deps.trace.recordSubagentResult(nodeId, result);
   };
+  let round1BearCounterpoints: BearCounterpoint[] = [];
+  let conditionalBearCounterpoints: BearCounterpoint[] = [];
+
+  const specialistContext = (params: {
+    role: SpecialistRole;
+    phase: SpecialistPhase;
+    roundNumber: number;
+    evidence: Evidence[];
+    bullClaims?: Claim[];
+    bearCounterpoints?: BearCounterpoint[];
+    rebuttalClaims?: Claim[];
+    discussion?: { agent: string; type: string; content: string }[];
+    availableCategories?: { marketMomentum: boolean; risk: boolean };
+  }): SpecialistContextPacket | undefined => deps.lifecycle
+    ? assembleSpecialistContext({
+      sessionId: deps.lifecycle.sessionId,
+      turnId: deps.lifecycle.turnId,
+      executionId: runId,
+      ticker,
+      ...params,
+    })
+    : undefined;
 
   /** Judge call shared by both verdict nodes: the discussion is the persisted conversation. */
-  const evaluateArguments = async (params: { claims: Claim[]; selection: EvidenceSelection }) => {
+  const evaluateArguments = async (params: {
+    claims: Claim[];
+    selection: EvidenceSelection;
+    bullClaims: Claim[];
+    bearCounterpoints: BearCounterpoint[];
+    rebuttalClaims: Claim[];
+    phase: 'EVALUATION' | 'RESOLUTION';
+    roundNumber: number;
+  }) => {
     const conversation = await ctx.db.conversation.getByRun(runId);
-    return await ctx.judge.evaluate({
-      ticker, claims: params.claims, evidenceZone: params.selection.evidenceZone,
-      discussion: conversation.map((message) => ({ agent: message.agent, type: message.messageType, content: message.content })),
-      availableCategories: { marketMomentum: params.selection.marketAvailable, risk: params.selection.newsAvailable },
+    const discussion = conversation.map((message) => ({ agent: message.agent, type: message.messageType, content: message.content }));
+    const availableCategories = { marketMomentum: params.selection.marketAvailable, risk: params.selection.newsAvailable };
+    const context = specialistContext({
+      role: 'JUDGE', phase: params.phase, roundNumber: params.roundNumber, evidence: params.selection.evidence,
+      bullClaims: params.bullClaims, bearCounterpoints: params.bearCounterpoints,
+      rebuttalClaims: params.rebuttalClaims, discussion, availableCategories,
     });
+    return context
+      ? await ctx.judge.evaluate({ context })
+      : await ctx.judge.evaluate({
+        ticker, claims: params.claims, evidenceZone: params.selection.evidenceZone,
+        discussion, availableCategories,
+      });
   };
 
   return {
@@ -300,7 +342,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'phase', phase: 'bull', label: 'Analyzing the evidence for a bullish thesis.' });
       events({ type: 'agent.start', agent: 'bull' });
       progress('bull', 'Analyzing the evidence for a bullish thesis...');
-      const result = await ctx.bull.analyze({ ticker, evidenceZone: selection.evidenceZone });
+      const context = specialistContext({ role: 'BULL', phase: 'THESIS', roundNumber: 1, evidence: selection.evidence });
+      const result = await ctx.bull.analyze(context ? { context } : { ticker, evidenceZone: selection.evidenceZone });
       const response: BullAnalysisResponse = { ...result.value, messageId: `bull_${runId}` };
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
@@ -328,7 +371,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'phase', phase: 'bear', label: 'Challenging the bullish thesis.' });
       events({ type: 'agent.start', agent: 'bear' });
       progress('bear', 'Challenging the bullish thesis...');
-      const result = await ctx.bear.challenge({ ticker, evidenceZone: selection.evidenceZone, bullClaims: thesis.claims });
+      const context = specialistContext({ role: 'BEAR', phase: 'CHALLENGE', roundNumber: 1, evidence: selection.evidence, bullClaims: thesis.claims });
+      const result = await ctx.bear.challenge(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bullClaims: thesis.claims });
       const response: BearChallengeResponse = { ...result.value, messageId: `bear_${runId}` };
       events({ type: 'agent.text', agent: 'bear', text: response.reasoning });
       assertNotAborted(signal);
@@ -336,6 +380,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       await ctx.validator.validateChallenge(response.counterpoints, response.evidenceIds, {
         claimIds: thesis.claims.map((claim) => claim.claimId), evidenceIds: selection.evidenceIds,
       });
+      round1BearCounterpoints = response.counterpoints;
       await ctx.db.conversation.addMessage({
         runId, messageId: response.messageId, agent: 'bear', messageType: 'challenge',
         content: challengeContent(response), evidenceIds: response.evidenceIds, sequenceOrder: 2,
@@ -355,7 +400,15 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'phase', phase: 'bull', label: 'Responding to the challenges.' });
       events({ type: 'agent.start', agent: 'bull' });
       progress('bull', 'Responding to the challenges...');
-      const result = await ctx.bull.rebuttal({ ticker, evidenceZone: selection.evidenceZone, bearCounterpoints: challenge.response.counterpoints });
+      const bullClaims: Claim[] = (await ctx.db.claims.getByRun(runId)).map((claim) => ({
+        claimId: claim.claimId,
+        statement: claim.statement,
+        confidence: claim.confidence,
+        reasoning: claim.reasoning ?? 'Persisted validated claim reasoning is unavailable.',
+        evidenceIds: claim.evidenceIds,
+      }));
+      const context = specialistContext({ role: 'BULL', phase: 'REBUTTAL', roundNumber: 1, evidence: selection.evidence, bullClaims, bearCounterpoints: challenge.response.counterpoints });
+      const result = await ctx.bull.rebuttal(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bearCounterpoints: challenge.response.counterpoints });
       const response: BullAnalysisResponse = { ...result.value, messageId: `bull_rebuttal_${runId}` };
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
@@ -389,7 +442,11 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'agent.start', agent: 'judge' });
       progress('judge', 'Weighing the debate against the rubrik...');
       const allClaims = [...thesis.claims, ...rebuttal.claims];
-      const result = await evaluateArguments({ claims: allClaims, selection });
+      const result = await evaluateArguments({
+        claims: allClaims, selection, bullClaims: thesis.claims,
+        bearCounterpoints: round1BearCounterpoints, rebuttalClaims: rebuttal.claims,
+        phase: 'EVALUATION', roundNumber: 1,
+      });
       const judgment = result.value;
       events({ type: 'agent.text', agent: 'judge', text: judgment.summary });
       assertNotAborted(signal);
@@ -416,7 +473,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       progress('bear', 'Conditional: re-challenging bullish thesis (extra round)...');
       events({ type: 'agent.start', agent: 'bear' });
       const allClaims = [...thesis.claims, ...rebuttal.claims];
-      const result = await ctx.bear.challenge({ ticker, evidenceZone: selection.evidenceZone, bullClaims: allClaims });
+      const context = specialistContext({ role: 'BEAR', phase: 'RECHALLENGE', roundNumber: 2, evidence: selection.evidence, bullClaims: allClaims });
+      const result = await ctx.bear.challenge(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bullClaims: allClaims });
       const response: BearChallengeResponse = { ...result.value, messageId: `bear_${runId}_conditional` };
       events({ type: 'agent.text', agent: 'bear', text: response.reasoning });
       assertNotAborted(signal);
@@ -424,6 +482,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       await ctx.validator.validateChallenge(response.counterpoints, response.evidenceIds, {
         claimIds: allClaims.map((claim) => claim.claimId), evidenceIds: selection.evidenceIds,
       });
+      conditionalBearCounterpoints = response.counterpoints;
       await ctx.db.conversation.addMessage({
         runId, messageId: `${response.messageId}_conditional`, agent: 'bear', messageType: 'challenge',
         content: challengeContent(response), evidenceIds: response.evidenceIds, sequenceOrder: 5,
@@ -444,7 +503,15 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'phase', phase: 'bull', label: 'Conditional: responding to re-challenge.' });
       events({ type: 'agent.start', agent: 'bull' });
       progress('bull', 'Conditional: responding to re-challenge...');
-      const result = await ctx.bull.rebuttal({ ticker, evidenceZone: selection.evidenceZone, bearCounterpoints: rechallenge.response.counterpoints });
+      const bullClaims: Claim[] = (await ctx.db.claims.getByRun(runId)).map((claim) => ({
+        claimId: claim.claimId,
+        statement: claim.statement,
+        confidence: claim.confidence,
+        reasoning: claim.reasoning ?? 'Persisted validated claim reasoning is unavailable.',
+        evidenceIds: claim.evidenceIds,
+      }));
+      const context = specialistContext({ role: 'BULL', phase: 'REBUTTAL', roundNumber: 2, evidence: selection.evidence, bullClaims, bearCounterpoints: rechallenge.response.counterpoints });
+      const result = await ctx.bull.rebuttal(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bearCounterpoints: rechallenge.response.counterpoints });
       const response: BullAnalysisResponse = { ...result.value, messageId: `bull_rebuttal_${runId}_conditional` };
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
@@ -475,7 +542,12 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'agent.start', agent: 'judge' });
       progress('judge', 'Conditional: re-weighing debate against the rubrik...');
       const allClaims = [...thesis.claims, ...rebuttal.claims, ...(conditionalRebuttal?.claims ?? [])];
-      const result = await evaluateArguments({ claims: allClaims, selection });
+      const result = await evaluateArguments({
+        claims: allClaims, selection, bullClaims: thesis.claims,
+        bearCounterpoints: [...round1BearCounterpoints, ...conditionalBearCounterpoints],
+        rebuttalClaims: [...rebuttal.claims, ...(conditionalRebuttal?.claims ?? [])],
+        phase: 'RESOLUTION', roundNumber: 2,
+      });
       const judgment = result.value;
       events({ type: 'agent.text', agent: 'judge', text: judgment.summary });
       assertNotAborted(signal);

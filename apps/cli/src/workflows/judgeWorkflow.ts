@@ -153,6 +153,7 @@ export async function judgeWorkflow(
     const conditional = Boolean(opts.conditional);
     const executors = createJudgeNodeExecutors({
       ctx, ticker, runId: run.id, events, progress, decision, reasoning, conditional,
+      lifecycle: opts.lifecycle,
       trace: { recordSubagentResult: (nodeId, result) => recorder.recordSubagentResult(nodeId, result) },
     });
     const context = createJudgeCommandContext({

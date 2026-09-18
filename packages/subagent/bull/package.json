@@ -5,6 +5,7 @@
   "private": true,
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
+    "@harness/context": "workspace:*",
     "@harness/llm": "workspace:*",
     "@harness/schemas": "workspace:*",
     "@harness/skill-filesystem": "workspace:*",

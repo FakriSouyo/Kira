@@ -9,6 +9,7 @@ export const CONTEXT_BUDGET_ESTIMATOR = 'ESTIMATED' as const;
 export const DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS = 256;
 
 export type ContextBudgetActionCode =
+  | 'DROP_DISCUSSION'
   | 'DROP_OPEN_QUESTION'
   | 'DROP_ASSUMPTION'
   | 'DROP_USER_ASSERTION'
@@ -69,6 +70,31 @@ export interface ContextBudgetResult {
   readonly report: ContextBudgetReport;
 }
 
+export interface StructuredContextBudgetRequest<TPacket> {
+  readonly packet: TPacket;
+  readonly render: (packet: TPacket) => string;
+  readonly modelCapabilities: ContextModelCapabilities;
+  readonly basePrompt: string;
+  readonly conversationHistory: string;
+  readonly currentUserMessage: string;
+  readonly reservedOutputTokens: number;
+  readonly safetyMarginTokens: number;
+}
+
+export interface StructuredContextCompaction<TPacket> {
+  readonly packet: TPacket;
+  readonly actions: readonly ContextBudgetAction[];
+}
+
+export interface StructuredContextBudgetResult<TPacket> {
+  readonly originalPacket: TPacket;
+  readonly finalPacket: TPacket;
+  readonly renderedContext: string;
+  readonly compacted: boolean;
+  readonly actions: readonly ContextBudgetAction[];
+  readonly report: ContextBudgetReport;
+}
+
 export class ContextBudgetError extends Error {
   readonly code = 'CONTEXT_BUDGET_EXCEEDED';
 
@@ -76,6 +102,52 @@ export class ContextBudgetError extends Error {
     super(`Required FinHarness context exceeds the available budget (${report.estimatedFinalTokens} > ${report.availableContextTokens} estimated tokens)`);
     this.name = 'ContextBudgetError';
   }
+}
+
+/** Shared token accounting for any immutable structured context packet. */
+export function budgetStructuredContext<TPacket>(
+  request: StructuredContextBudgetRequest<TPacket>,
+  compact?: (packet: TPacket, fits: (candidate: TPacket) => boolean) => StructuredContextCompaction<TPacket>,
+): StructuredContextBudgetResult<TPacket> {
+  const contextWindowTokens = effectiveContextWindowTokens(request.modelCapabilities);
+  assertNonNegativeInteger(request.reservedOutputTokens, 'reserved output tokens');
+  assertNonNegativeInteger(request.safetyMarginTokens, 'safety margin tokens');
+  const available = availableContextTokens({
+    contextWindowTokens,
+    reservedOutputTokens: request.reservedOutputTokens,
+    basePromptTokens: estimateTextTokens(request.basePrompt),
+    conversationHistoryTokens: estimateTextTokens(request.conversationHistory),
+    currentUserMessageTokens: estimateTextTokens(request.currentUserMessage),
+    safetyMarginTokens: request.safetyMarginTokens,
+  });
+  const renderedOriginal = request.render(request.packet);
+  const originalTokens = estimateTextTokens(renderedOriginal);
+  const fits = (candidate: TPacket): boolean => estimateTextTokens(request.render(candidate)) <= available;
+  const compacted = fits(request.packet) ? { packet: request.packet, actions: [] } : (compact?.(request.packet, fits) ?? { packet: request.packet, actions: [] });
+  const renderedFinal = request.render(compacted.packet);
+  const report: ContextBudgetReport = {
+    estimator: CONTEXT_BUDGET_ESTIMATOR,
+    contextWindowTokens,
+    reservedOutputTokens: request.reservedOutputTokens,
+    safetyMarginTokens: request.safetyMarginTokens,
+    basePromptTokens: estimateTextTokens(request.basePrompt),
+    conversationHistoryTokens: estimateTextTokens(request.conversationHistory),
+    currentUserMessageTokens: estimateTextTokens(request.currentUserMessage),
+    availableContextTokens: available,
+    estimatedOriginalTokens: originalTokens,
+    estimatedFinalTokens: estimateTextTokens(renderedFinal),
+    compacted: compacted.actions.length > 0,
+    actions: compacted.actions,
+  };
+  if (report.estimatedFinalTokens > available) throw new ContextBudgetError(report);
+  return {
+    originalPacket: request.packet,
+    finalPacket: compacted.packet,
+    renderedContext: renderedFinal,
+    compacted: compacted.actions.length > 0,
+    actions: compacted.actions,
+    report,
+  };
 }
 
 /** Conservative, deterministic estimate used because the runtime has no tokenizer. */

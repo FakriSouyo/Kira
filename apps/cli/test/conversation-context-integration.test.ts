@@ -176,10 +176,11 @@ describe('PR I conversational context integration', () => {
     const session = await createHarnessSession(db, config, { write: () => {} });
     await session.commands.get('judge')!(['BBRI']);
     const respond = vi.spyOn(session.context.mainAgent, 'respond');
+    const snapshotsBeforeFollowUp = (db.raw.prepare('SELECT COUNT(*) AS count FROM context_snapshots').get() as { count: number }).count;
 
     await expect(session.handleNaturalLanguage('jadi menurutmu bagaimana?')).rejects.toMatchObject({ code: 'CONTEXT_BUDGET_EXCEEDED' });
     expect(respond).not.toHaveBeenCalled();
-    expect((db.raw.prepare('SELECT COUNT(*) AS count FROM context_snapshots').get() as { count: number }).count).toBe(0);
+    expect((db.raw.prepare('SELECT COUNT(*) AS count FROM context_snapshots').get() as { count: number }).count).toBe(snapshotsBeforeFollowUp);
     await session.close();
   });
 });

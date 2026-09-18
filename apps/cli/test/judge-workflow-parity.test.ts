@@ -287,6 +287,62 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
     expect(zones[0].length).toBeGreaterThan(0);
   });
 
+  it('gives lifecycle specialist calls typed execution context and links final snapshots', async () => {
+    const context = ctx();
+    const session = await db.sessions.createSession({
+      sessionId: 'specialist_context_session', title: 'Specialist context', provider: 'openai', model: 'mock', reasoningMode: 'usual',
+    });
+    const turn = await db.sessions.createTurn({ sessionId: session.id, input: '/judge BBCA', command: 'judge' });
+    const captured: Array<Record<string, unknown>> = [];
+    const analyze = context.bull.analyze.bind(context.bull);
+    const rebuttal = context.bull.rebuttal.bind(context.bull);
+    const challenge = context.bear.challenge.bind(context.bear);
+    const evaluate = context.judge.evaluate.bind(context.judge);
+    vi.spyOn(context.bull, 'analyze').mockImplementation(async (args) => { captured.push(args as unknown as Record<string, unknown>); return analyze(args); });
+    vi.spyOn(context.bull, 'rebuttal').mockImplementation(async (args) => { captured.push(args as unknown as Record<string, unknown>); return rebuttal(args); });
+    vi.spyOn(context.bear, 'challenge').mockImplementation(async (args) => { captured.push(args as unknown as Record<string, unknown>); return challenge(args); });
+    vi.spyOn(context.judge, 'evaluate').mockImplementation(async (args) => { captured.push(args as unknown as Record<string, unknown>); return evaluate(args); });
+
+    const result = await judgeWorkflow(context, 'BBCA', () => {}, () => {}, { lifecycle: { sessionId: session.id, turnId: turn.id } });
+
+    const specialistContexts = captured.map(call => call.context as { contextKind: string; specialist: { role: string; evidenceIds: string[] } });
+    expect(specialistContexts.map(item => `${item.specialist.role}:${item.contextKind}`)).toEqual([
+      'BULL:SPECIALIST', 'BEAR:SPECIALIST', 'BULL:SPECIALIST', 'JUDGE:SPECIALIST',
+    ]);
+    expect(new Set(specialistContexts.map(item => item.specialist.evidenceIds.join(','))).size).toBe(1);
+
+    const snapshots = db.raw.prepare('SELECT packet_json FROM context_snapshots WHERE session_id = ? AND turn_id = ?').all(session.id, turn.id) as Array<{ packet_json: string }>;
+    expect(snapshots).toHaveLength(4);
+    expect(snapshots.every(row => JSON.parse(row.packet_json).contextKind === 'SPECIALIST')).toBe(true);
+    const calls = db.raw.prepare('SELECT context_snapshot_id FROM model_calls WHERE run_id = ? ORDER BY created_at').all(result.run.id) as Array<{ context_snapshot_id: string | null }>;
+    expect(calls).toHaveLength(4);
+    expect(calls.every(call => call.context_snapshot_id)).toBe(true);
+  });
+
+  it('snapshots every typed specialist phase in the conditional round', async () => {
+    const context = ctx();
+    const session = await db.sessions.createSession({
+      sessionId: 'specialist_conditional_session', title: 'Conditional specialist context', provider: 'openai', model: 'mock', reasoningMode: 'reasoning',
+    });
+    const turn = await db.sessions.createTurn({ sessionId: session.id, input: '/judge BBCA', command: 'judge' });
+
+    const result = await judgeWorkflow(context, 'BBCA', () => {}, () => {}, {
+      reasoning: true, lifecycle: { sessionId: session.id, turnId: turn.id },
+    });
+    const snapshots = db.raw.prepare('SELECT packet_json FROM context_snapshots WHERE session_id = ? AND turn_id = ?').all(session.id, turn.id) as Array<{ packet_json: string }>;
+    const packets = snapshots.map(row => JSON.parse(row.packet_json) as { contextKind: string; specialist: { role: string; phase: string; roundNumber: number } });
+
+    expect(result.conditionalUsed).toBe(true);
+    expect(packets).toHaveLength(7);
+    expect(packets.map(packet => `${packet.specialist.role}:${packet.specialist.phase}:${packet.specialist.roundNumber}`)).toEqual(expect.arrayContaining([
+      'BULL:THESIS:1', 'BEAR:CHALLENGE:1', 'BULL:REBUTTAL:1', 'JUDGE:EVALUATION:1',
+      'BEAR:RECHALLENGE:2', 'BULL:REBUTTAL:2', 'JUDGE:RESOLUTION:2',
+    ]));
+    const calls = db.raw.prepare('SELECT context_snapshot_id FROM model_calls WHERE run_id = ?').all(result.run.id) as Array<{ context_snapshot_id: string | null }>;
+    expect(calls).toHaveLength(7);
+    expect(calls.every(call => call.context_snapshot_id)).toBe(true);
+  });
+
   it('settles the canonical Execution exactly once and keeps Session/Turn identity', async () => {
     const context = ctx();
     const session = await db.sessions.createSession({
