@@ -129,6 +129,34 @@ describe('ArtifactStoreSqlite', () => {
     expect(await db.artifacts.getSourceExecution(ids.execution.id)).toMatchObject({ id: ids.execution.id, status: 'completed', command: 'judge' });
   });
 
+  it('orders overlapping Turns by durable acceptance sequence, not timestamps or settlement order', async () => {
+    const session = await db.sessions.createSession({ sessionId: 'session_overlap', title: 'Overlap', provider: 'openai', model: 'mock', reasoningMode: 'usual' });
+    const first = await db.sessions.createTurn({ sessionId: session.id, turnId: 'turn_first', input: '/judge BBCA', command: 'judge' });
+    const second = await db.sessions.createTurn({ sessionId: session.id, turnId: 'turn_second', input: '/judge BBCA', command: 'judge' });
+    db.journal.append(session.id, { type: 'turn.started', id: first.id, turnId: first.id, correlationId: first.id });
+    db.journal.append(session.id, { type: 'turn.started', id: second.id, turnId: second.id, correlationId: second.id });
+
+    // Deliberately make wall-clock Turn timestamps disagree with acceptance order.
+    db.raw.prepare('UPDATE research_turns SET started_at = ? WHERE id = ?').run('2026-09-18T10:00:00.000Z', first.id);
+    db.raw.prepare('UPDATE research_turns SET started_at = ? WHERE id = ?').run('2026-09-18T09:00:00.000Z', second.id);
+
+    const firstExecution = await db.sessions.createExecution({ sessionId: session.id, turnId: first.id, executionId: 'run_first', ticker: 'BBCA', command: 'judge' });
+    const secondExecution = await db.sessions.createExecution({ sessionId: session.id, turnId: second.id, executionId: 'run_second', ticker: 'BBCA', command: 'judge' });
+
+    // The later accepted Turn settles first; the older Turn settles later.
+    await db.sessions.settleExecution(secondExecution.id, 'completed', { completedAt: '2026-09-18T11:00:00.000Z' });
+    await db.sessions.settleTurn(second.id, 'completed', '2026-09-18T11:01:00.000Z');
+    await db.sessions.settleExecution(firstExecution.id, 'completed', { completedAt: '2026-09-18T12:00:00.000Z' });
+    await db.sessions.settleTurn(first.id, 'completed', '2026-09-18T12:01:00.000Z');
+    await db.artifacts.save(bullEnvelope(links({ session, turn: first, execution: firstExecution }), '2026-09-18T12:02:00.000Z'));
+    await db.artifacts.save(bullEnvelope(links({ session, turn: second, execution: secondExecution }), '2026-09-18T11:02:00.000Z'));
+
+    const listed = await db.artifacts.listByQuery({
+      sessionId: session.id, subjects: ['BBCA'], allowedKinds: ['BULL_CASE'], focus: 'thesis',
+    });
+    expect(listed.map(artifact => artifact.executionId)).toEqual(['run_second', 'run_first']);
+  });
+
   it('rolls back the whole batch when any artifact fails validation or linkage', async () => {
     const ids = await completedExecution();
     const valid = bullEnvelope(links(ids));

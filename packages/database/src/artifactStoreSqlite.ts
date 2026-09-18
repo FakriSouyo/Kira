@@ -8,7 +8,7 @@ import {
 import type { ArtifactSourceExecution, ArtifactStore } from '@harness/session-core';
 import { canonicalJson } from '@harness/shared';
 import type { Orm } from './client';
-import { artifacts as artifactRows, executions, researchTurns } from './schema';
+import { artifacts as artifactRows, conversationEvents, executions, researchTurns } from './schema';
 
 type ArtifactRow = typeof artifactRows.$inferSelect;
 
@@ -119,11 +119,41 @@ export class ArtifactStoreSqlite implements ArtifactStore {
         inArray(artifactRows.ticker, query.subjects),
         inArray(artifactRows.kind, query.allowedKinds),
       ));
+
+    // The journal's turn.started sequence is the durable acceptance watermark
+    // used by SessionWorkingContext. Reuse it here so late settlement cannot
+    // make an older Turn appear newer during artifact retrieval.
+    const sourceSequences = new Map<string, number>();
+    const journalRows = this.db.select({ sequence: conversationEvents.sequence, payload: conversationEvents.payload })
+      .from(conversationEvents)
+      .where(eq(conversationEvents.sessionId, query.sessionId))
+      .all();
+    for (const row of journalRows) {
+      const payload = JSON.parse(row.payload) as { type?: string; id?: unknown; turnId?: unknown };
+      if (payload.type === 'turn.started' && typeof payload.id === 'string' && payload.id === payload.turnId) {
+        sourceSequences.set(payload.id, row.sequence);
+      }
+    }
+
+    const kindOrder = new Map<string, number>([['BULL_CASE', 0], ['BEAR_CASE', 1], ['VERDICT', 2]]);
     rows.sort((left, right) => {
+      const leftSequence = left.turn ? sourceSequences.get(left.turn.id) : undefined;
+      const rightSequence = right.turn ? sourceSequences.get(right.turn.id) : undefined;
+      if (leftSequence !== undefined && rightSequence !== undefined && leftSequence !== rightSequence) {
+        return rightSequence - leftSequence;
+      }
+
+      // Legacy artifacts may predate the correlated turn.started journal row.
+      // Only those comparisons fall back to the durable Turn timestamp.
       const turn = (right.turn?.startedAt ?? '').localeCompare(left.turn?.startedAt ?? '');
       if (turn !== 0) return turn;
+
       const attempt = (right.execution?.attempt ?? 0) - (left.execution?.attempt ?? 0);
       if (attempt !== 0) return attempt;
+
+      const kind = (kindOrder.get(left.artifact.kind) ?? 99) - (kindOrder.get(right.artifact.kind) ?? 99);
+      if (kind !== 0) return kind;
+
       const created = right.artifact.createdAt.localeCompare(left.artifact.createdAt);
       if (created !== 0) return created;
       return right.artifact.artifactId.localeCompare(left.artifact.artifactId);
