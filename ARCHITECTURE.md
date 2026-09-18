@@ -1,30 +1,64 @@
-# ARCHITECTURE — Financial Agent Harness (Phase 0 + Debate ronde Phase 1)
+# ARCHITECTURE - FinHarness Stateful Financial Agent Harness (A-L baseline)
 
-Dokumen teknis: bagaimana sistem dibangun, keputusan desain yang diambil, dan
-deviasi terdokumentasi dari addendum v3.1.
+Dokumen teknis untuk current runtime, keputusan desain, dan historical deviations.
+PR A-L adalah baseline stateful harness saat ini. Bagian phase/addendum yang lebih
+lama tetap dipertahankan di bawah sebagai audit trail keputusan sebelumnya.
 
-## 1. Layer & Abstraksi (Locked)
+## 1. Current Runtime Layers & Invariants
 
 ```
-apps/cli (REPL + commands + workflows)          ← satu-satunya UI
-        │
-packages/agent (Bull, Bear, Judge, Router)      ← pure functions, tanpa DB write
-        │
-packages/llm (LLMClient / MockLLMClient)        ← LLMClientLike interface
-        │
-packages/sectors-api (SectorsClient / Mock)     ← SectorsApi interface
-        │
-packages/execution (validator + store interfaces)
-packages/evidence, packages/conversation (store interfaces)
-packages/schemas (Zod) · packages/shared (utils)
-        │
-packages/database (*Sqlite)                     ← SATU-SATUNYA yang menyentuh Drizzle
+apps/cli
+  ├─ explicit slash commands
+  └─ natural-language conversation
+          |
+          v
+packages/orchestrator + packages/routing
+          |
+          v
+packages/context
+  Resolver -> bounded artifact retrieval -> validity -> policy -> assembler
+          -> token budget / deterministic compaction
+          -> ContextSnapshot
+          |
+          +------------------------------+
+          |                              |
+          v                              v
+packages/command                    packages/subagent
+WorkflowRunner definitions          Bull / Bear / Judge runtime
+          |                              |
+          +---------------+--------------+
+                          v
+       evidence / execution / session / conversation
+                          |
+                          v
+                    packages/database
+
+External provider seams:
+  packages/llm
+  packages/sectors-api
 ```
 
-Prinsip terkunci (addendum §04): **agent adalah pure function** — membaca evidence
-read-only, mengembalikan respons terstruktur; **workflow** (apps/cli) yang
-mem-persist ke DB. Konsekuensinya agent dapat diuji tanpa database sama sekali
-(lih. `packages/agent/test/fakes.ts`).
+Current invariants:
+
+- `Session -> Turn -> Execution` is the canonical lifecycle. A normal conversation
+  Turn may have zero ResearchExecutions.
+- `/judge` is the explicit deterministic debate workflow. It owns Researcher ->
+  Bull -> Bear -> rebuttal -> Judge -> deterministic evidence check -> Verdict.
+- Bull/Bear/Judge are workflow-scoped specialists. Other commands do not implicitly
+  invoke them.
+- Natural-language input goes through `MainFinHarnessAgent`. It may answer using
+  available context or recommend an explicit command; it does not auto-execute
+  `/judge`, `/research`, `/compare`, or `/screen`.
+- `SessionWorkingContext` is durable relevance state, `ContextPacket` is an
+  invocation projection, and `ContextSnapshot` records the exact final packet
+  used by a model call.
+- PR L artifact reuse is bounded same-session reuse as prior context only. It does
+  not memoize workflow outputs, skip a new `/judge`, or inject historical artifacts
+  into current-execution specialist grounding.
+- Provider cache/freshness, Evidence, artifacts, context, and workflow execution are
+  separate concerns and must not be treated as interchangeable storage layers.
+- Specialist reasoning remains Evidence-grounded and typed. Persistence remains
+  owned by workflow/composition boundaries rather than model-generated side effects.
 
 ## 2. Evidence-First Flow (/judge, termasuk Debate ronde Phase 1)
 
