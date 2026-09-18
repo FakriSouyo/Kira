@@ -238,6 +238,9 @@ importers:
 
   packages/session/core:
     dependencies:
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../../schemas
       '@harness/shared':
         specifier: workspace:*
         version: link:../../shared
