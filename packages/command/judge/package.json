@@ -1,0 +1,8 @@
+{
+  "name": "@harness/command-judge", "version": "0.1.0", "type": "module", "private": true,
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@harness/command-core": "workspace:*", "@harness/subagent-bear": "workspace:*", "@harness/subagent-bull": "workspace:*",
+    "@harness/subagent-judge": "workspace:*", "@harness/subagent-researcher": "workspace:*"
+  }
+}

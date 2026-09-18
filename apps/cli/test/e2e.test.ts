@@ -197,22 +197,31 @@ describe('E2E — /judge offline (mock sectors + mock LLM)', () => {
   }, CLI_TIMEOUT_MS);
 });
 
-describe('E2E — natural language → Intent Router', () => {
-  it('"Apakah BBRI layak dibeli?" dirute ke /judge BBRI', async () => {
+describe('E2E — natural language → MainFinHarnessAgent', () => {
+  it('does not auto-route a company question into /judge', async () => {
     const home = freshHome();
     const run = await runCli(home, 'Apakah BBRI layak dibeli?\n/exit\n');
 
     expect(run.code).toBe(0);
-    expect(run.stdout).toContain('Routing to /judge BBRI');
-    expect(run.stdout).toContain('BBRI · FINAL JUDGMENT');
+    expect(run.stdout).toContain('Apakah BBRI layak dibeli?');
+    expect(run.stdout).not.toContain('Routing to /judge BBRI');
+    expect(run.stdout).not.toContain('FINAL JUDGMENT');
+
+    const db = openHomeDb(home);
+    try {
+      const executions = (db.raw.prepare('SELECT COUNT(*) c FROM executions').get() as { c: number }).c;
+      expect(executions).toBe(0);
+    } finally {
+      db.raw.close();
+    }
   }, CLI_TIMEOUT_MS);
 
-  it('input ambigu → clarification, tidak eksekusi command', async () => {
+  it('keeps an ambiguous context-free message in normal conversation', async () => {
     const home = freshHome();
     const run = await runCli(home, 'hmm interesting\n/exit\n');
 
     expect(run.code).toBe(0);
-    expect(run.stdout).toContain('Not sure what you mean');
+    expect(run.stdout).toContain('hmm interesting');
     expect(run.stdout).not.toContain('FINAL JUDGMENT');
 
     const db = openHomeDb(home);

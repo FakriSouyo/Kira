@@ -1,30 +1,64 @@
-# ARCHITECTURE — Financial Agent Harness (Phase 0 + Debate ronde Phase 1)
+# ARCHITECTURE - FinHarness Stateful Financial Agent Harness (A-L baseline)
 
-Dokumen teknis: bagaimana sistem dibangun, keputusan desain yang diambil, dan
-deviasi terdokumentasi dari addendum v3.1.
+Dokumen teknis untuk current runtime, keputusan desain, dan historical deviations.
+PR A-L adalah baseline stateful harness saat ini. Bagian phase/addendum yang lebih
+lama tetap dipertahankan di bawah sebagai audit trail keputusan sebelumnya.
 
-## 1. Layer & Abstraksi (Locked)
+## 1. Current Runtime Layers & Invariants
 
 ```
-apps/cli (REPL + commands + workflows)          ← satu-satunya UI
-        │
-packages/agent (Bull, Bear, Judge, Router)      ← pure functions, tanpa DB write
-        │
-packages/llm (LLMClient / MockLLMClient)        ← LLMClientLike interface
-        │
-packages/sectors-api (SectorsClient / Mock)     ← SectorsApi interface
-        │
-packages/execution (validator + store interfaces)
-packages/evidence, packages/conversation (store interfaces)
-packages/schemas (Zod) · packages/shared (utils)
-        │
-packages/database (*Sqlite)                     ← SATU-SATUNYA yang menyentuh Drizzle
+apps/cli
+  ├─ explicit slash commands
+  └─ natural-language conversation
+          |
+          v
+packages/orchestrator + packages/routing
+          |
+          v
+packages/context
+  Resolver -> bounded artifact retrieval -> validity -> policy -> assembler
+          -> token budget / deterministic compaction
+          -> ContextSnapshot
+          |
+          +------------------------------+
+          |                              |
+          v                              v
+packages/command                    packages/subagent
+WorkflowRunner definitions          Bull / Bear / Judge runtime
+          |                              |
+          +---------------+--------------+
+                          v
+       evidence / execution / session / conversation
+                          |
+                          v
+                    packages/database
+
+External provider seams:
+  packages/llm
+  packages/sectors-api
 ```
 
-Prinsip terkunci (addendum §04): **agent adalah pure function** — membaca evidence
-read-only, mengembalikan respons terstruktur; **workflow** (apps/cli) yang
-mem-persist ke DB. Konsekuensinya agent dapat diuji tanpa database sama sekali
-(lih. `packages/agent/test/fakes.ts`).
+Current invariants:
+
+- `Session -> Turn -> Execution` is the canonical lifecycle. A normal conversation
+  Turn may have zero ResearchExecutions.
+- `/judge` is the explicit deterministic debate workflow. It owns Researcher ->
+  Bull -> Bear -> rebuttal -> Judge -> deterministic evidence check -> Verdict.
+- Bull/Bear/Judge are workflow-scoped specialists. Other commands do not implicitly
+  invoke them.
+- Natural-language input goes through `MainFinHarnessAgent`. It may answer using
+  available context or recommend an explicit command; it does not auto-execute
+  `/judge`, `/research`, `/compare`, or `/screen`.
+- `SessionWorkingContext` is durable relevance state, `ContextPacket` is an
+  invocation projection, and `ContextSnapshot` records the exact final packet
+  used by a model call.
+- PR L artifact reuse is bounded same-session reuse as prior context only. It does
+  not memoize workflow outputs, skip a new `/judge`, or inject historical artifacts
+  into current-execution specialist grounding.
+- Provider cache/freshness, Evidence, artifacts, context, and workflow execution are
+  separate concerns and must not be treated as interchangeable storage layers.
+- Specialist reasoning remains Evidence-grounded and typed. Persistence remains
+  owned by workflow/composition boundaries rather than model-generated side effects.
 
 ## 2. Evidence-First Flow (/judge, termasuk Debate ronde Phase 1)
 
@@ -165,6 +199,132 @@ Run yang gagal tetap tercatat di `executions` dengan status `failed`.
 
 Konvensi: **snake_case di DB ↔ camelCase di TS/Zod**, dipetakan eksplisit di
 `packages/database/src/schema.ts` (satu-satunya tempat yang tahu dua konvensi).
+
+### Canonical lifecycle foundation (PR A)
+
+`ResearchSessionStore` adalah persistence boundary untuk relasi durable
+`Session -> Turn -> Execution`, bukan pemilik workflow, context, artifact,
+journal projection, cache, atau memory. Setiap input yang diterima akan menjadi
+satu Turn setelah wiring production di PR B; Turn dapat memiliki nol atau banyak
+Execution attempt.
+
+Migrasi `0007_canonical_lifecycle.sql` mempertahankan `research_turns.run_id`
+sebagai kolom transisi nullable tanpa constraint unik, lalu memindahkan ownership
+ke `executions.session_id`, `executions.turn_id`, dan `executions.attempt`. Relasi
+lama di-backfill sebagai attempt 1. Execution lama tanpa research turn tetap
+valid dan tidak dipaksa memiliki relasi palsu. Status terminal execution canonical
+mencakup `completed`, `failed`, dan `cancelled`.
+
+### Live lifecycle and journal linkage (PR B)
+
+`createHarnessSession` adalah composition boundary untuk request live. Setiap
+input yang diterima membuat tepat satu Turn melalui `ResearchSessionStore`, lalu
+menyelesaikannya sebagai `completed`, `failed`, atau `stopped`. Percakapan biasa
+tidak membuat Execution. `/judge` membuat Execution canonical untuk Turn yang
+sama, tetapi tetap menjalankan pipeline manual yang ada; pemindahan execution
+truth ke `WorkflowRunner` dikerjakan di PR C (selesai — Deviation #33).
+
+Command yang presentasinya ditangani lokal oleh workspace TTY (`/help`, menu,
+`/context`, dan `/new`) tetap melewati boundary lifecycle yang sama; UI tidak
+boleh membuat jalur input kedua. Saat restart, proyeksi journal yang masih
+`running` direkonsiliasi terhadap lifecycle canonical: status terminal canonical
+diproyeksikan apa adanya, sedangkan Execution yang sungguh terputus diselesaikan
+`cancelled` dan Turn induknya diselesaikan secara konsisten.
+
+`ConversationJournal` hanya menyimpan audit/replay append-only. Event baru
+memakai payload version 1 dan membawa `turnId`, `executionId` bila ada,
+`correlationId`, serta rantai `causationId`; `sessionId`, sequence, dan timestamp
+tetap berada pada envelope journal. Event lama tanpa metadata itu tetap dapat
+dibaca. Pembuatan Session tidak lagi dimiliki journal.
+
+### SessionWorkingContext (PR D)
+
+Working context adalah materialized view **versioned** dari "apa yang masih
+relevan di satu session" — reference state terstruktur, bukan history. Journal
+tetap pemilik urutan kejadian; `SessionWorkingContext` hanya memiliki yang masih
+relevan. Contract: `packages/session/core/src/workingContext.ts`
+(`applyWorkingContextPatch` murni, `assertWorkingContextCommit` untuk CAS,
+`deriveWorkingContextPatch` hanya dari baris durable). Storage:
+`session_context_versions` (migrasi `0008`) + `WorkingContextStoreSqlite`
+(`current`/`at`/`history`/`commit`); versi lama tetap terbaca dan tidak ada pointer
+"current" terpisah, sehingga tidak ada state turunan yang bisa drift.
+
+Updater tunggal ada di `apps/cli/src/repl/workingContext.ts`, dipanggil dari
+composition boundary setelah Turn settle `completed`:
+
+```text
+/judge BBRI         → activeSubjects=[BBRI], currentIntent=judge,
+                      activeVerdictRef={kind:'judgment', executionId} (resolve via judgments.getByRun)
+kenapa BBRI turun?  → currentIntent=conversation (Turn tanpa Execution; subject tetap)
+Turn failed/stopped → tidak publish apa pun
+```
+
+Dua guard compare-and-set menolak penulis stale: `expectedVersion` lama
+(`STALE_CONTEXT_VERSION`) dan prefix journal lama (`STALE_SOURCE_SEQUENCE`).
+`sourceSequence` adalah sequence kanonik `turn.started` milik Turn yang diterima,
+bukan journal tail saat settlement, sehingga completion Turn lama tidak dapat
+terlihat causally lebih baru hanya karena selesai belakangan.
+Journal menerima satu event referensi `session.context.updated` per versi; payload
+context tidak diduplikasi ke journal, dan kegagalan append tidak membatalkan versi
+durable (diperbaiki deterministik saat restore). Field yang belum punya produsen
+durable (thesis/bull/bear/risk ref, focus topics, pinned refs, user assertion,
+summary ref) dibiarkan kosong — bukan diarang; PR F/G yang mengisinya. PR E
+(freshness/reuse provider) sengaja tidak ada di sini: working context hanya
+mereferensikan, tidak pernah mengotorisasi reuse data eksternal.
+
+### ContextPacket (PR G)
+
+`@harness/context` projects the captured `SessionWorkingContext` into one
+immutable, invocation-scoped `ContextPacket`; it is not journal history or a
+provider-cache payload. PR L adds bounded same-session Artifact Retrieval by
+exact subject and existing artifact kind, followed by structural validity
+checks against the completed source Execution. The Reference Resolver resolves
+explicit active/pinned refs plus retrieved candidates, the deterministic
+Context Policy selects eligible candidates, and the Context Assembler emits
+stable thesis/Bull/Bear/Verdict/pinned/retrieved ordering with artifact-ID
+deduplication and provenance. Retrieved artifacts are prior context only when
+freshness is unknown; provider freshness remains PR E's authority. PR L does
+not memoize workflow outputs, expand Evidence, call providers/models, mutate
+working context, or search across sessions. Bull/Bear/Judge remain `/judge`-
+scoped specialists and receive current-Execution context only.
+
+### ContextSnapshot (PR H)
+
+`ContextSnapshot` is the immutable durable record of the exact structured
+`ContextPacket` used for one invocation. Its canonical SHA-256 fingerprint
+excludes only operational creation time; packet trust distinctions, provenance,
+source refs, selected artifact IDs, diagnostics, and stable ordering are
+preserved. `ModelCall.contextSnapshotId` is nullable for existing/transitional
+calls that did not consume a ContextPacket; explicitly supplied context cannot
+silently degrade to a null link. PR H does not inject context into agents,
+render prompts, count tokens, or change provider behavior.
+
+### Rencana PR berikutnya (Core Refactor Plan)
+
+Urutan PR dan definisinya yang mengikat ada di `docs/core/03-CONTEXT-AND-MEMORY.md`
+§21 (PR A–PR L) dan `docs/core/13-CORE-REFACTOR-PLAN.md` §8. PR A–PR G selesai;
+**PR E = selective provider retrieval + freshness policy** disisipkan setelah PR D
+dan sebelum integrasi Context Engine pertama:
+permintaan Sectors menjadi demand-driven per requirement node, data yang masih
+valid di-reuse, hanya yang stale/missing/incompatible di-refresh, `fetchedAt` /
+`dataAsOf` / `period` / `requestedAsOf` tetap dibedakan, dan cache identity
+memuat operation/argumen/asOf/period. PR E tidak mengimplementasikan ContextPacket,
+Context Engine, capability registry, atau provider abstraction generik; boundary
+Context Engine ↔ provider dicatat di `03-CONTEXT-AND-MEMORY.md` §12.
+
+### Context Budget (PR J)
+
+After assembly, the CLI budgets the rendered `ContextPacket` against the
+selected agent's configured context-window capability, output reserve, prompt
+components, and deterministic safety margin. Structural compaction proceeds in
+stable trust-preserving stages (open questions, assumptions, assertions,
+typed artifact projections, then lower-priority artifacts according to focus).
+It does not mutate durable artifacts or working context and makes no provider or
+LLM calls. Only the final packet that fits is persisted as `ContextSnapshot` and
+sent to `MainFinHarnessAgent`; an impossible required context fails before
+snapshot/model invocation. Counts are explicitly conservative estimates, and
+the existing model usage metadata remains authoritative for actual provider
+accounting.
 
 ## 10. Pengujian
 

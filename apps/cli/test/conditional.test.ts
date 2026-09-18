@@ -34,14 +34,14 @@ describe('judgeWorkflow conditional debate (Phase 3 Task 2)', () => {
     ctx.judge.evaluate = async (p: Parameters<typeof orig>[0]) => {
       calls++;
       // pertama neutral, kedua juga neutral — tapi tanpa conditional tidak akan terpanggil kedua kali
-      return {
+      return { value: {
         ticker: p.ticker,
         score: 50,
         stance: 'neutral' as const,
         confidence: 'moderate' as const,
         breakdown: { financialHealth: 50, growth: 50, valuation: 50, marketMomentum: null, risk: null },
         summary: `Neutral mock ${calls}`,
-      };
+      }, subagent: 'judge', skills: [{ name: 'evidence-weighing', contentHash: 'test-hash' }] };
     };
     const art = await judgeWorkflow(ctx, 'BBCA', () => {}, () => {}, { conditional: false });
     const msgs = await db.conversation.getByRun(art.run.id);
@@ -54,26 +54,28 @@ describe('judgeWorkflow conditional debate (Phase 3 Task 2)', () => {
     const ctx = baseCtx();
     let judgeCalls = 0;
     const orig = ctx.judge.evaluate.bind(ctx.judge);
+    // Skor harus konsisten dengan breakdown: `synthesize-verdict` menegakkan
+    // re-derivasi rubrik deterministik (PR C), sama seperti JudgeAgent asli.
     ctx.judge.evaluate = async (p: Parameters<typeof orig>[0]) => {
       judgeCalls++;
       if (judgeCalls === 1) {
-        return {
+        return { value: {
           ticker: p.ticker,
-          score: 52,
+          score: 51,
           stance: 'neutral' as const,
           confidence: 'moderate' as const,
           breakdown: { financialHealth: 50, growth: 52, valuation: 51, marketMomentum: null, risk: null },
           summary: 'First neutral',
-        };
+        }, subagent: 'judge', skills: [{ name: 'evidence-weighing', contentHash: 'test-hash' }] };
       }
-      return {
+      return { value: {
         ticker: p.ticker,
         score: 72,
         stance: 'bullish' as const,
         confidence: 'moderate' as const,
-        breakdown: { financialHealth: 70, growth: 65, valuation: 68, marketMomentum: null, risk: null },
+        breakdown: { financialHealth: 72, growth: 72, valuation: 72, marketMomentum: null, risk: null },
         summary: 'Second bullish after conditional',
-      };
+      }, subagent: 'judge', skills: [{ name: 'evidence-weighing', contentHash: 'test-hash' }] };
     };
     const art = await judgeWorkflow(ctx, 'BBCA', () => {}, () => {}, { conditional: true });
     const msgs = await db.conversation.getByRun(art.run.id);

@@ -2,9 +2,10 @@
 
 ![version](https://img.shields.io/badge/version-0.3.0-blue) ![CI](https://github.com/actions/workflows/ci.yml/badge.svg) ![node](https://img.shields.io/badge/node-%3E%3D22-green)
 
-Evidence-based stock research system — interactive REPL harness dengan multi-agent
-reasoning (Researcher → Bull → Bear → Bull rebuttal → Judge), embedded SQLite,
-dan audit trail penuh.
+Evidence-based stock research harness with stateful sessions, structured context,
+and explicit financial workflows. `/judge` owns the Researcher -> Bull -> Bear ->
+Bull rebuttal -> Judge debate path; normal conversation runs through
+`MainFinHarnessAgent` and does not auto-execute `/judge` or other slash commands.
 
 Spesifikasi lengkap: [`planning/addendum_v3.0.md`](planning/addendum_v3.0.md) (v3.1) ·
 Dokumentasi teknis: [`ARCHITECTURE.md`](ARCHITECTURE.md) · Changelog: [`CHANGELOG.md`](CHANGELOG.md)
@@ -23,9 +24,33 @@ Dokumentasi teknis: [`ARCHITECTURE.md`](ARCHITECTURE.md) · Changelog: [`CHANGEL
 - Sectors API client (v2, file cache TTL 24h/1h news, `where` native, error mapping)
 - LLM dua-tier (agent+router, `maxTokens` 2000/256, custom `baseURL`/`apiKey`, Vercel AI SDK)
 - 3 lapis validasi claim + `assertSeenEvidence` invariant
-- REPL interaktif: slash command, tab completion, history, Ctrl+C best-effort, natural language via Intent Router
+- REPL interaktif: slash command, tab completion, history, Ctrl+C best-effort, natural language via MainFinHarnessAgent dengan structured context follow-up
 - Mock mode penuh (sectors+LLM) — **jalan offline tanpa API key**
 - Vector prototype (Phase 7) — `mockEmbedding` placeholder `pgvector`
+
+## Stateful Harness A-L ✅
+
+The current runtime has completed the A-L stateful-context roadmap:
+
+```text
+Session -> Turn -> Execution
+              |
+              +-> /judge -> Evidence -> Bull/Bear/Judge -> typed artifacts
+              |
+              +-> conversation -> SessionWorkingContext
+                                  -> Resolver / Retrieval / Policy / Assembler
+                                  -> Token Budget / Compaction
+                                  -> ContextSnapshot
+                                  -> ModelCall
+```
+
+Key boundaries:
+
+- `/judge` is the only workflow that owns the Bull/Bear/Judge debate.
+- Other commands keep independent workflow semantics and do not implicitly invoke the debate.
+- Natural-language conversation may answer from existing context or recommend a command, but does not auto-run commands.
+- PR L artifact reuse means reuse as prior context only, not workflow-output memoization.
+- Bull/Bear/Judge specialist context remains scoped to the current `/judge` execution and authoritative Evidence.
 
 ## Requirements
 
@@ -143,8 +168,10 @@ Environment: lihat [`.env.example`](.env.example) — `SECTORS_API_KEY`, `LLM_PR
 | `/exit` | Keluar |
 | `/challenge`, `/compare`, `/research`, `/investigate` | Stub roadmap (Phase 1) |
 
-Natural language juga langsung jalan: *"Saham apa yang konsisten tumbuh?"* → `/screen`,
-*"Apakah BBCA layak dibeli?"* → `/judge BBCA`.
+Natural language ditangani oleh `MainFinHarnessAgent`. Agent dapat menjawab dari
+context yang tersedia atau menyarankan slash command yang lebih sesuai, tetapi
+tidak mengeksekusi `/judge`, `/research`, `/compare`, atau `/screen` secara
+implisit. Command berjalan ketika dipanggil secara eksplisit.
 
 ## Development
 
@@ -159,19 +186,25 @@ pnpm db:migrate    # jalankan migrasi DB saja
 Konvensi kontribusi & struktur: [`AGENTS.md`](AGENTS.md) · per-paket: lihat
 `README.md` di masing-masing `packages/*` dan `apps/cli`.
 
-Struktur monorepo:
+Struktur monorepo saat ini:
 
 ```
 packages/
-  shared/       utils: error, constants, canonical JSON, evidence block, rubrik
-  schemas/      schema Zod (Claim, Judgment, Breakdown, Intent, Evidence, Message)
-  evidence/     interface EvidenceStore + content hashing
-  conversation/ interface ConversationStore
-  execution/    interface Execution/Claim/JudgmentStore + ClaimValidator
-  database/     implementasi SQLite (Drizzle + better-sqlite3) + migrasi
-  sectors-api/  client Sectors API + file cache + mock
-  llm/          LLMClient (Vercel AI SDK) dua-tier + MockLLMClient
-  agent/        Bull, Bear, Judge, Intent Router (pure functions)
+  command/      kontrak dan definisi workflow command, termasuk /judge
+  context/      ContextPacket, retrieval, validity, policy, budget, snapshot
+  conversation/ durable conversation store contracts
+  database/     SQLite stores + migrations
+  evidence/     EvidenceStore + hashing/provenance
+  execution/    lifecycle validators, claim/judgment store contracts
+  llm/          provider-facing LLM runtime contracts + mock
+  orchestrator/ MainFinHarnessAgent conversation orchestration
+  routing/      routing primitives
+  schemas/      shared Zod/domain schemas
+  sectors-api/  Sectors provider adapter + cache/freshness policy
+  session/      canonical Session/Turn/Execution + SessionWorkingContext
+  shared/       common utilities
+  skill/        skill contracts/providers
+  subagent/     Bull, Bear, Judge, Researcher, and shared specialist runtime
 apps/
-  cli/          REPL, command, workflow, config
+  cli/          REPL, composition, command adapters, workflow/runtime wiring
 ```

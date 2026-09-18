@@ -1,0 +1,14 @@
+{
+  "name": "@harness/subagent-bear",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@harness/context": "workspace:*",
+    "@harness/llm": "workspace:*",
+    "@harness/schemas": "workspace:*",
+    "@harness/skill-filesystem": "workspace:*",
+    "@harness/subagent-core": "workspace:*"
+  }
+}

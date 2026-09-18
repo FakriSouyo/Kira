@@ -1,6 +1,12 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { FileCache } from './cache';
+import { FileCache, type CacheEntryMeta } from './cache';
+import {
+  cacheKeyFor,
+  evaluateCacheEntry,
+  type CacheDecision,
+  type SectorsCacheRequirement,
+} from './policy';
 import type {
   CompanyReport,
   DailyTransaction,
@@ -50,6 +56,41 @@ export interface SectorsApiOptions {
   homeDir?: string;
   /** Injection untuk test (default: global fetch). */
   fetchImpl?: typeof fetch;
+  /** Injection waktu untuk pengujian freshness/cache; default waktu sekarang. */
+  now?: () => Date;
+  /** Observer read-only untuk keputusan `reuse`/`fetch` cache yang dapat diaudit. */
+  onCacheDecision?: (decision: CacheDecision) => void;
+}
+
+const COMPANY_REPORT_SECTIONS = ['overview', 'valuation', 'financials', 'dividend'] as const;
+const CACHE_SCHEMA_VERSION = 1;
+const CACHE_ADAPTER_VERSION = 'v2';
+
+function normalizeTicker(ticker: string): string {
+  return ticker.toUpperCase();
+}
+
+function formatLocalDate(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function requirement(
+  operation: string,
+  ticker: string,
+  params: Record<string, unknown>,
+  temporal: SectorsCacheRequirement['temporal'],
+): SectorsCacheRequirement {
+  return {
+    provider: 'sectors-api',
+    operation,
+    subjectScope: 'symbol',
+    subject: normalizeTicker(ticker),
+    params,
+    temporal,
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    adapterVersion: CACHE_ADAPTER_VERSION,
+  };
 }
 
 /** Skor match deterministik per kriteria (dipakai client & mock, addendum Task 15). */
@@ -164,10 +205,11 @@ interface V2Report {
 interface V2QuarterRow {
   symbol?: string;
   date?: string;
-  revenue?: number;
-  earnings?: number;
-  ebitda?: number;
-  total_equity?: number;
+  revenue?: number | null;
+  earnings?: number | null;
+  ebitda?: number | null;
+  total_equity?: number | null;
+  financials_sector_metrics?: Record<string, number | null>;
 }
 
 interface V2DailyRow {
@@ -274,21 +316,71 @@ function periodOfDate(date: string | undefined): string {
   return `${parsed[1]}-Q${quarter}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNullableFiniteNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === 'number' && Number.isFinite(value));
+}
+
+function isQuarterlyRow(value: unknown): value is V2QuarterRow {
+  if (!isRecord(value) || typeof value.symbol !== 'string' || value.symbol.length === 0
+    || typeof value.date !== 'string' || value.date.length === 0) return false;
+  const hasRequiredNumber = (field: 'revenue' | 'earnings'): boolean =>
+    Object.prototype.hasOwnProperty.call(value, field) && isNullableFiniteNumber(value[field]);
+  if (!hasRequiredNumber('revenue') || !hasRequiredNumber('earnings')) return false;
+  for (const field of ['ebitda', 'total_equity'] as const) {
+    if (field in value && !isNullableFiniteNumber(value[field])) return false;
+  }
+  const sectorMetrics = value.financials_sector_metrics;
+  return sectorMetrics === undefined
+    || (isRecord(sectorMetrics) && Object.values(sectorMetrics).every(isNullableFiniteNumber));
+}
+
+function normalizeQuarterlyPayload(raw: unknown): V2QuarterRow[] {
+  const rows = Array.isArray(raw) ? raw : [raw];
+  if (!rows.every(isQuarterlyRow)) throw new Error('Invalid Sectors quarterly financial response');
+  return rows;
+}
+
 function toQuarterlyFinancials(raw: V2QuarterRow[]): QuarterlyFinancials {
   const rows = [...(raw ?? [])].sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')));
+  const byPeriod = new Map(rows.map((row) => [periodOfDate(row.date), row]));
+  const growth = (current?: number | null, previous?: number | null): number | undefined =>
+    current !== undefined && current !== null && previous !== undefined && previous !== null && previous !== 0
+      ? pct((current - previous) / Math.abs(previous)) : undefined;
   const quarters: QuarterlyFinancials['quarters'] = rows.map((r) => {
     const period = periodOfDate(r.date);
-    const i = rows.indexOf(r);
-    const prev = rows[i + 4]; // kuartal sama tahun sebelumnya
+    const prev = byPeriod.get(`${Number(period.slice(0, 4)) - 1}${period.slice(4)}`);
     return {
       period,
+      periodType: 'single_quarter' as const,
       revenue: r.revenue ?? 0,
       netIncome: r.earnings ?? 0,
-      revenueGrowthYoy: prev && r.revenue ? pct((r.revenue - (prev.revenue ?? 0)) / (prev.revenue ?? 1)) : undefined,
-      netIncomeGrowthYoy: prev && r.earnings ? pct((r.earnings - (prev.earnings ?? 0)) / (prev.earnings ?? 1)) : undefined,
+      revenueGrowthYoy: growth(r.revenue, prev?.revenue),
+      netIncomeGrowthYoy: growth(r.earnings, prev?.earnings),
     };
   });
-  return { ticker: stripSuffix(rows[0]?.symbol), quarters };
+  // YTD is only defined with every Q1..latest quarter in both calendar years.
+  let cumulativeYtd: QuarterlyFinancials['cumulativeYtd'];
+  const latest = /^(\d{4})-Q([1-4])$/.exec(quarters[0]?.period ?? '');
+  if (latest) {
+    const year = Number(latest[1]);
+    const quarter = Number(latest[2]);
+    const current = Array.from({ length: quarter }, (_, i) => byPeriod.get(`${year}-Q${i + 1}`));
+    const previous = Array.from({ length: quarter }, (_, i) => byPeriod.get(`${year - 1}-Q${i + 1}`));
+    if ([...current, ...previous].every((row) => row && row.revenue !== undefined && row.earnings !== undefined)) {
+      const sum = (set: Array<V2QuarterRow | undefined>, field: 'revenue' | 'earnings') => set.reduce((total, row) => total + row![field]!, 0);
+      const period = quarter === 2 ? 'H1' : quarter === 4 ? 'FY' : `YTD Q${quarter}`;
+      cumulativeYtd = {
+        periodLabel: `${year} ${period} vs ${year - 1} ${period}`,
+        revenueGrowthYoy: growth(sum(current, 'revenue'), sum(previous, 'revenue')),
+        netIncomeGrowthYoy: growth(sum(current, 'earnings'), sum(previous, 'earnings')),
+      };
+    }
+  }
+  return { ticker: stripSuffix(rows[0]?.symbol), quarters, ...(cumulativeYtd ? { cumulativeYtd } : {}) };
 }
 
 function toScreenerRows(raw: V2Paged<V2ScreenerItem>): ScreenerRow[] {
@@ -415,58 +507,127 @@ export class SectorsClient implements SectorsApi {
   private readonly edate: string;
   private readonly cache: FileCache;
   private readonly newsCache: FileCache;
+  private readonly periodicCache: FileCache;
   private readonly fetchImpl: typeof fetch;
+  private readonly now: () => Date;
+  private readonly cacheTtlMs: number;
+  private readonly newsCacheTtlMs: number;
+  private readonly onCacheDecision?: (decision: CacheDecision) => void;
 
   constructor(options: SectorsApiOptions = {}) {
     this.apiKey = options.apiKey ?? process.env.SECTORS_API_KEY ?? '';
     this.baseUrl = (options.baseUrl ?? 'https://api.sectors.app/v2').replace(/\/+$/, '');
     this.timeoutMs = options.timeoutMs ?? 30_000;
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.now = options.now ?? (() => new Date());
+    this.cacheTtlMs = (options.cacheTtlHours ?? 24) * 3_600_000;
+    this.newsCacheTtlMs = (options.newsCacheTtlHours ?? 1) * 3_600_000;
+    this.onCacheDecision = options.onCacheDecision;
     const homeDir = options.homeDir ?? process.env.FINHARNESS_HOME ?? join(homedir(), '.finharness');
     const cacheDir = options.cacheDir ?? join(homeDir, 'cache', 'sectors_api');
-    this.cache = new FileCache(cacheDir, (options.cacheTtlHours ?? 24) * 3_600_000);
-    this.newsCache = new FileCache(cacheDir, (options.newsCacheTtlHours ?? 1) * 3_600_000);
-    // Default window 90 hari (batas maksimum v2 daily/foreign-flow).
-    const end = new Date();
+    // Sectors quotas are conserved by one snapshot per local calendar date.
+    // A new date invalidates the snapshot even when fewer than 24 hours elapsed.
+    this.cache = new FileCache(cacheDir, this.cacheTtlMs, { calendarDay: true, now: this.now });
+    // News/filings are short-TTL recent/event data; calendar-day reuse would
+    // incorrectly retain a stale response across the configured TTL.
+    this.newsCache = new FileCache(cacheDir, this.newsCacheTtlMs, { now: this.now });
+    // Company report is mixed identity/valuation/fundamental data, and latest
+    // financials need bounded revalidation. Keep one conservative configurable
+    // window rather than applying long-lived profile freshness to the whole entry.
+    this.periodicCache = new FileCache(cacheDir, this.cacheTtlMs, { now: this.now });
+    // Daily/foreign-flow docs permit `end=today` but do not guarantee that the
+    // current trading day's row is immutable. End yesterday so this calendar-
+    // day cache contains only completed historical sessions.
+    const end = new Date(this.now());
+    end.setDate(end.getDate() - 1);
     const start = new Date(end.getTime() - 90 * 86_400_000);
-    this.sdate = start.toISOString().slice(0, 10);
-    this.edate = end.toISOString().slice(0, 10);
+    this.sdate = formatLocalDate(start);
+    this.edate = formatLocalDate(end);
   }
 
   async getCompanyReport(ticker: string): Promise<CompanyReport> {
-    return this.cached(this.cache, 'company_report', ticker, () =>
-      this.request<V2Report>(`/company/report/${encodeURIComponent(ticker)}/`, ticker).then(toCompanyReport),
+    const symbol = normalizeTicker(ticker);
+    const req = requirement('company_report', symbol, { sections: [...COMPANY_REPORT_SECTIONS] }, { kind: 'mixed_snapshot' });
+    return this.cached(this.periodicCache, req,
+      () =>
+        this.request<V2Report>(`/company/report/${encodeURIComponent(symbol)}/?sections=${encodeURIComponent(COMPANY_REPORT_SECTIONS.join(','))}`, symbol).then(toCompanyReport),
+      // Company Report is mixed identity/valuation/reference-date data; its
+      // market reference date is not a financial reporting period.
+      (d) => ({ dataAsOf: d.asOf, source: 'sectors-api' }),
     );
   }
 
   async getQuarterlyFinancials(ticker: string): Promise<QuarterlyFinancials> {
-    return this.cached(this.cache, 'quarterly_financials', ticker, async () => {
-      const raw = await this.request<V2QuarterRow[]>(`/financials/quarterly/${encodeURIComponent(ticker)}/`, ticker);
-      const fin = toQuarterlyFinancials(raw);
-      // Deviasi #17: v2 /financials/quarterly/ hanya 1 kuartal → YoY undefined.
-      // Isi dari company_report.financials.yoy_quarter_*_growth (report sudah
-      // di-fetch & cached di run normal; kalau belum, fetch via cache).
-      if (fin.quarters.length > 0) {
-        const q0 = fin.quarters[0];
-        if (q0.revenueGrowthYoy === undefined || q0.netIncomeGrowthYoy === undefined) {
-          try {
-            const report = await this.getCompanyReport(ticker);
-            if (q0.revenueGrowthYoy === undefined && report.financials.yoyQuarterRevenueGrowth !== undefined) {
-              q0.revenueGrowthYoy = report.financials.yoyQuarterRevenueGrowth;
-            }
-            if (q0.netIncomeGrowthYoy === undefined && report.financials.yoyQuarterEarningsGrowth !== undefined) {
-              q0.netIncomeGrowthYoy = report.financials.yoyQuarterEarningsGrowth;
-            }
-          } catch {
-            // Report unavailable → biarkan undefined, rubrik akan renorm
-          }
-        }
+    const symbol = normalizeTicker(ticker);
+    const req = requirement('quarterly_financials', symbol, { approx: true, nQuarters: 1 }, { kind: 'latest_period' });
+    return this.cached(this.periodicCache, req, async () => {
+      let fin = await this.fetchQuarterly(symbol, 1);
+      fin = await this.fillQuarterlyGrowth(symbol, fin);
+      // A one-row response is correct when the report supplies YoY. If that
+      // dependency is absent, retain the old multi-row derivation as a safe
+      // fallback instead of silently degrading analytical correctness.
+      if (fin.quarters[0]
+        && (fin.quarters[0].revenueGrowthYoy === undefined || fin.quarters[0].netIncomeGrowthYoy === undefined)) {
+        fin = await this.fetchQuarterly(symbol, 5);
+        fin = await this.fillQuarterlyGrowth(symbol, fin);
       }
       return fin;
-    });
+    }, (data: QuarterlyFinancials) => ({ dataAsOf: data.quarters[0]?.period, period: data.quarters[0]?.period, source: 'sectors-api' }));
+  }
+
+  private async fetchQuarterly(ticker: string, nQuarters: number): Promise<QuarterlyFinancials> {
+    const raw = await this.request<unknown>(
+      `/financials/quarterly/${encodeURIComponent(ticker)}/?n_quarters=${nQuarters}&approx=true`,
+      ticker,
+    );
+    return toQuarterlyFinancials(normalizeQuarterlyPayload(raw));
+  }
+
+  private async fillQuarterlyGrowth(ticker: string, fin: QuarterlyFinancials): Promise<QuarterlyFinancials> {
+    if (fin.quarters.length === 0) return fin;
+    const q0 = fin.quarters[0];
+    if (q0.revenueGrowthYoy !== undefined && q0.netIncomeGrowthYoy !== undefined) return fin;
+    try {
+      const report = await this.getCompanyReport(ticker);
+      if (q0.revenueGrowthYoy === undefined && report.financials.yoyQuarterRevenueGrowth !== undefined) {
+        q0.revenueGrowthYoy = report.financials.yoyQuarterRevenueGrowth;
+      }
+      if (q0.netIncomeGrowthYoy === undefined && report.financials.yoyQuarterEarningsGrowth !== undefined) {
+        q0.netIncomeGrowthYoy = report.financials.yoyQuarterEarningsGrowth;
+      }
+    } catch {
+      // Report unavailable → biarkan undefined, rubrik akan renorm.
+    }
+    return fin;
   }
 
   async screen(criteria: string[]): Promise<ScreenerResult[]> {
+    const scoreRows = async (data: V2Paged<V2ScreenerItem>): Promise<ScreenerResult[]> => {
+      let rows = toScreenerRows(data);
+      if (criteria.some((c) => c.toLowerCase() === 'profitable')) {
+        // The companies endpoint omits ROE. Bound report enrichment to ten
+        // candidates, ranked by known growth signals; reuse the normal report cache.
+        // Enrichment paralel + toleran gagal per-ticker agar satu 404 tidak merusak screening.
+        const candidates = rows
+          .sort((a, b) => computeMatchScore(b, criteria) - computeMatchScore(a, criteria) || a.ticker.localeCompare(b.ticker))
+          .slice(0, 10);
+        const enriched = await Promise.all(
+          candidates.map(async (row) => {
+            if (row.roe !== undefined) return row;
+            try {
+              const report = await this.getCompanyReport(row.ticker);
+              return { ...row, roe: report.financials.roe };
+            } catch {
+              return row; // biarkan roe undefined → profitable tetap 0 untuk ticker ini
+            }
+          }),
+        );
+        rows = enriched;
+      }
+      return rows.map((row) => ({ ...row, matchScore: computeMatchScore(row, criteria) }))
+        .filter((r) => r.matchScore > 0)
+        .sort((a, b) => b.matchScore - a.matchScore || a.ticker.localeCompare(b.ticker));
+    };
     const where = buildWhereClause(criteria);
     // Phase 3: where SQL-native v2 bila kriteria dikenal — pre-filter server-side,
     // fallback client-side bila where 400/500 atau kriteria tak dikenal.
@@ -475,12 +636,9 @@ export class SectorsClient implements SectorsApi {
         const rows = await this.request<V2Paged<V2ScreenerItem>>(
           `/companies/?where=${encodeURIComponent(where)}&limit=200`,
         );
-        return toScreenerRows(rows)
-          .map((row) => ({ ...row, matchScore: computeMatchScore(row, criteria) }))
-          .filter((r) => r.matchScore > 0)
-          .sort((a, b) => b.matchScore - a.matchScore || a.ticker.localeCompare(b.ticker));
+        return await scoreRows(rows);
       } catch (error) {
-        if (error instanceof SectorsApiError && (error.code === 'BAD_REQUEST' || error.code === 'SERVER_ERROR')) {
+        if (error instanceof SectorsApiError && error.code === 'BAD_REQUEST') {
           // fallback: ambil universe tanpa where
         } else {
           throw error;
@@ -488,44 +646,49 @@ export class SectorsClient implements SectorsApi {
       }
     }
     const rows = await this.request<V2Paged<V2ScreenerItem>>(`/companies/?limit=200`);
-    return toScreenerRows(rows)
-      .map((row) => ({ ...row, matchScore: computeMatchScore(row, criteria) }))
-      .filter((r) => r.matchScore > 0)
-      .sort((a, b) => b.matchScore - a.matchScore || a.ticker.localeCompare(b.ticker));
+    return scoreRows(rows);
   }
 
   // —— Market Researcher (Phase 1, addendum §24-A.2) ——
   async getDailyTransaction(ticker: string): Promise<DailyTransaction> {
-    return this.cached(this.cache, 'daily_transaction', ticker, () =>
+    const symbol = normalizeTicker(ticker);
+    const req = requirement('daily_transaction', symbol, { end: this.edate, start: this.sdate }, { kind: 'historical_range' });
+    return this.cached(this.cache, req, () =>
       this.request<V2DailyRow[]>(
-        `/daily/${encodeURIComponent(ticker)}/?start=${this.sdate}&end=${this.edate}`,
-        ticker,
+        `/daily/${encodeURIComponent(symbol)}/?start=${this.sdate}&end=${this.edate}`,
+        symbol,
       ).then(toDailyTransaction),
     );
   }
 
   async getForeignFlow(ticker: string): Promise<ForeignFlow> {
-    return this.cached(this.cache, 'foreign_flow', ticker, () =>
+    const symbol = normalizeTicker(ticker);
+    const req = requirement('foreign_flow', symbol, { end: this.edate, start: this.sdate }, { kind: 'historical_range' });
+    return this.cached(this.cache, req, () =>
       this.request<V2ForeignFlow>(
-        `/foreign-flow/${encodeURIComponent(ticker)}/?start=${this.sdate}&end=${this.edate}`,
-        ticker,
+        `/foreign-flow/${encodeURIComponent(symbol)}/?start=${this.sdate}&end=${this.edate}`,
+        symbol,
       ).then(toForeignFlow),
     );
   }
 
   // —— News Researcher (Phase 1, addendum §24-A.2) — newsCache TTL lebih pendek.
   async getNews(ticker: string): Promise<NewsArticle[]> {
-    return this.cached(this.newsCache, 'news', ticker, () =>
-      this.request<V2Paged<V2NewsItem>>(`/news/?symbols=${encodeURIComponent(ticker)}&limit=20`, ticker).then((raw) =>
-        toNewsArticles(raw, ticker),
+    const symbol = normalizeTicker(ticker);
+    const req = requirement('news', symbol, { limit: 20, symbols: symbol }, { kind: 'recent_snapshot' });
+    return this.cached(this.newsCache, req, () =>
+      this.request<V2Paged<V2NewsItem>>(`/news/?symbols=${encodeURIComponent(symbol)}&limit=20`, symbol).then((raw) =>
+        toNewsArticles(raw, symbol),
       ),
     );
   }
 
   async getFilings(ticker: string): Promise<Filing[]> {
-    return this.cached(this.newsCache, 'filings', ticker, () =>
-      this.request<V2Paged<V2FilingItem>>(`/filings/?symbol=${encodeURIComponent(ticker)}&limit=10`, ticker).then(
-        (raw) => toFilings(raw, ticker),
+    const symbol = normalizeTicker(ticker);
+    const req = requirement('filings', symbol, { limit: 10, symbol }, { kind: 'event_revalidation' });
+    return this.cached(this.newsCache, req, () =>
+      this.request<V2Paged<V2FilingItem>>(`/filings/?symbol=${encodeURIComponent(symbol)}&limit=10`, symbol).then(
+        (raw) => toFilings(raw, symbol),
       ),
     );
   }
@@ -534,16 +697,28 @@ export class SectorsClient implements SectorsApi {
   async getSentiment(ticker: string): Promise<Sentiment> {
     // getNews/getFilings memakai cache → umumnya tidak menambah call berbayar.
     const [news, foreign] = await Promise.all([this.getNews(ticker), this.getForeignFlow(ticker)]);
-    return deriveSentiment(ticker, news, foreign);
+    return deriveSentiment(normalizeTicker(ticker), news, foreign);
   }
 
-  /** Read-through cache: hit → langsung return; miss → fetch lalu simpan. */
-  private async cached<T>(cache: FileCache, source: string, ticker: string, fetcher: () => Promise<T>): Promise<T> {
-    const cacheKey = `${ticker.toUpperCase()}_${source}`;
-    const hit = cache.get<T>(cacheKey);
-    if (hit !== null) return hit;
+  /** Read-through cache: hit → langsung return; miss → fetch lalu simpan + metadata data-date. */
+  private async cached<T>(cache: FileCache, req: SectorsCacheRequirement, fetcher: () => Promise<T>, metaFor?: (data: T) => CacheEntryMeta): Promise<T> {
+    const cacheKey = cacheKeyFor(req);
+    const entry = cache.getEntry<T>(cacheKey);
+    const decision = evaluateCacheEntry(req, entry, {
+      now: this.now(),
+      ttlMs: this.cacheTtlMs,
+      newsTtlMs: this.newsCacheTtlMs,
+    });
+    this.onCacheDecision?.(decision);
+    if (decision.action === 'reuse') return entry!.data;
     const data = await fetcher();
-    cache.set(cacheKey, data);
+    cache.set(cacheKey, data, {
+      ...metaFor?.(data),
+      cacheIdentity: cacheKey,
+      schemaVersion: req.schemaVersion,
+      adapterVersion: req.adapterVersion,
+      source: 'sectors-api',
+    });
     return data;
   }
 

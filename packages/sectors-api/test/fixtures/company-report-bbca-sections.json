@@ -1,0 +1,123 @@
+{
+  "symbol": "BBCA.JK",
+  "company_name": "PT Bank Central Asia Tbk.",
+  "overview": {
+    "listing_board": "Main",
+    "industry": "Banks",
+    "sub_industry": "Banks",
+    "sector": "Financials",
+    "sub_sector": "Banks",
+    "market_cap": 771917544337500,
+    "market_cap_rank": 1,
+    "last_close_price": 6325,
+    "latest_close_date": "2026-09-16",
+    "daily_close_change": -0.01171875,
+    "tags": [
+      "dividend-yield-ttm-above-5-percent",
+      "esg-under-25",
+      "top-20-institution-selling",
+      "top-90d-transaction-value"
+    ]
+  },
+  "valuation": {
+    "last_close_price": 6325,
+    "latest_close_date": "2026-09-16",
+    "daily_close_change": -0.01171875,
+    "forward_pe": 13.1093513844644,
+    "intrinsic_value": 13694,
+    "historical_valuation": [
+      {
+        "pb": 2.8543283442621,
+        "pe": 13.2823193795321,
+        "ps": 6.75568977654742,
+        "pcf": -97.1126855912342,
+        "peg": 11.211984235391936,
+        "year": 2026,
+        "pb_peer_avg": 0.784084749531241,
+        "pe_peer_avg": 9.67444974004285,
+        "enterprise_to_ebitda": null,
+        "enterprise_to_revenue": null
+      }
+    ]
+  },
+  "financials": {
+    "eps": 471.4536454633092,
+    "historical_eps": {
+      "2025": {
+        "eps": 471.4536454633092,
+        "eps_growth": 0.0493
+      }
+    },
+    "historical_financials": [
+      {
+        "year": 2025,
+        "revenue": 112006326000000,
+        "earnings": 57537287000000,
+        "total_assets": 1586830000000000,
+        "total_equity": 281687555000000,
+        "ebit": 71260876000000,
+        "ebitda": 73663656000000,
+        "gross_loan": 970233234000000,
+        "net_debt": 2395446000000,
+        "free_cash_flow": 75057575000000,
+        "cash_inflow": null,
+        "cash_outflow": null,
+        "industry_breakdown": {
+          "loan_at_risk": {
+            "Non-performing Loan (NPL)": 16047483000000
+          }
+        }
+      }
+    ],
+    "historical_financial_ratio": [
+      {
+        "year": "2025",
+        "profitability": {
+          "roa": 0.036259263437167184,
+          "roe": 0.20425924389879418,
+          "net_profit_margin": 0.5136967620918126
+        },
+        "liquidity": {
+          "liquidity_coverage_ratio": null
+        }
+      }
+    ],
+    "yoy_quarter_earnings_growth": -0.00136772238340106,
+    "yoy_quarter_revenue_growth": 0.00305775623420816
+  },
+  "dividend": {
+    "historical_dividends": {
+      "2026": {
+        "breakdown": [
+          {
+            "date": "2026-08-31",
+            "total": 25,
+            "yield": 0.00395256916996047
+          },
+          {
+            "date": "2026-06-17",
+            "total": 20,
+            "yield": 0.00316205533596838
+          },
+          {
+            "date": "2026-03-30",
+            "total": 281,
+            "yield": 0.0444268774703557
+          }
+        ],
+        "total_yield": 0.0515415019762846,
+        "total_dividend": 326
+      }
+    },
+    "upcoming_dividends": null,
+    "yield_ttm": 0.0602371541501976,
+    "dividend_yield_avg": {
+      "period": 5,
+      "avg_yield": 0.0283050412777811
+    },
+    "dividend_ttm": 381,
+    "payout_ratio": 0.801491566752531,
+    "cash_payout_ratio": 1.1288898789542,
+    "last_ex_dividend_date": "2026-08-31"
+  }
+}

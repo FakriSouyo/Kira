@@ -1,6 +1,7 @@
 export * from './types';
 export * from './client';
 export * from './cache';
+export * from './policy';
 export * from './mock';
 
 import type { SectorsApi } from './types';

@@ -4,16 +4,23 @@
   "type": "module",
   "private": true,
   "dependencies": {
-    "@harness/agent": "workspace:*",
+    "@harness/command-core": "workspace:*",
+    "@harness/command-judge": "workspace:*",
+    "@harness/context": "workspace:*",
     "@harness/database": "workspace:*",
     "@harness/execution": "workspace:*",
     "@harness/llm": "workspace:*",
+    "@harness/orchestrator": "workspace:*",
+    "@harness/routing": "workspace:*",
     "@harness/schemas": "workspace:*",
     "@harness/sectors-api": "workspace:*",
-    "@harness/shared": "workspace:*",
-    "ink": "^4.4.1",
-    "ink-select-input": "^5.0.0",
-    "ink-text-input": "^5.0.1",
-    "react": "^18.3.1"
+    "@harness/session-core": "workspace:*",
+    "@harness/skill-filesystem": "workspace:*",
+    "@harness/subagent-bear": "workspace:*",
+    "@harness/subagent-bull": "workspace:*",
+    "@harness/subagent-core": "workspace:*",
+    "@harness/subagent-judge": "workspace:*",
+    "@harness/subagent-researcher": "workspace:*",
+    "@harness/shared": "workspace:*"
   }
 }

@@ -74,6 +74,15 @@ describe('ExecutionStoreSqlite (Task 5)', () => {
 });
 
 describe('EvidenceStoreSqlite (Task 3)', () => {
+  it('keeps identical empty payloads from different sources and tickers distinct', async () => {
+    const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
+    const values = [];
+    for (const [ticker, source] of [['BBCA', 'sectors.news'], ['BBCA', 'sectors.filings'], ['BBRI', 'sectors.news']]) {
+      values.push(await db.evidence.save({ runId: run.id, ticker, source, data: [] as unknown as Record<string, unknown> }));
+    }
+    expect(new Set(values.map((e) => e.id)).size).toBe(3);
+    expect(values.map((e) => e.source)).toEqual(['sectors.news', 'sectors.filings', 'sectors.news']);
+  });
   it('dedup: data sama (beda key order) di run berbeda → satu row evidence', async () => {
     const runA = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
     const runB = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
@@ -94,6 +103,16 @@ describe('EvidenceStoreSqlite (Task 3)', () => {
     expect(e2.id).toBe(e1.id);
     const byTicker = await db.evidence.getByTicker('BBCA');
     expect(byTicker).toHaveLength(1);
+    expect((await db.evidence.getByRun(runB.id)).map((e) => e.id)).toEqual([e1.id]);
+    expect((await db.execution.getExecutionWithArtifacts(runB.id)).evidence.map((e) => e.id)).toEqual([e1.id]);
+  });
+
+  it('getManyByIds preserves prompt evidence order across callers', async () => {
+    const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
+    const items = [];
+    for (let i = 0; i < 5; i++) items.push(await db.evidence.save({ runId: run.id, ticker: 'BBCA', source: 'test', data: { index: i } }));
+    const ids = items.map((e) => e.id).sort().reverse();
+    expect((await db.evidence.getManyByIds(ids)).map((e) => e.id)).toEqual(ids);
   });
 
   it('getManyByIds mengembalikan evidence penuh dengan data ter-parse', async () => {

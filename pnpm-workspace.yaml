@@ -1,6 +1,10 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "packages/command/*"
+  - "packages/subagent/*"
+  - "packages/skill/*"
+  - "packages/session/*"
 
 allowBuilds:
   better-sqlite3: true

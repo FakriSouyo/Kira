@@ -4,8 +4,13 @@ import { sortKeys } from './canonical';
 export interface EvidenceLike {
   id: string;
   source: string;
-  data: Record<string, unknown>;
+  /** Provider payloads may be object or array; rendering remains canonical. */
+  data?: unknown;
 }
+
+export const EVIDENCE_PREAMBLE =
+  'You are part of the Financial Agent Harness, an evidence-based stock research system. ' +
+  'Cite evidence by ID only — never invent data.';
 
 /**
  * Helper deterministik SATU untuk semua prompt builder (addendum §17).
@@ -24,4 +29,9 @@ export function renderEvidenceBlock(evidence: readonly EvidenceLike[]): string {
         `  Data: ${JSON.stringify(sortKeys(e.data), null, 2)}`,
     )
     .join('\n');
+}
+
+/** Canonical cache-stable evidence zone shared by every specialist in one run. */
+export function buildEvidenceZone(ticker: string, evidence: readonly EvidenceLike[]): string {
+  return `${EVIDENCE_PREAMBLE}\nAvailable evidence for ${ticker}:\n${renderEvidenceBlock(evidence)}`;
 }

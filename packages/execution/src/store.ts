@@ -3,7 +3,7 @@ export interface ExecutionRun {
   id: string;
   ticker: string;
   command: string;
-  status: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
   executionTime: number | null;
   error: string | null;
   createdAt: string;

@@ -11,10 +11,10 @@ import type { LLMClientLike, LLMModelConfig } from './types';
 /** Factory dua-tier: satu client per tier; `mock: true` → MockLLMClient offline. */
 export function createLLMClient(
   config: LLMModelConfig,
-  options: { mock?: boolean; maxRetries?: number; retryBaseDelayMs?: number; modelFactory?: LLMClientOptions['modelFactory'] } = {},
+  options: { mock?: boolean; fallbackConfigs?: LLMModelConfig[]; maxRetries?: number; retryBaseDelayMs?: number; modelFactory?: LLMClientOptions['modelFactory'] } = {},
 ): LLMClientLike {
   if (options.mock) return new MockLLMClient();
-  return new LLMClient({ config, maxRetries: options.maxRetries, retryBaseDelayMs: options.retryBaseDelayMs, modelFactory: options.modelFactory });
+  return new LLMClient({ config, fallbackConfigs: options.fallbackConfigs, maxRetries: options.maxRetries, retryBaseDelayMs: options.retryBaseDelayMs, modelFactory: options.modelFactory });
 }
 
 /** Shortcut untuk tier default (bagi pemakai yang tidak membangun konteks penuh). */

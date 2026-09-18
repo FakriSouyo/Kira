@@ -78,7 +78,7 @@ const BEAR_OUTPUT_SCHEMA = z.object({
   evidenceIds: z.array(z.string().uuid()),
 });
 
-/** Format prompt challenge (buildBearPrompt di @harness/agent). */
+/** Format prompt challenge milik specialist Bear. */
 const BEAR_PROMPT = `You are a bearish analyst evaluating BBCA.
 
 Bull Agent made the following claims:
@@ -312,5 +312,19 @@ describe('MockLLMClient — Market & News (Phase 1, addendum §24-A)', () => {
     });
     expect(withoutMarket.breakdown.marketMomentum).toBeNull();
     expect(withoutMarket.breakdown.risk).toBeNull();
+  });
+});
+
+describe('MockLLMClient — extended workflow specialists', () => {
+  const mock = new MockLLMClient();
+  const schema = z.object({ summary: z.string().min(1) }).passthrough();
+
+  it.each(['Researcher', 'Fundamentals', 'Market', 'Valuation', 'Risk'])('%s Agent has deterministic offline output', async (name) => {
+    const value = await mock.generateObject({
+      schema,
+      prompt: 'Analyze BBCA using only supplied evidence.',
+      system: [BULL_ZONE1, `You are the ${name} Agent.`],
+    });
+    expect(value.summary).toBeTruthy();
   });
 });

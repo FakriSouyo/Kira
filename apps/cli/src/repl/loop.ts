@@ -1,175 +1,106 @@
 import * as readline from 'node:readline';
-import { UserFriendlyError } from '@harness/shared';
+import { failToUserFriendly } from '../commands';
 import { parseInput } from './parser';
 import { color, renderError, renderUnknownCommand, resetProgress } from './renderer';
 
 export interface CommandResult {
-  /** Akhiri REPL setelah command selesai. */
   quit?: boolean;
+  reload?: boolean;
+  /** The input owner releases readline/raw mode while this interaction runs. */
+  suspend?: () => Promise<void>;
 }
-
-export type CommandHandler = (args: string[]) => Promise<CommandResult | void>;
-
+export interface CommandExecution {
+  signal?: AbortSignal;
+  input?: string;
+  lifecycle?: { sessionId: string; turnId: string };
+}
+export type CommandHandler = (args: string[], execution?: CommandExecution) => Promise<CommandResult | void>;
 export interface ReplOptions {
   commands: Map<string, CommandHandler>;
-  handleNaturalLanguage: (text: string) => Promise<void>;
-  /** Injection untuk test. */
+  handleNaturalLanguage: (text: string, execution?: { signal?: AbortSignal }) => Promise<void>;
   input?: NodeJS.ReadableStream;
   output?: NodeJS.WritableStream;
 }
 
-const PROMPT = color.cyan('❯ ');
-const SIGINT_WINDOW_MS = 1500;
+export function completeCommand(line: string, names: string[]): [string[], string] {
+  const commands = names.map((name) => `/${name}`).sort();
+  if (!line.startsWith('/') || /\s/.test(line)) return [[], line];
+  return [commands.filter((name) => name.startsWith(line.toLowerCase())), line];
+}
 
-/**
- * Loop REPL interaktif (addendum §09/Task 16):
- *   - slash command → dispatcher; selain itu → Intent Router (NL)
- *   - Tab completion slash command (mode terminal)
- *   - History atas/bawah ( bawaan readline di mode terminal)
- *   - Ctrl+C: saat executing → cancel request (best effort); saat idle →
- *     double Ctrl+C keluar. /exit atau Ctrl+D keluar sopan.
- */
+/** Serial line queue for pipes; real completion, cancellation and suspension for TTY. */
 export async function startRepl(opts: ReplOptions): Promise<void> {
   const input = opts.input ?? process.stdin;
   const output = opts.output ?? process.stdout;
-  const isTerminal =
-    (input as { isTTY?: boolean }).isTTY === true &&
-    (output as { isTTY?: boolean }).isTTY === true;
-
-  const rl = readline.createInterface({ input, output, terminal: isTerminal });
-  const commandNames = [...opts.commands.keys()].sort();
-  let executing = false;
+  const terminal = (input as NodeJS.ReadStream).isTTY === true && (output as NodeJS.WriteStream).isTTY === true;
+  const pending: string[] = [];
+  let resolveLine: ((line: string | null) => void) | undefined;
+  let closed = false;
   let shouldExit = false;
+  let active: AbortController | undefined;
   let lastSigint = 0;
-
-  const prompt = (): void => {
-    if (isTerminal) {
-      rl.setPrompt(PROMPT);
-      rl.prompt(true);
-    }
-  };
-
-  // Tab completion (hanya mode terminal — buffered pipe tidak punya line buffer).
-  if (isTerminal) {
-    rl.on('keypress', (_char, key) => {
-      if (!key || key.name !== 'tab' || executing) return;
-      const line = (key as { line?: string }).line ?? '';
-      if (!line.startsWith('/')) return;
-      const partial = line.slice(1).split(/\s+/)[0].toLowerCase();
-      const hits = commandNames.filter((name) => name.startsWith(partial));
-      try {
-        if (hits.length === 1) {
-          const state = rl as unknown as { _line?: string };
-          state._line = `/${hits[0]} `;
-          rl.prompt(true); // redraw baris dengan hasil completion
-        } else if (hits.length > 1) {
-          output.write(`\n  ${color.dim(hits.map((h) => `/${h}`).join('   '))}\n`);
-        }
-      } catch {
-        // fallback: tampilkan daftar tanpa mengganti baris
-        if (hits.length > 0) {
-          output.write(`\n  ${color.dim(hits.map((h) => `/${h}`).join('   '))}\n`);
-        }
+  let history: string[] = [];
+  const prompt = () => { if (terminal && !closed) { rl.setPrompt(color.cyan('❯ ')); rl.prompt(); } };
+  const open = () => {
+    closed = false;
+    const reader = readline.createInterface({ input, output, terminal, history, completer: (line: string) => completeCommand(line, [...opts.commands.keys()]) });
+    reader.on('line', (line) => {
+      if (resolveLine) { const resolve = resolveLine; resolveLine = undefined; resolve(line); }
+      else pending.push(line);
+    });
+    reader.on('history', (lines: string[]) => {
+      for (let i = lines.length - 1; i >= 0; i--) if (/^\s*\/auth-set\b/i.test(lines[i])) lines.splice(i, 1);
+      history = [...lines];
+    });
+    reader.on('close', () => { closed = true; resolveLine?.(null); resolveLine = undefined; });
+    reader.on('SIGINT', () => {
+      if (active) {
+        active.abort();
+        output.write('\nCancellation requested — waiting for the current operation to finish.\n');
+      } else if (Date.now() - lastSigint < 1500) {
+        shouldExit = true; reader.close();
+      } else {
+        lastSigint = Date.now();
+        reader.write(null, { ctrl: true, name: 'u' });
+        output.write('\nPress Ctrl+C again (or /exit) to quit.\n'); prompt();
       }
     });
-  }
-
-  rl.on('SIGINT', () => {
-    if (executing) {
-      // Phase 0: cancel best-effort — workflow melanjutkan langkah saat ini
-      // lalu berhenti di batas fase berikutnya.
-      output.write(`\n${color.yellow('⚠  Execution in progress — cancel requested at next phase boundary.')}\n`);
-      return;
-    }
-    const now = Date.now();
-    if (now - lastSigint < SIGINT_WINDOW_MS) {
-      output.write('\n');
-      shouldExit = true;
-      rl.close();
-      return;
-    }
-    lastSigint = now;
-    output.write(`\n${color.gray('Press Ctrl+C again (or /exit) to quit.')}\n`);
+    return reader;
+  };
+  let rl = open();
+  const nextLine = () => new Promise<string | null>((resolve) => {
+    const line = pending.shift();
+    if (line !== undefined) resolve(line);
+    else if (closed) resolve(null);
+    else resolveLine = resolve;
   });
-
-  // Line queue: piped input bisa mengirim semua baris sekaligus (burst);
-  // event 'line' yang tiba sebelum loop meminta baris berikutnya ditampung,
-  // tidak dibuang.
-  const pendingLines: string[] = [];
-  let pendingResolve: ((line: string | null) => void) | null = null;
-  let closed = false;
-
-  rl.on('line', (line: string) => {
-    if (pendingResolve) {
-      const resolve = pendingResolve;
-      pendingResolve = null;
-      resolve(line);
-    } else {
-      pendingLines.push(line);
-    }
-  });
-  rl.on('close', () => {
-    closed = true;
-    if (pendingResolve) {
-      const resolve = pendingResolve;
-      pendingResolve = null;
-      resolve(null);
-    }
-  });
-
-  const nextLine = (): Promise<string | null> =>
-    new Promise((resolve) => {
-      const buffered = pendingLines.shift();
-      if (buffered !== undefined) resolve(buffered);
-      else if (closed) resolve(null);
-      else pendingResolve = resolve;
-    });
 
   prompt();
-  for (;;) {
-    if (shouldExit) break;
-    const line = await nextLine();
-    if (line === null) break; // close (Ctrl+D / stream habis)
-
-    const parsed = parseInput(line);
-    if (parsed.type === 'natural_language' && parsed.text === '') {
-      prompt();
-      continue;
-    }
-
-    executing = true;
-    resetProgress();
-    try {
-      if (parsed.type === 'command') {
-        if (parsed.command === '') {
-          // "/" kosong — abaikan
-        } else {
+  try {
+    while (!shouldExit) {
+      const line = await nextLine();
+      if (line === null) break;
+      active = new AbortController();
+      resetProgress();
+      try {
+        const parsed = parseInput(line);
+        if (parsed.type === 'command' && parsed.command) {
           const handler = opts.commands.get(parsed.command);
-          if (handler) {
-            const result = await handler(parsed.args);
+          if (!handler) output.write(`${renderUnknownCommand(parsed.command)}\n`);
+          else {
+            const result = await handler(parsed.args, { signal: active.signal, input: line });
+            if (result?.suspend) {
+              rl.close();
+              try { await result.suspend(); } finally { rl = open(); }
+            }
             if (result?.quit) break;
-          } else {
-            output.write(`${renderUnknownCommand(parsed.command)}\n`);
           }
+        } else if (parsed.type === 'natural_language' && parsed.text) {
+          await opts.handleNaturalLanguage(parsed.text, { signal: active.signal });
         }
-      } else {
-        await opts.handleNaturalLanguage(parsed.text);
-      }
-    } catch (error) {
-      const friendly = toFriendly(error);
-      output.write(`${renderError(friendly)}\n`);
-    } finally {
-      executing = false;
+      } catch (error) { output.write(`${renderError(failToUserFriendly(error))}\n`); }
+      finally { active = undefined; }
+      prompt();
     }
-    if (shouldExit) break;
-    prompt();
-  }
-
-  rl.close();
-}
-
-function toFriendly(error: unknown): UserFriendlyError {
-  if (error instanceof UserFriendlyError) return error;
-  const message = error instanceof Error ? error.message : String(error);
-  return new UserFriendlyError('UNKNOWN_ERROR', message, 'Check the output above, or retry.');
+  } finally { rl.close(); }
 }

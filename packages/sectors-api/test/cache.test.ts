@@ -39,9 +39,30 @@ describe('FileCache', () => {
     expect(cache.get('k')).toBeNull();
   });
 
+  it('reuses an entry for the same calendar date and refreshes on the next date', () => {
+    // FileCache calendar-day semantics follow the process-local timezone.
+    // Construct local dates so the test is deterministic on developer machines
+    // and GitHub runners regardless of their configured timezone.
+    let now = new Date(2026, 8, 9, 23, 59, 0);
+    const cache = new FileCache(dir, 60_000, { calendarDay: true, now: () => now });
+    cache.set('BBCA_company_report', { roe: 23.1 });
+
+    now = new Date(2026, 8, 9, 23, 59, 59);
+    expect(cache.get('BBCA_company_report')).toEqual({ roe: 23.1 });
+
+    now = new Date(2026, 8, 10, 0, 0, 1);
+    expect(cache.get('BBCA_company_report')).toBeNull();
+  });
+
   it('treats corrupted files as a miss', () => {
     const cache = new FileCache(dir, 60_000);
     writeFileSync(join(dir, 'k.json'), '{not valid json');
+    expect(cache.get('k')).toBeNull();
+  });
+
+  it('treats an invalid fetchedAt as a miss', () => {
+    const cache = new FileCache(dir, 60_000);
+    writeFileSync(join(dir, 'k.json'), JSON.stringify({ fetchedAt: 'not-a-date', data: { a: 1 } }));
     expect(cache.get('k')).toBeNull();
   });
 

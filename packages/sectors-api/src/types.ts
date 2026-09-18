@@ -44,10 +44,12 @@ export interface CompanyReport {
 export interface QuarterlyFinancials {
   ticker: string;
   currency?: string;
-  /** Terurut terbaru pertama. */
+  /** Terurut terbaru pertama, masing-masing single_quarter. */
   quarters: Array<{
     /** Mis. "2024-Q4". */
     period: string;
+    /** Eksplisit: tiap entry adalah single quarter, bukan kumulatif. */
+    periodType?: 'single_quarter';
     revenue: number;
     netIncome: number;
     /** Pertumbuhan pendapatan YoY, %. */
@@ -55,6 +57,13 @@ export interface QuarterlyFinancials {
     /** Pertumbuhan laba bersih YoY, %. */
     netIncomeGrowthYoy?: number;
   }>;
+  /** Kumulatif YTD/H1 dihitung deterministik dari quarters (P0.1) — bukan dari LLM. */
+  cumulativeYtd?: {
+    /** Mis. "H1 2026 vs H1 2025". */
+    periodLabel: string;
+    revenueGrowthYoy?: number;
+    netIncomeGrowthYoy?: number;
+  };
 }
 
 /** Satu baris hasil screener (sebelum skor match dihitung client-side). */

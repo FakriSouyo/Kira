@@ -3,5 +3,15 @@
   "categories": {
     "correctness": "error"
   },
-  "rules": {}
+  "rules": {
+    "no-control-regex": "off"
+  },
+  "overrides": [
+    {
+      "files": ["apps/**/test/**/*.ts", "packages/**/test/**/*.ts"],
+      "rules": {
+        "no-unused-vars": "off"
+      }
+    }
+  ]
 }

@@ -1,7 +1,6 @@
 import type { JudgeArtifacts } from '../workflows/judgeWorkflow';
 import type { ScreenArtifacts } from '../workflows/screenWorkflow';
 import type { ExecutionArtifacts } from '@harness/execution';
-import { normalizeJudgmentScore } from '@harness/shared';
 import type { UserFriendlyError } from '@harness/shared';
 
 /**

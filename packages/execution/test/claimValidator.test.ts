@@ -150,3 +150,97 @@ describe('ClaimValidator.assertSeenEvidence — invariant "yang dilihat = yang d
     expect(() => validator.assertSeenEvidence(['1111', '9999'], ['1111', '2222'])).toThrow(/never saw/);
   });
 });
+
+describe('ClaimValidator — P1.1 Multi-Metric Reconciliation (singleMetric)', () => {
+  it('flag undefined (backward-compat) saat pasangan metrik tak lengkap', async () => {
+    const out = await validator.validate([validClaim], allowedIds); // company_report → tanpa pasangan
+    expect(out[0].singleMetric).toBeUndefined();
+  });
+
+  it('set singleMetric=true saat claim hanya kutip sisi quarterly tapi cumulativeYtd tersedia', async () => {
+    const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
+    const fin = await db.evidence.save({
+      runId: run.id,
+      ticker: 'BBCA',
+      source: 'sectors.quarterly_financials',
+      data: {
+        quarters: [{ period: '2025-Q4', revenue: 100, netIncome: 20, revenueGrowthYoy: 18.2 }],
+        cumulativeYtd: { periodLabel: 'H1 2026 vs H1 2025', revenueGrowthYoy: 5.1 },
+      },
+    });
+    const ids = [fin.id];
+    const claim: Claim = {
+      ...validClaim,
+      evidenceIds: ids,
+      citedFigures: [{ evidenceId: fin.id, path: 'quarters[0].revenueGrowthYoy', value: 18.2, periodLabel: "Q4'25" }],
+    };
+    const out = await validator.validate([claim], ids);
+    expect(out[0].singleMetric).toBe(true);
+  });
+
+  it('singleMetric=false saat claim kutip kedua sisi same family (quarterly + cumulativeYtd)', async () => {
+    const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
+    const fin = await db.evidence.save({
+      runId: run.id,
+      ticker: 'BBCA',
+      source: 'sectors.quarterly_financials',
+      data: {
+        quarters: [{ period: '2025-Q4', revenue: 100, netIncome: 20, revenueGrowthYoy: 18.2 }],
+        cumulativeYtd: { periodLabel: 'H1 2026 vs H1 2025', revenueGrowthYoy: 5.1 },
+      },
+    });
+    const ids = [fin.id];
+    const claim: Claim = {
+      ...validClaim,
+      evidenceIds: ids,
+      citedFigures: [
+        { evidenceId: fin.id, path: 'quarters[0].revenueGrowthYoy', value: 18.2, periodLabel: "Q4'25" },
+        { evidenceId: fin.id, path: 'cumulativeYtd.revenueGrowthYoy', value: 5.1, periodLabel: 'H1 2026 vs H1 2025' },
+      ],
+    };
+    const out = await validator.validate([claim], ids);
+    expect(out[0].singleMetric).toBeUndefined();
+  });
+
+  it('set singleMetric=true saat claim kutip distribution tapi aggregate juga tersedia', async () => {
+    const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
+    const sent = await db.evidence.save({
+      runId: run.id,
+      ticker: 'BBCA',
+      source: 'sectors.sentiment',
+      data: { aggregate: 0.7, distribution: { positive: 0.7, negative: 0.1, neutral: 0.2 }, articleCount: 20 },
+    });
+    const ids = [sent.id];
+    const claim: Claim = {
+      ...validClaim,
+      evidenceIds: ids,
+      citedFigures: [{ evidenceId: sent.id, path: 'distribution.positive', value: 0.7, periodLabel: '30d' }],
+    };
+    const out = await validator.validate([claim], ids);
+    expect(out[0].singleMetric).toBe(true);
+  });
+
+  it('set singleMetric=true saat claim hanya pakai satu dari dua foreign window yang tersedia', async () => {
+    const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
+    const short = await db.evidence.save({
+      runId: run.id,
+      ticker: 'BBCA',
+      source: 'sectors.foreign_flow',
+      data: { window: '30d', netFlow: 'buy', netForeignPctOfCap: 0.8 },
+    });
+    const long = await db.evidence.save({
+      runId: run.id,
+      ticker: 'BBCA',
+      source: 'sectors.foreign_flow',
+      data: { window: '90d', netFlow: 'sell', netForeignPctOfCap: -0.4 },
+    });
+    const ids = [short.id, long.id];
+    const claim: Claim = {
+      ...validClaim,
+      evidenceIds: [short.id],
+      citedFigures: [{ evidenceId: short.id, path: 'netForeignPctOfCap', value: 0.8, periodLabel: '30d' }],
+    };
+    const out = await validator.validate([claim], ids);
+    expect(out[0].singleMetric).toBe(true);
+  });
+});

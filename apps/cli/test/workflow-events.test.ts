@@ -7,6 +7,7 @@ import { buildContext } from '../src/context';
 import { loadConfig } from '../src/config';
 import { judgeWorkflow } from '../src/workflows/judgeWorkflow';
 import { serializeAgentEvent, type AgentEvent } from '../src/repl/events';
+import { JUDGE_NODE_IDS } from '@harness/command-judge';
 
 /**
  * Integrasi Agent-Events JSONL di judgeWorkflow (Phase 2 Task 2).
@@ -47,6 +48,10 @@ describe('judgeWorkflow → Agent-Events (Phase 2 Task 2)', () => {
     const sessionComplete = events.find((e) => e.type === 'session.complete');
     expect(sessionComplete && sessionComplete.type === 'session.complete' && sessionComplete.status).toBe('completed');
     expect(sessionStart && sessionStart.type === 'session.start' && sessionStart.runId).toBe(artifact.run.id);
+    const plan = events.find((event) => event.type === 'workflow.plan');
+    expect(plan).toMatchObject({ type: 'workflow.plan', workflowId: 'judge' });
+    expect(plan && plan.type === 'workflow.plan' ? plan.nodes.map(node => node.id) : []).toEqual(JUDGE_NODE_IDS);
+    expect(events.indexOf(plan!)).toBeLessThan(events.findIndex(event => event.type === 'phase'));
 
     // phase researcher + minimal satu fase agent
     expect(types).toContain('phase');
@@ -61,6 +66,11 @@ describe('judgeWorkflow → Agent-Events (Phase 2 Task 2)', () => {
     // evidence.found utk source fundamental
     expect(types).toContain('evidence.found');
     expect(events.some((e) => e.type === 'evidence.found' && e.source === 'sectors.company_report')).toBe(true);
+
+    // Narrative agent output is emitted as renderer-neutral public text, so
+    // Ink can show it while the structured result is still being assembled.
+    expect(events.some((e) => e.type === 'agent.text' && e.agent === 'bull' && e.text.length > 0)).toBe(true);
+    expect(events.filter((e) => e.type === 'agent.text' && e.agent === 'bull')).toHaveLength(6);
 
     // seluruh event harus valid satu baris JSON (round-trip)
     for (const ev of events) expect(JSON.parse(serializeAgentEvent(ev))).toEqual(ev);

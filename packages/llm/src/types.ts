@@ -6,11 +6,15 @@ import type { z } from 'zod';
  * Tier 2 — router ringan (Intent Router): model kecil + maxTokens 256
  */
 export interface LLMModelConfig {
+  /** Opaque runtime session affinity for Responses gateways; never part of prompts. */
+  sessionId?: string;
   provider: 'openai' | 'anthropic';
   model: string;
   temperature: number;
   /** Batas output per panggilan — kontrol biaya (addendum §17). */
   maxTokens: number;
+  /** Conservative input context window used by the local budget policy. */
+  contextWindowTokens?: number;
   /**
    * Endpoint kustom (OpenAI-compatible: DeepSeek, OpenRouter, Groq,
    * Ollama/LM Studio lokal, dll). `undefined` = endpoint default provider.
@@ -21,6 +25,12 @@ export interface LLMModelConfig {
    * (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`).
    */
   apiKey?: string;
+  /**
+   * Wire protocol untuk endpoint kustom — seperti di deepseek-harness
+   * `LlmModelDiscoveryRequest.api`. `chat` = /chat/completions (default),
+   * `responses` = /responses (opencode Zen, OpenAI Responses API).
+   */
+  api?: 'chat' | 'responses';
 }
 
 /**
@@ -38,9 +48,33 @@ export interface GenerateObjectParams<T> {
   system?: SystemZones;
 }
 
+/** Structured generation with optional public partial-object updates. */
+export interface StreamObjectParams<T> extends GenerateObjectParams<T> {
+  onPartial?: (partial: Partial<T>) => void;
+}
+
 export interface GenerateTextParams {
   prompt: string;
   system?: SystemZones;
+  /** Caller-owned cancellation; abort prevents subsequent retries/fallbacks. */
+  abortSignal?: AbortSignal;
+}
+
+/** Provider facts attached to one successful model call. Missing usage stays null. */
+export interface LLMCallMetadata {
+  provider: LLMModelConfig['provider'] | 'mock';
+  model: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cachedInputTokens: number | null;
+  totalTokens: number | null;
+  finishReason: string | null;
+  latencyMs: number;
+}
+
+export interface LLMResult<T> {
+  value: T;
+  metadata: LLMCallMetadata;
 }
 
 /** Parameter streaming jalur text (Phase 2 Task 2) — klaim/judgment tetap generateObject. */
@@ -55,6 +89,9 @@ export interface StreamTextParams {
  */
 export interface LLMClientLike {
   generateObject<T>(params: GenerateObjectParams<T>): Promise<T>;
+  /** Transitional usage-aware API; command subagents migrate before legacy value-only methods are removed. */
+  generateObjectResult?<T>(params: GenerateObjectParams<T>): Promise<LLMResult<T>>;
+  streamObject<T>(params: StreamObjectParams<T>): Promise<T>;
   generateText(params: GenerateTextParams): Promise<string>;
   /**
    * Streaming text token-per-token (jalur narasi/REPL). Bukan untuk klaim/

@@ -6,10 +6,12 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@harness/context": "workspace:*",
     "@harness/conversation": "workspace:*",
     "@harness/evidence": "workspace:*",
     "@harness/execution": "workspace:*",
     "@harness/schemas": "workspace:*",
+    "@harness/session-core": "workspace:*",
     "@harness/shared": "workspace:*",
     "better-sqlite3": "^12.2.0",
     "drizzle-orm": "^0.44.0"

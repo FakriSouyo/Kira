@@ -52,9 +52,15 @@ importers:
 
   apps/cli:
     dependencies:
-      '@harness/agent':
+      '@harness/command-core':
         specifier: workspace:*
-        version: link:../../packages/agent
+        version: link:../../packages/command/core
+      '@harness/command-judge':
+        specifier: workspace:*
+        version: link:../../packages/command/judge
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@harness/database':
         specifier: workspace:*
         version: link:../../packages/database
@@ -64,42 +70,71 @@ importers:
       '@harness/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@harness/orchestrator':
+        specifier: workspace:*
+        version: link:../../packages/orchestrator
+      '@harness/routing':
+        specifier: workspace:*
+        version: link:../../packages/routing
       '@harness/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
       '@harness/sectors-api':
         specifier: workspace:*
         version: link:../../packages/sectors-api
+      '@harness/session-core':
+        specifier: workspace:*
+        version: link:../../packages/session/core
       '@harness/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      ink:
-        specifier: ^4.4.1
-        version: 4.4.1(@types/react@18.3.31)(react@18.3.1)
-      ink-select-input:
-        specifier: ^5.0.0
-        version: 5.0.0(ink@4.4.1(@types/react@18.3.31)(react@18.3.1))(react@18.3.1)
-      ink-text-input:
-        specifier: ^5.0.1
-        version: 5.0.1(ink@4.4.1(@types/react@18.3.31)(react@18.3.1))(react@18.3.1)
-      react:
-        specifier: 18.3.1
-        version: 18.3.1
+      '@harness/skill-filesystem':
+        specifier: workspace:*
+        version: link:../../packages/skill/filesystem
+      '@harness/subagent-bear':
+        specifier: workspace:*
+        version: link:../../packages/subagent/bear
+      '@harness/subagent-bull':
+        specifier: workspace:*
+        version: link:../../packages/subagent/bull
+      '@harness/subagent-core':
+        specifier: workspace:*
+        version: link:../../packages/subagent/core
+      '@harness/subagent-judge':
+        specifier: workspace:*
+        version: link:../../packages/subagent/judge
+      '@harness/subagent-researcher':
+        specifier: workspace:*
+        version: link:../../packages/subagent/researcher
 
-  packages/agent:
+  packages/command/core: {}
+
+  packages/command/judge:
     dependencies:
-      '@harness/conversation':
+      '@harness/command-core':
         specifier: workspace:*
-        version: link:../conversation
-      '@harness/evidence':
+        version: link:../core
+      '@harness/subagent-bear':
         specifier: workspace:*
-        version: link:../evidence
-      '@harness/llm':
+        version: link:../../subagent/bear
+      '@harness/subagent-bull':
         specifier: workspace:*
-        version: link:../llm
+        version: link:../../subagent/bull
+      '@harness/subagent-judge':
+        specifier: workspace:*
+        version: link:../../subagent/judge
+      '@harness/subagent-researcher':
+        specifier: workspace:*
+        version: link:../../subagent/researcher
+
+  packages/context:
+    dependencies:
       '@harness/schemas':
         specifier: workspace:*
         version: link:../schemas
+      '@harness/session-core':
+        specifier: workspace:*
+        version: link:../session/core
       '@harness/shared':
         specifier: workspace:*
         version: link:../shared
@@ -115,6 +150,9 @@ importers:
 
   packages/database:
     dependencies:
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../context
       '@harness/conversation':
         specifier: workspace:*
         version: link:../conversation
@@ -127,6 +165,9 @@ importers:
       '@harness/schemas':
         specifier: workspace:*
         version: link:../schemas
+      '@harness/session-core':
+        specifier: workspace:*
+        version: link:../session/core
       '@harness/shared':
         specifier: workspace:*
         version: link:../shared
@@ -186,6 +227,27 @@ importers:
         specifier: ^3.25.0
         version: 3.25.76
 
+  packages/orchestrator:
+    dependencies:
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../context
+      '@harness/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+
+  packages/routing:
+    dependencies:
+      '@harness/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+
   packages/schemas:
     dependencies:
       '@harness/shared':
@@ -201,7 +263,114 @@ importers:
         specifier: workspace:*
         version: link:../shared
 
+  packages/session/core:
+    dependencies:
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../../schemas
+      '@harness/shared':
+        specifier: workspace:*
+        version: link:../../shared
+
   packages/shared: {}
+
+  packages/skill/core: {}
+
+  packages/skill/filesystem:
+    dependencies:
+      '@harness/skill-core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/subagent/bear:
+    dependencies:
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../../context
+      '@harness/llm':
+        specifier: workspace:*
+        version: link:../../llm
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../../schemas
+      '@harness/skill-filesystem':
+        specifier: workspace:*
+        version: link:../../skill/filesystem
+      '@harness/subagent-core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/subagent/bull:
+    dependencies:
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../../context
+      '@harness/llm':
+        specifier: workspace:*
+        version: link:../../llm
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../../schemas
+      '@harness/skill-filesystem':
+        specifier: workspace:*
+        version: link:../../skill/filesystem
+      '@harness/subagent-core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/subagent/core:
+    dependencies:
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../../context
+      '@harness/llm':
+        specifier: workspace:*
+        version: link:../../llm
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../../schemas
+      '@harness/skill-core':
+        specifier: workspace:*
+        version: link:../../skill/core
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+
+  packages/subagent/judge:
+    dependencies:
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../../context
+      '@harness/llm':
+        specifier: workspace:*
+        version: link:../../llm
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../../schemas
+      '@harness/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@harness/skill-filesystem':
+        specifier: workspace:*
+        version: link:../../skill/filesystem
+      '@harness/subagent-core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/subagent/researcher:
+    dependencies:
+      '@harness/llm':
+        specifier: workspace:*
+        version: link:../../llm
+      '@harness/skill-filesystem':
+        specifier: workspace:*
+        version: link:../../skill/filesystem
+      '@harness/subagent-core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
 
 packages:
 
