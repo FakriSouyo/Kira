@@ -40,14 +40,17 @@ describe('FileCache', () => {
   });
 
   it('reuses an entry for the same calendar date and refreshes on the next date', () => {
-    let now = new Date('2026-09-09T23:59:00+08:00');
+    // FileCache calendar-day semantics follow the process-local timezone.
+    // Construct local dates so the test is deterministic on developer machines
+    // and GitHub runners regardless of their configured timezone.
+    let now = new Date(2026, 8, 9, 23, 59, 0);
     const cache = new FileCache(dir, 60_000, { calendarDay: true, now: () => now });
     cache.set('BBCA_company_report', { roe: 23.1 });
 
-    now = new Date('2026-09-09T23:59:59+08:00');
+    now = new Date(2026, 8, 9, 23, 59, 59);
     expect(cache.get('BBCA_company_report')).toEqual({ roe: 23.1 });
 
-    now = new Date('2026-09-10T00:00:01+08:00');
+    now = new Date(2026, 8, 10, 0, 0, 1);
     expect(cache.get('BBCA_company_report')).toBeNull();
   });
 
