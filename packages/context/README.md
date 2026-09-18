@@ -3,7 +3,7 @@
 PR G provides the provider-neutral Context Engine construction pipeline:
 
 ```text
-SessionWorkingContext → Reference Resolver → Context Policy → Context Assembler → ContextPacket
+SessionWorkingContext → bounded Artifact Retriever → Reference Resolver → Context Policy → Context Assembler → ContextPacket
 ```
 
 `SessionWorkingContext` is durable, versioned relevance state. `ContextPacket` is
@@ -18,15 +18,35 @@ provider, reads no history, and shares no cross-session memory. All specialist
 roles render the same canonical Evidence zone; debate state is a separately
 labelled role zone.
 
-- `resolveContextCandidates` resolves only explicit active/pinned references
-  through the `ArtifactStore` boundary and reports legacy, missing, and skipped
-  references with structured diagnostics. A typed `activeThesisRef` uses the
-  existing PR F Bull artifact semantics because PR F has no separate Thesis kind.
+- `retrieveArtifactCandidates` performs bounded, deterministic, same-session
+  lookup by exact subject and real PR F kind. It uses canonical lifecycle order
+  supplied by `ArtifactStore`, chooses the latest valid candidate per
+  subject/kind, and records retrieved provenance; it never searches across
+  sessions, scans prose, calls a provider/model, or executes a workflow.
+- `resolveContextCandidates` resolves explicit active/pinned references and
+  retrieved candidates through the `ArtifactStore` boundary and reports legacy,
+  missing, invalid, and skipped references with structured diagnostics. A typed
+  `activeThesisRef` uses the existing PR F Bull artifact semantics because PR F
+  has no separate Thesis kind.
+- `evaluateArtifactValidity` checks schema, lifecycle ownership, exact subject
+  and kind compatibility, and completed source Execution. Provider freshness is
+  not re-evaluated here: artifacts without durable freshness metadata are
+  labelled prior/unknown rather than presented as newly fetched data.
 - `selectContextCandidates` applies deterministic structured focus rules; it does
-  not infer intent with an LLM or search historical artifacts.
+  not infer intent with an LLM or perform semantic search. Explicit active and
+  pinned artifacts outrank retrieved alternatives, while requested subjects
+  remain isolated.
 - `assembleContext` creates schema-versioned packet data in stable thesis, Bull,
-  Bear, Verdict, then pinned order, deduplicating by canonical artifact ID while
-  retaining role/source provenance.
+  Bear, Verdict, then pinned/retrieved order, deduplicating by canonical artifact
+  ID while retaining role/source provenance. Retrieved artifacts are marked as
+  prior research and pass through the same PR J budgeting and PR H snapshot
+  pipeline.
+
+PR L reuse means context reuse only. It does not memoize or skip `/judge`
+workflow nodes, reuse prior Bull/Bear/Verdict outputs as new Execution results,
+expand historical Evidence, mutate `SessionWorkingContext`, or provide
+cross-session memory. Bull, Bear, and Judge remain `/judge`-scoped specialists
+and continue to receive only current-Execution context.
 
 The package has no Sectors/provider dependency and performs no writes, workflow
 execution, Evidence expansion, freshness decisions, prompt rendering, or model

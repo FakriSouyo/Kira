@@ -84,6 +84,49 @@ describe('PR I conversational context integration', () => {
     await session.close();
   });
 
+  it('retrieves a prior same-session BBRI thesis after the active subject moves to BMRI', async () => {
+    const session = await createHarnessSession(db, loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true }), { write: () => {} });
+    const sectors = providerSpies(session.context.sectors);
+    await session.commands.get('judge')!(['BBRI']);
+    await session.commands.get('judge')!(['BMRI']);
+    const providerCallsBeforeFollowUp = sectors.map(spy => spy.mock.calls.length);
+
+    await session.handleNaturalLanguage('balik ke thesis BBRI tadi');
+
+    expect(sectors.map(spy => spy.mock.calls.length)).toEqual(providerCallsBeforeFollowUp);
+    const artifacts = await db.sessions.getSessionArtifacts(session.conversation.id);
+    const conversationTurn = artifacts.turns.find(turn => turn.command === 'conversation')!;
+    const call = artifacts.modelCalls.find(modelCall => modelCall.turnId === conversationTurn.id)!;
+    const snapshot = await db.contextSnapshots.getById(call.contextSnapshotId!);
+    expect(snapshot?.packet.artifacts.map(item => [item.artifact.ticker, item.artifact.kind])).toEqual([['BBRI', 'BULL_CASE']]);
+    expect(snapshot?.packet.artifacts[0]?.reuseStatus).toBe('PRIOR');
+    expect(snapshot?.packet.provenance.sourceRefs).toContainEqual(expect.objectContaining({ source: 'RETRIEVED' }));
+    expect(artifacts.executions).toHaveLength(2);
+    await session.close();
+  });
+
+  it('retrieves historical same-session context after restart without provider calls', async () => {
+    let session = await createHarnessSession(db, loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true }), { write: () => {} });
+    await session.commands.get('judge')!(['BBRI']);
+    await session.commands.get('judge')!(['BMRI']);
+    const sessionId = session.conversation.id;
+    await session.close();
+    db.raw.close();
+
+    db = openDb({ homeDir: dir });
+    session = await createHarnessSession(db, loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true }), { write: () => {} });
+    const sectors = providerSpies(session.context.sectors);
+    await session.handleNaturalLanguage('balik ke thesis BBRI tadi');
+
+    const artifacts = await db.sessions.getSessionArtifacts(sessionId);
+    const turn = artifacts.turns.find(candidate => candidate.command === 'conversation')!;
+    const call = artifacts.modelCalls.find(candidate => candidate.turnId === turn.id)!;
+    const snapshot = await db.contextSnapshots.getById(call.contextSnapshotId!);
+    expect(snapshot?.packet.artifacts.map(item => item.artifact.ticker)).toEqual(['BBRI']);
+    expect(sectors.every(spy => spy.mock.calls.length === 0)).toBe(true);
+    await session.close();
+  });
+
   it('keeps a context-free conversation unlinked and execution-free', async () => {
     const session = await createHarnessSession(db, loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true }), { write: () => {} });
     const sectors = providerSpies(session.context.sectors);

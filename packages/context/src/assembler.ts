@@ -18,6 +18,9 @@ const ROLE_ORDER: readonly ContextArtifactRole[] = [
   'ACTIVE_BEAR_CASE',
   'ACTIVE_VERDICT',
   'PINNED_ARTIFACT',
+  'RETRIEVED_BULL_CASE',
+  'RETRIEVED_BEAR_CASE',
+  'RETRIEVED_VERDICT',
 ];
 
 function roleRank(role: ContextArtifactRole): number {
@@ -25,7 +28,7 @@ function roleRank(role: ContextArtifactRole): number {
 }
 
 function sourceRank(source: ContextSourceRef['source']): number {
-  return source === 'ACTIVE' ? 0 : 1;
+  return source === 'ACTIVE' ? 0 : source === 'PINNED' ? 1 : 2;
 }
 
 function sourceRefKey(value: ContextSourceRef): string {
@@ -102,6 +105,7 @@ export function assembleContext(params: AssembleContextParams): ContextAssemblyR
         if (role !== 0) return role;
         return sourceRank(left.source) - sourceRank(right.source);
       }),
+      reuseStatus: [...group.sourceRefs.values()].some(source => source.source === 'RETRIEVED') ? 'PRIOR' : undefined,
     }));
 
   const diagnostics = [...(params.diagnostics ?? [])].sort(diagnosticOrder);

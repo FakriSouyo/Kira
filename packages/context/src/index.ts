@@ -1,5 +1,7 @@
 export * from './contracts.js';
 export { resolveContextCandidates } from './resolver.js';
+export { retrieveArtifactCandidates } from './retriever.js';
+export { evaluateArtifactValidity, validityForArtifact } from './validity.js';
 export { selectContextCandidates } from './policy.js';
 export { assembleContext } from './assembler.js';
 export * from './snapshot.js';

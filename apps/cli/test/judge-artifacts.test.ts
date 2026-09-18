@@ -74,6 +74,19 @@ describe('PR F /judge typed artifacts', () => {
     await session.close();
   });
 
+  it('does not reuse prior artifacts as the result of a second /judge', async () => {
+    const session = await createHarnessSession(db, loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true }), { write: () => {} });
+    await session.commands.get('judge')!(['BBRI']);
+    await session.commands.get('judge')!(['BBRI']);
+
+    const trace = await db.sessions.getSessionArtifacts(session.conversation.id);
+    expect(trace.executions).toHaveLength(2);
+    const artifactRows = db.raw.prepare('SELECT artifact_id, execution_id FROM artifacts ORDER BY execution_id, artifact_id').all() as Array<{ artifact_id: string; execution_id: string }>;
+    expect(new Set(artifactRows.map(row => row.execution_id)).size).toBe(2);
+    expect(trace.steps.filter(step => step.runId === trace.executions[1]!.id && step.status === 'completed').length).toBeGreaterThan(0);
+    await session.close();
+  });
+
   it('does not publish successful artifacts for failed or cancelled /judge', async () => {
     const session = await createHarnessSession(db, config(), { write: () => {} });
     await expect(session.commands.get('judge')!(['ZZZZ'])).rejects.toThrow();

@@ -242,12 +242,17 @@ mereferensikan, tidak pernah mengotorisasi reuse data eksternal.
 
 `@harness/context` projects the captured `SessionWorkingContext` into one
 immutable, invocation-scoped `ContextPacket`; it is not journal history or a
-provider-cache payload. The Reference Resolver resolves only explicit active or
-pinned artifact refs, the deterministic Context Policy selects eligible
-candidates, and the Context Assembler emits stable thesis/Bull/Bear/Verdict/
-pinned ordering with artifact-ID deduplication and provenance. PR G does not
-persist snapshots, render prompts, expand Evidence, call providers, or attach
-context to model calls; those boundaries remain for later PRs.
+provider-cache payload. PR L adds bounded same-session Artifact Retrieval by
+exact subject and existing artifact kind, followed by structural validity
+checks against the completed source Execution. The Reference Resolver resolves
+explicit active/pinned refs plus retrieved candidates, the deterministic
+Context Policy selects eligible candidates, and the Context Assembler emits
+stable thesis/Bull/Bear/Verdict/pinned/retrieved ordering with artifact-ID
+deduplication and provenance. Retrieved artifacts are prior context only when
+freshness is unknown; provider freshness remains PR E's authority. PR L does
+not memoize workflow outputs, expand Evidence, call providers/models, mutate
+working context, or search across sessions. Bull/Bear/Judge remain `/judge`-
+scoped specialists and receive current-Execution context only.
 
 ### ContextSnapshot (PR H)
 

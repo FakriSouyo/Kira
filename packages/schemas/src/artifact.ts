@@ -6,6 +6,15 @@ export const ARTIFACT_KINDS = ['BULL_CASE', 'BEAR_CASE', 'VERDICT'] as const;
 export const ArtifactKindSchema = z.enum(ARTIFACT_KINDS);
 export type ArtifactKind = z.infer<typeof ArtifactKindSchema>;
 
+export const ArtifactRetrievalQuerySchema = z.object({
+  sessionId: z.string().min(1),
+  subjects: z.string().min(1).array().min(1),
+  allowedKinds: ArtifactKindSchema.array().min(1),
+  focus: z.enum(['generic', 'downside', 'thesis', 'bull', 'bear']),
+  limit: z.number().int().positive().max(20).optional(),
+}).strict();
+export type ArtifactRetrievalQuery = z.infer<typeof ArtifactRetrievalQuerySchema>;
+
 /** Durable identity; it contains no array position or process-local handle. */
 export const ArtifactRefSchema = z.object({
   kind: ArtifactKindSchema,

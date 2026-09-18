@@ -26,10 +26,13 @@ export const ContextArtifactRoleSchema = z.enum([
   'ACTIVE_BEAR_CASE',
   'ACTIVE_VERDICT',
   'PINNED_ARTIFACT',
+  'RETRIEVED_BULL_CASE',
+  'RETRIEVED_BEAR_CASE',
+  'RETRIEVED_VERDICT',
 ]);
 export type ContextArtifactRole = z.infer<typeof ContextArtifactRoleSchema>;
 
-export const ContextCandidateSourceSchema = z.enum(['ACTIVE', 'PINNED']);
+export const ContextCandidateSourceSchema = z.enum(['ACTIVE', 'PINNED', 'RETRIEVED']);
 export type ContextCandidateSource = z.infer<typeof ContextCandidateSourceSchema>;
 
 export const ContextDiagnosticStageSchema = z.enum(['resolver', 'policy', 'assembler']);
@@ -53,6 +56,14 @@ export const ContextDiagnosticCodeSchema = z.enum([
   'UNSUPPORTED_ROLE',
   'NOT_RELEVANT',
   'DUPLICATE',
+  'WRONG_SESSION',
+  'WRONG_SUBJECT',
+  'WRONG_KIND',
+  'SOURCE_EXECUTION_INCOMPLETE',
+  'DEPENDENCY_MISSING',
+  'UNKNOWN_FRESHNESS',
+  'VALID_PRIOR',
+  'SUPERSEDED',
 ]);
 export type ContextDiagnosticCode = z.infer<typeof ContextDiagnosticCodeSchema>;
 
@@ -82,12 +93,27 @@ export interface ResolvedContextCandidate {
   readonly artifact: ArtifactEnvelope;
   readonly role: ContextArtifactRole;
   readonly source: ContextCandidateSource;
+  readonly validity?: ArtifactValidityResult;
+}
+
+export const ArtifactValidityStatusSchema = z.enum(['VALID', 'VALID_AS_PRIOR', 'INVALID', 'UNKNOWN']);
+export type ArtifactValidityStatus = z.infer<typeof ArtifactValidityStatusSchema>;
+export const ArtifactValidityReasonSchema = z.enum([
+  'SCHEMA_VALID', 'SESSION_MATCH', 'SUBJECT_MATCH', 'KIND_MATCH', 'SOURCE_EXECUTION_COMPLETED',
+  'SOURCE_EXECUTION_INCOMPLETE', 'MISSING_SOURCE_EXECUTION', 'UNKNOWN_FRESHNESS', 'MALFORMED_ARTIFACT',
+  'WRONG_SESSION', 'WRONG_SUBJECT', 'WRONG_KIND', 'DEPENDENCY_MISSING',
+]);
+export type ArtifactValidityReason = z.infer<typeof ArtifactValidityReasonSchema>;
+export interface ArtifactValidityResult {
+  readonly status: ArtifactValidityStatus;
+  readonly reasons: readonly ArtifactValidityReason[];
 }
 
 export const ResolvedContextArtifactSchema = z.object({
   artifact: ArtifactEnvelopeSchema,
   roles: ContextArtifactRoleSchema.array().min(1),
   sourceRefs: ContextSourceRefSchema.array().min(1),
+  reuseStatus: z.enum(['CURRENT', 'PRIOR']).optional(),
 }).strict();
 export type ResolvedContextArtifact = z.infer<typeof ResolvedContextArtifactSchema>;
 
@@ -156,6 +182,7 @@ export type ContextFocus = 'generic' | 'downside' | 'thesis' | 'bull' | 'bear';
 
 export interface ContextPolicyInput {
   readonly focus?: ContextFocus;
+  readonly subjects?: readonly string[];
 }
 
 export interface ContextResolutionResult {
@@ -214,7 +241,17 @@ export interface ResolveContextParams {
   readonly artifactStore: {
     resolve(ref: DurableArtifactRef): Promise<ArtifactEnvelope | null>;
     getById(artifactId: string): Promise<ArtifactEnvelope | null>;
+    getSourceExecution?(executionId: string): Promise<import('@harness/session-core').ArtifactSourceExecution | null>;
   };
+  readonly retrievedCandidates?: readonly RetrievedArtifactCandidate[];
+}
+
+export interface RetrievedArtifactCandidate {
+  readonly ref: DurableArtifactRef;
+  readonly artifact: ArtifactEnvelope;
+  readonly role: ContextArtifactRole;
+  readonly source: 'RETRIEVED';
+  readonly validity: ArtifactValidityResult;
 }
 
 export interface SelectContextParams {

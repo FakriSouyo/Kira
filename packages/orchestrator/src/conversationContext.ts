@@ -26,12 +26,13 @@ function renderClaims(claims: readonly { statement: string }[]): string {
 
 type RenderableArtifact = ContextPacket['artifacts'][number]['artifact'];
 
-function renderArtifact(artifact: RenderableArtifact, roles: readonly ContextArtifactRole[]): string {
+function renderArtifact(artifact: RenderableArtifact, roles: readonly ContextArtifactRole[], reuseStatus?: 'CURRENT' | 'PRIOR'): string {
   const header = line(`${artifact.kind} (${roleLabel(roles)})`, artifact.ticker);
+  const prior = reuseStatus === 'PRIOR' ? '  Status: Prior FinHarness research (freshness not established)' : null;
   if (artifact.kind === 'VERDICT') {
     const judgment = artifact.payload.judgment;
     return [
-      header,
+      header, ...(prior ? [prior] : []),
       `  Stance: ${judgment.stance}`,
       `  Score: ${judgment.score}`,
       `  Confidence: ${judgment.confidence}`,
@@ -41,7 +42,7 @@ function renderArtifact(artifact: RenderableArtifact, roles: readonly ContextArt
   }
   if (artifact.kind === 'BULL_CASE') {
     return [
-      header,
+      header, ...(prior ? [prior] : []),
       `  Thesis reasoning: ${artifact.payload.thesis.reasoning}`,
       '  Thesis claims:',
       renderClaims(artifact.payload.thesis.claims),
@@ -51,7 +52,7 @@ function renderArtifact(artifact: RenderableArtifact, roles: readonly ContextArt
     ].join('\n');
   }
   return [
-    header,
+    header, ...(prior ? [prior] : []),
     `  Bear reasoning: ${artifact.payload.reasoning}`,
     '  Counterpoints:',
     artifact.payload.counterpoints.map(point => `  - [${point.strength}] ${point.argument}`).join('\n'),
@@ -69,7 +70,7 @@ export function renderContextPacket(packet: ContextPacket): string {
 
   if (packet.artifacts.length > 0) {
     sections.push('VERIFIED RESEARCH ARTIFACTS');
-    sections.push(...packet.artifacts.map(item => renderArtifact(item.artifact, item.roles)));
+    sections.push(...packet.artifacts.map(item => renderArtifact(item.artifact, item.roles, item.reuseStatus)));
   }
   if (packet.userAssertions.length > 0) {
     sections.push('USER ASSERTIONS');

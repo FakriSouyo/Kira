@@ -1,13 +1,14 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import {
   ArtifactEnvelopeSchema,
+  ArtifactRetrievalQuerySchema,
   type ArtifactEnvelope,
   type DurableArtifactRef,
 } from '@harness/schemas';
-import type { ArtifactStore } from '@harness/session-core';
+import type { ArtifactSourceExecution, ArtifactStore } from '@harness/session-core';
 import { canonicalJson } from '@harness/shared';
 import type { Orm } from './client';
-import { artifacts as artifactRows, executions } from './schema';
+import { artifacts as artifactRows, executions, researchTurns } from './schema';
 
 type ArtifactRow = typeof artifactRows.$inferSelect;
 
@@ -105,6 +106,45 @@ export class ArtifactStoreSqlite implements ArtifactStore {
     const rows = this.db.select().from(artifactRows).where(eq(artifactRows.executionId, executionId)).orderBy(asc(artifactRows.createdAt)).all();
     const order = new Map<string, number>([['BULL_CASE', 0], ['BEAR_CASE', 1], ['VERDICT', 2]]);
     return rows.map(row => toEnvelope(row as ArtifactRow)).sort((a, b) => (order.get(a.kind) ?? 99) - (order.get(b.kind) ?? 99));
+  }
+
+  async listByQuery(input: Parameters<ArtifactStore['listByQuery']>[0]): Promise<ArtifactEnvelope[]> {
+    const query = ArtifactRetrievalQuerySchema.parse(input);
+    const rows = await this.db.select({ artifact: artifactRows, execution: executions, turn: researchTurns })
+      .from(artifactRows)
+      .leftJoin(executions, eq(executions.id, artifactRows.executionId))
+      .leftJoin(researchTurns, eq(researchTurns.id, artifactRows.turnId))
+      .where(and(
+        eq(artifactRows.sessionId, query.sessionId),
+        inArray(artifactRows.ticker, query.subjects),
+        inArray(artifactRows.kind, query.allowedKinds),
+      ));
+    rows.sort((left, right) => {
+      const turn = (right.turn?.startedAt ?? '').localeCompare(left.turn?.startedAt ?? '');
+      if (turn !== 0) return turn;
+      const attempt = (right.execution?.attempt ?? 0) - (left.execution?.attempt ?? 0);
+      if (attempt !== 0) return attempt;
+      const created = right.artifact.createdAt.localeCompare(left.artifact.createdAt);
+      if (created !== 0) return created;
+      return right.artifact.artifactId.localeCompare(left.artifact.artifactId);
+    });
+    return rows.slice(0, query.limit ?? 20).map(row => toEnvelope(row.artifact));
+  }
+
+  async getSourceExecution(executionId: string): Promise<ArtifactSourceExecution | null> {
+    const row = await this.db.select().from(executions).where(eq(executions.id, executionId)).limit(1);
+    if (!row[0] || row[0].sessionId === null || row[0].turnId === null || row[0].attempt === null) return null;
+    return {
+      id: row[0].id,
+      sessionId: row[0].sessionId,
+      turnId: row[0].turnId,
+      attempt: row[0].attempt,
+      ticker: row[0].ticker,
+      command: row[0].command,
+      status: row[0].status as ArtifactSourceExecution['status'],
+      createdAt: row[0].createdAt,
+      completedAt: row[0].completedAt,
+    };
   }
 
   async resolve(ref: DurableArtifactRef): Promise<ArtifactEnvelope | null> {

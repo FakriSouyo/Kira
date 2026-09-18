@@ -117,6 +117,18 @@ describe('ArtifactStoreSqlite', () => {
     expect(await db.artifacts.getByExecution(ids.execution.id)).toEqual(saved);
   });
 
+  it('lists bounded completed judge artifacts by session, subject, and kind', async () => {
+    const ids = await completedExecution('BBRI');
+    const saved = await db.artifacts.save(bullEnvelope(links(ids)));
+    expect(await db.artifacts.listByQuery({
+      sessionId: ids.session.id, subjects: ['BBRI'], allowedKinds: ['BULL_CASE'], focus: 'thesis',
+    })).toEqual([saved]);
+    expect(await db.artifacts.listByQuery({
+      sessionId: ids.session.id, subjects: ['BMRI'], allowedKinds: ['BULL_CASE'], focus: 'thesis',
+    })).toEqual([]);
+    expect(await db.artifacts.getSourceExecution(ids.execution.id)).toMatchObject({ id: ids.execution.id, status: 'completed', command: 'judge' });
+  });
+
   it('rolls back the whole batch when any artifact fails validation or linkage', async () => {
     const ids = await completedExecution();
     const valid = bullEnvelope(links(ids));

@@ -174,5 +174,27 @@ export async function resolveContextCandidates(params: ResolveContextParams): Pr
     await resolveOne(params, ref, 'PINNED_ARTIFACT', 'PINNED', undefined, false, candidates, sourceRefs, diagnostics);
   }
 
+  for (const retrieved of params.retrievedCandidates ?? []) {
+    if (retrieved.validity.status === 'INVALID') {
+      diagnostics.push(diagnostic({
+        status: 'failed', code: 'MALFORMED_ARTIFACT', reason: retrieved.validity.reasons.join('|'),
+        role: retrieved.role, source: 'RETRIEVED', ref: retrieved.ref, artifactId: retrieved.artifact.artifactId,
+      }));
+      continue;
+    }
+    const parsed = ArtifactEnvelopeSchema.safeParse(retrieved.artifact);
+    if (!parsed.success) {
+      diagnostics.push(diagnostic({ status: 'failed', code: 'MALFORMED_ARTIFACT', reason: 'malformed', role: retrieved.role, source: 'RETRIEVED', ref: retrieved.ref, artifactId: retrieved.artifact.artifactId }));
+      continue;
+    }
+    if (parsed.data.sessionId !== params.sessionId) {
+      diagnostics.push(diagnostic({ status: 'failed', code: 'CROSS_SESSION', reason: 'wrong-session', role: retrieved.role, source: 'RETRIEVED', ref: retrieved.ref, artifactId: retrieved.artifact.artifactId }));
+      continue;
+    }
+    candidates.push({ ...retrieved, artifact: parsed.data });
+    sourceRefs.push(sourceRef(retrieved.role, 'RETRIEVED', retrieved.ref));
+    diagnostics.push(diagnostic({ status: 'resolved', code: 'RESOLVED', reason: retrieved.validity.status, role: retrieved.role, source: 'RETRIEVED', ref: retrieved.ref, artifactId: retrieved.artifact.artifactId }));
+  }
+
   return { candidates, sourceRefs, diagnostics };
 }

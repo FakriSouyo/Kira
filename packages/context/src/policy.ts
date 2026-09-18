@@ -14,15 +14,19 @@ const ROLE_ORDER: readonly ContextArtifactRole[] = [
   'ACTIVE_BEAR_CASE',
   'ACTIVE_VERDICT',
   'PINNED_ARTIFACT',
+  'RETRIEVED_BULL_CASE',
+  'RETRIEVED_BEAR_CASE',
+  'RETRIEVED_VERDICT',
 ];
 
 const roleRank = (role: ContextArtifactRole): number => ROLE_ORDER.indexOf(role);
 
-function selectedForFocus(candidate: ResolvedContextCandidate, focus: ContextFocus): boolean {
+function selectedForFocus(candidate: ResolvedContextCandidate, focus: ContextFocus, subjects?: readonly string[]): boolean {
+  if (subjects && subjects.length > 0 && !subjects.includes(candidate.artifact.ticker)) return false;
   if (candidate.source === 'PINNED') return true;
   if (focus === 'generic') return true;
-  if (focus === 'downside' || focus === 'bear') return candidate.role === 'ACTIVE_BEAR_CASE' || candidate.role === 'ACTIVE_VERDICT';
-  if (focus === 'thesis' || focus === 'bull') return candidate.role === 'ACTIVE_THESIS' || candidate.role === 'ACTIVE_BULL_CASE';
+  if (focus === 'downside' || focus === 'bear') return candidate.role === 'ACTIVE_BEAR_CASE' || candidate.role === 'ACTIVE_VERDICT' || candidate.role === 'RETRIEVED_BEAR_CASE' || candidate.role === 'RETRIEVED_VERDICT';
+  if (focus === 'thesis' || focus === 'bull') return candidate.role === 'ACTIVE_THESIS' || candidate.role === 'ACTIVE_BULL_CASE' || candidate.role === 'RETRIEVED_BULL_CASE';
   return false;
 }
 
@@ -39,20 +43,27 @@ function compareCandidates(left: ResolvedContextCandidate, right: ResolvedContex
   if (roleDifference !== 0) return roleDifference;
   const artifactDifference = left.artifact.artifactId.localeCompare(right.artifact.artifactId);
   if (artifactDifference !== 0) return artifactDifference;
-  return (left.source === 'ACTIVE' ? 0 : 1) - (right.source === 'ACTIVE' ? 0 : 1);
+  const sourceRank = (source: ResolvedContextCandidate['source']): number => source === 'ACTIVE' ? 0 : source === 'PINNED' ? 1 : 2;
+  return sourceRank(left.source) - sourceRank(right.source);
 }
 
 /** Selects explicit resolved candidates using only structured deterministic focus. */
 export function selectContextCandidates(params: SelectContextParams): ContextPolicyResult {
   const focus = params.intent?.focus ?? 'generic';
+  const subjects = params.intent?.subjects;
+  const explicitKeys = new Set(params.candidates
+    .filter(candidate => candidate.source !== 'RETRIEVED')
+    .map(candidate => `${candidate.artifact.ticker}|${candidate.artifact.kind}`));
   const selected: ResolvedContextCandidate[] = [];
   const diagnostics: ContextDiagnostic[] = [];
   for (const candidate of params.candidates) {
-    if (selectedForFocus(candidate, focus)) {
+    const supersededByExplicit = candidate.source === 'RETRIEVED'
+      && explicitKeys.has(`${candidate.artifact.ticker}|${candidate.artifact.kind}`);
+    if (!supersededByExplicit && selectedForFocus(candidate, focus, subjects)) {
       selected.push(candidate);
       diagnostics.push(diagnostic(candidate, 'selected', 'SELECTED'));
     } else {
-      diagnostics.push(diagnostic(candidate, 'skipped', 'NOT_RELEVANT'));
+      diagnostics.push({ ...diagnostic(candidate, 'skipped', 'NOT_RELEVANT'), reason: supersededByExplicit ? 'superseded-by-explicit-ref' : 'not-relevant-to-intent' });
     }
   }
   selected.sort(compareCandidates);

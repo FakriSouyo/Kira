@@ -74,6 +74,10 @@ class MemoryArtifactStore implements ArtifactStore {
   async getByExecution(executionId: string): Promise<ArtifactEnvelope[]> {
     return [...this.artifacts.values()].filter(value => value.executionId === executionId);
   }
+  async listByQuery(query: { sessionId: string; subjects: string[]; allowedKinds: ArtifactKind[]; focus: 'generic' | 'downside' | 'thesis' | 'bull' | 'bear' }): Promise<ArtifactEnvelope[]> {
+    return [...this.artifacts.values()].filter(value => value.sessionId === query.sessionId && query.subjects.includes(value.ticker) && query.allowedKinds.includes(value.kind));
+  }
+  async getSourceExecution(_executionId: string): Promise<null> { return null; }
   async resolve(ref: Extract<ArtifactRef, { kind: ArtifactKind }>): Promise<ArtifactEnvelope | null> {
     this.resolveCalls.push(ref);
     const value = this.artifacts.get(ref.artifactId);
