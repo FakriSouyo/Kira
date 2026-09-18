@@ -19,7 +19,7 @@ import { makeSearchCommand } from './search';
 import { createWebServer } from '../repl/web';
 import { makeVersionCommand } from './version';
 import { UserFriendlyError } from '@harness/shared';
-import { SectorsApiError } from '@harness/sectors-api';
+import { FinancialDataError } from '@harness/financial-data';
 import { PROVIDERS } from '../setup/providers';
 
 const TICKER_RE = /^[A-Z]{2,6}$/;
@@ -38,7 +38,7 @@ function assertTicker(value: string): string {
 
 function failToUserFriendly(error: unknown): UserFriendlyError {
   if (error instanceof UserFriendlyError) return error;
-  if (error instanceof SectorsApiError) {
+  if (error instanceof FinancialDataError) {
     return new UserFriendlyError(error.code, error.message, error.suggestion);
   }
   const message = error instanceof Error ? error.message : String(error);
@@ -194,12 +194,12 @@ function makeSetupCommand(ctx: HarnessContext): CommandHandler {
       return;
     }
     const cfg = loadConfig({ homeDir: ctx.homeDir });
-    const { createSectorsApi } = await import('@harness/sectors-api');
+    const { createSectorsFinancialDataProvider } = await import('@harness/sectors-api');
     const { createLLMClient } = await import('@harness/llm');
     const { default: React } = await import('react');
     const { render } = await import('ink');
     const { SetupWizard } = await import('../setup/wizard.js');
-    const sectors = createSectorsApi({
+    const financialData = createSectorsFinancialDataProvider({
       mock: false,
       apiKey: cfg.sectors.apiKey || undefined,
       baseUrl: cfg.sectors.baseUrl,
@@ -214,7 +214,7 @@ function makeSetupCommand(ctx: HarnessContext): CommandHandler {
         // @ts-ignore dynamic
         React.createElement(SetupWizard, {
           homeDir: cfg.homeDir,
-          deps: { sectors, agentLlm, routerLlm },
+          deps: { financialData, agentLlm, routerLlm },
           onDone: () => {
             try {
               (instance as unknown as { unmount: () => void }).unmount();

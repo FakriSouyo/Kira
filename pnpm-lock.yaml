@@ -67,6 +67,9 @@ importers:
       '@harness/execution':
         specifier: workspace:*
         version: link:../../packages/execution
+      '@harness/financial-data':
+        specifier: workspace:*
+        version: link:../../packages/financial-data
       '@harness/llm':
         specifier: workspace:*
         version: link:../../packages/llm
@@ -206,6 +209,8 @@ importers:
         specifier: workspace:*
         version: link:../database
 
+  packages/financial-data: {}
+
   packages/llm:
     dependencies:
       '@ai-sdk/anthropic':
@@ -259,6 +264,9 @@ importers:
 
   packages/sectors-api:
     dependencies:
+      '@harness/financial-data':
+        specifier: workspace:*
+        version: link:../financial-data
       '@harness/shared':
         specifier: workspace:*
         version: link:../shared

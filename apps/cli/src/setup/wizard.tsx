@@ -19,7 +19,7 @@ export function SetupWizard({
 }: {
   homeDir: string;
   deps: {
-    sectors: { getCompanyReport: (t: string) => Promise<unknown> };
+    financialData: { getCompanyReport: (t: string) => Promise<unknown> };
     agentLlm: { generateText: (p: { prompt: string }) => Promise<unknown> };
     routerLlm: { generateText: (p: { prompt: string }) => Promise<unknown> };
   };

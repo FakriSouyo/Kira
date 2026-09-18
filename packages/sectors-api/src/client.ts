@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { FinancialDataError, type FinancialDataErrorCode } from '@harness/financial-data';
 import { FileCache, type CacheEntryMeta } from './cache';
 import {
   cacheKeyFor,
@@ -20,23 +21,16 @@ import type {
   Sentiment,
 } from './types';
 
-export type SectorsErrorCode =
-  | 'NOT_FOUND'
-  | 'BAD_REQUEST'
-  | 'UNAUTHORIZED'
-  | 'RATE_LIMIT'
-  | 'TIMEOUT'
-  | 'SERVER_ERROR'
-  | 'NETWORK';
+export type SectorsErrorCode = FinancialDataErrorCode;
 
 /** Error Sectors API dengan code yang dipetakan ke pesan ramah user (addendum §21). */
-export class SectorsApiError extends Error {
+export class SectorsApiError extends FinancialDataError {
   constructor(
     public readonly code: SectorsErrorCode,
     message: string,
-    public readonly suggestion: string,
+    suggestion: string,
   ) {
-    super(message);
+    super(code, message, suggestion);
     this.name = 'SectorsApiError';
   }
 }

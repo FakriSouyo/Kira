@@ -5,7 +5,8 @@ import { createLLMClient, DEFAULT_CONTEXT_WINDOW_TOKENS } from '@harness/llm';
 import { DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS } from '@harness/context';
 import { IntentRouter } from '@harness/routing';
 import { MainFinHarnessAgent } from '@harness/orchestrator';
-import { createSectorsApi, type SectorsApi } from '@harness/sectors-api';
+import { createSectorsFinancialDataProvider } from '@harness/sectors-api';
+import type { FinancialDataProvider } from '@harness/financial-data';
 import { FilesystemSkillProvider } from '@harness/skill-filesystem';
 import { BearAgent } from '@harness/subagent-bear';
 import { BullAgent } from '@harness/subagent-bull';
@@ -17,7 +18,7 @@ import { createConversationContextCoordinator, type ConversationContextCoordinat
 
 export interface HarnessContext {
   db: FinharnessDatabase;
-  sectors: SectorsApi;
+  financialData: FinancialDataProvider;
   researcher: ResearcherAgent;
   bull: BullAgent;
   bear: BearAgent;
@@ -57,7 +58,7 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
   return {
     config,
     db,
-    sectors: createSectorsApi({
+    financialData: createSectorsFinancialDataProvider({
       mock: config.sectors.mock,
       apiKey: config.sectors.apiKey || undefined,
       baseUrl: config.sectors.baseUrl,

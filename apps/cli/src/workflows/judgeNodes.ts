@@ -226,7 +226,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'phase', phase: 'researcher', label: "I'm starting with Company Report and Quarterly Financials." });
       events({ type: 'agent.start', agent: 'researcher' });
       progress('researcher', `I'm starting with Company Report and Quarterly Financials for ${ticker}...`);
-      const report = await tool('company_report', signal, () => ctx.sectors.getCompanyReport(ticker));
+      const report = await tool('company_report', signal, () => ctx.financialData.getCompanyReport(ticker));
       const evidence = await saveEvidence(SECTORS_SOURCES.companyReport, report);
       progress('researcher', '✓ Company Report retrieved');
       return evidence;
@@ -234,7 +234,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
 
     /** Quarterly Financials — required ground truth; a failed request ends the run. */
     'fetch-financials': async (_inputs, signal) => {
-      const financials = await tool('quarterly_financials', signal, () => ctx.sectors.getQuarterlyFinancials(ticker));
+      const financials = await tool('quarterly_financials', signal, () => ctx.financialData.getQuarterlyFinancials(ticker));
       const evidence = await saveEvidence(SECTORS_SOURCES.quarterlyFinancials, financials);
       progress('researcher', '✓ Quarterly Financials retrieved');
       return evidence;
@@ -247,8 +247,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
      */
     'fetch-market-data': async (_inputs, signal) => {
       try {
-        const daily = await tool('daily_transaction', signal, () => ctx.sectors.getDailyTransaction(ticker));
-        const foreign = await tool('foreign_flow', signal, () => ctx.sectors.getForeignFlow(ticker));
+        const daily = await tool('daily_transaction', signal, () => ctx.financialData.getDailyTransaction(ticker));
+        const foreign = await tool('foreign_flow', signal, () => ctx.financialData.getForeignFlow(ticker));
         return { daily, foreign };
       } catch (error) {
         assertNotAborted(signal);
@@ -262,9 +262,9 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
     /** News + Filings + Sentiment. Any failed source request degrades the whole group. */
     'fetch-news': async (_inputs, signal) => {
       try {
-        const news = await tool('news', signal, () => ctx.sectors.getNews(ticker));
-        const filings = await tool('filings', signal, () => ctx.sectors.getFilings(ticker));
-        const sentiment = await tool('sentiment', signal, () => ctx.sectors.getSentiment(ticker));
+        const news = await tool('news', signal, () => ctx.financialData.getNews(ticker));
+        const filings = await tool('filings', signal, () => ctx.financialData.getFilings(ticker));
+        const sentiment = await tool('sentiment', signal, () => ctx.financialData.getSentiment(ticker));
         return { news, filings, sentiment };
       } catch (error) {
         assertNotAborted(signal);
