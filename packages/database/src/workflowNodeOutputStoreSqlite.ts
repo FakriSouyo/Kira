@@ -38,8 +38,7 @@ function sameSemanticOutput(left: WorkflowNodeOutput, right: WorkflowNodeOutput)
     && left.nodeId === right.nodeId
     && left.status === right.status
     && left.outputKind === right.outputKind
-    && left.dependencyFingerprint === right.dependencyFingerprint
-    && left.completionGeneration === right.completionGeneration;
+    && left.dependencyFingerprint === right.dependencyFingerprint;
 }
 
 /** Immutable, fenced persistence for future workflow restore seeds. */

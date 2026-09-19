@@ -64,6 +64,8 @@ describe('durable resumability persistence', () => {
     });
     await expect(db.executionProfiles.save(profile)).resolves.toEqual(profile);
     await expect(db.executionProfiles.save(profile)).resolves.toEqual(profile);
+    const sameSemanticProfile = createExecutionProfile({ ...profile, createdAt: '2026-09-19T00:01:00.000Z' });
+    await expect(db.executionProfiles.save(sameSemanticProfile)).resolves.toEqual(profile);
     expect(await db.executionProfiles.getByExecutionId(execution.id)).toEqual(profile);
 
     const conflictingProfile = createExecutionProfile({ ...profile, payload: { reasoningMode: 'reasoning', conditional: false } });
@@ -91,6 +93,8 @@ describe('durable resumability persistence', () => {
 
     await db.sessions.interruptExecution(execution.id);
     await db.sessions.acquireInterruptedExecution(execution.id);
+    const sameOutputAfterReacquire = createWorkflowNodeOutput({ ...output, completionGeneration: 1, createdAt: '2026-09-19T00:02:00.000Z' });
+    await expect(db.workflowNodeOutputs.save(sameOutputAfterReacquire)).resolves.toEqual(output);
     const stale = createWorkflowNodeOutput({ ...output, nodeId: 'other-node', outputId: 'output-other' });
     await expect(db.workflowNodeOutputs.save(stale)).rejects.toMatchObject({ code: 'WORKFLOW_OUTPUT_CONFLICT' });
   });

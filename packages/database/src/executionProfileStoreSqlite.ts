@@ -58,7 +58,10 @@ export class ExecutionProfileStoreSqlite implements ExecutionProfileStore {
         .where(eq(executionProfiles.executionId, profile.executionId)).limit(1).get();
       if (existing) {
         const stored = toProfile(existing);
-        if (stored.fingerprint === profile.fingerprint && stored.createdAt === profile.createdAt) return stored as ExecutionProfile<TPayload>;
+        // createdAt is operational metadata and is deliberately excluded from
+        // the semantic fingerprint; a retry with the same semantic profile
+        // must remain idempotent while retaining the original stored timestamp.
+        if (stored.fingerprint === profile.fingerprint) return stored as ExecutionProfile<TPayload>;
         throw new ExecutionProfileConflictError(`Execution profile ${profile.executionId} is immutable and already has a different value`);
       }
       tx.insert(executionProfiles).values({
