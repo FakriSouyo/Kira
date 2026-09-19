@@ -1,9 +1,10 @@
 # AGENTS.md
 
 Financial Agent Harness — monorepo pnpm untuk sistem riset saham evidence-based
-multi-agent. Baca [planning/addendum_v3.0.md](planning/addendum_v3.0.md) (v3.1,
-locked source of truth) sebelum mengubah `packages/`; baca [ARCHITECTURE.md](ARCHITECTURE.md)
-untuk keputusan desain & tabel Deviations.
+multi-agent. Baca [ARCHITECTURE.md](ARCHITECTURE.md) untuk keputusan desain dan
+invariant runtime, [docs/ROADMAP.md](docs/ROADMAP.md) untuk arah arsitektur, dan
+[docs/PROGRESS.md](docs/PROGRESS.md) untuk status proyek sebelum mengubah
+`packages/`.
 
 ## Pre-release stance: foundation over blast radius
 

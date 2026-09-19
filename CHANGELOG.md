@@ -1,6 +1,7 @@
 # Changelog
 
-Semua perubahan terdokumentasi — sumber `git log --oneline` + `ARCHITECTURE.md` Deviasi.
+Historical release information lives here. Current architecture, roadmap, and
+status live in `ARCHITECTURE.md`, `docs/ROADMAP.md`, and `docs/PROGRESS.md`.
 
 ## 0.3.0 — 2026-09-04 (Phase 8 · Release & Distribution)
 
@@ -8,7 +9,7 @@ Semua perubahan terdokumentasi — sumber `git log --oneline` + `ARCHITECTURE.md
 
 ## 0.2.0 — 2026-09-03 (Phase 6 · Final RC)
 
-- **Final RC:** evaluasi agregat Phase 0→6 vs addendum §04–§29 (`progress/phase-6/eval.md`), bump `0.2.0-rc→0.2.0`, gate `203/203` (Deviasi #27).
+- **Final RC:** evaluasi agregat Phase 0→6 vs the then-current addendum contract, bump `0.2.0-rc→0.2.0`, gate `203/203` (historical release hardening).
 
 ## 0.2.0-rc — 2026-09-03 (Phase 5 · Version + Metrics)
 

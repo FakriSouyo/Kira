@@ -2,7 +2,7 @@ import type { LLMModelConfig } from '@harness/llm';
 import { DEFAULT_AGENT_CONFIG, DEFAULT_ROUTER_CONFIG } from '@harness/llm';
 
 /**
- * Provider registry — single source of truth for wizard UI (Phase 9B).
+ * Provider registry — single source of truth for the setup wizard UI.
  * Friendly names → internal model IDs; baseURL defaults per provider.
  * Do not hardcode elsewhere — inspect this file for provider list.
  */

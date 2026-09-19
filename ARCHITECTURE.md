@@ -1,557 +1,296 @@
-# ARCHITECTURE - FinHarness Stateful Financial Agent Harness (A-L baseline + PR M/N/O)
+# FinHarness Architecture
 
-Dokumen teknis untuk current runtime, keputusan desain, dan historical deviations.
-PR A-L adalah baseline stateful harness saat ini. PR M menambahkan seam provider
-financial yang tetap mempertahankan perilaku A-L, PR N menambahkan verified
-financial snapshots, dan PR O menambahkan durable resumability foundations.
-Bagian phase/addendum yang lebih lama tetap dipertahankan di bawah sebagai audit
-trail keputusan sebelumnya.
+This document describes the current runtime architecture and its invariants.
+It is not a chronological implementation diary. The canonical roadmap is
+[`docs/ROADMAP.md`](docs/ROADMAP.md), and current project status is
+[`docs/PROGRESS.md`](docs/PROGRESS.md).
 
-## 1. Current Runtime Layers & Invariants
+## System shape
 
-```
+```text
 apps/cli
-  ├─ explicit slash commands
-  └─ natural-language conversation
-          |
-          v
+  explicit slash commands + natural-language conversation
+          │
+          ▼
 packages/orchestrator + packages/routing
-          |
-          v
+          │
+          ▼
 packages/context
-  Resolver -> bounded artifact retrieval -> validity -> policy -> assembler
-          -> token budget / deterministic compaction
-          -> ContextSnapshot
-          |
-          +------------------------------+
-          |                              |
-          v                              v
-packages/command                    packages/subagent
-WorkflowRunner definitions          Bull / Bear / Judge runtime
-          |                              |
-          +---------------+--------------+
-                          v
-       evidence / execution / session / conversation
-                          |
-                          v
-                    packages/database
-
-External provider seams:
-  packages/llm
-  packages/financial-data (provider-neutral financial contract)
-  packages/sectors-api
+  resolver → retrieval → validity → policy → assembler
+          │
+          ├───────────────┬─────────────────┐
+          ▼               ▼                 ▼
+packages/command   packages/subagent   packages/financial-data
+WorkflowRunner     Bull/Bear/Judge     provider-neutral seam
+          │               │                 │
+          └───────────────┴─────────────────┘
+                          ▼
+     evidence / execution / session / conversation
+                          │
+                          ▼
+                   packages/database
 ```
 
-Current invariants:
+External seams are explicit: `packages/llm` owns model clients,
+`packages/financial-data` owns the provider-neutral financial contract, and
+`packages/sectors-api` is the current financial provider implementation.
 
-- `Session -> Turn -> Execution` is the canonical lifecycle. A normal conversation
+## Core boundaries and invariants
+
+- `Session → Turn → Execution` is the canonical lifecycle. A conversational
   Turn may have zero ResearchExecutions.
-- `/judge` is the explicit deterministic debate workflow. It owns Researcher ->
-  Bull -> Bear -> rebuttal -> Judge -> deterministic evidence check -> Verdict.
-- Bull/Bear/Judge are workflow-scoped specialists. Other commands do not implicitly
-  invoke them.
-- Natural-language input goes through `MainFinHarnessAgent`. It may answer using
-  available context or recommend an explicit command; it does not auto-execute
-  `/judge`, `/research`, `/compare`, or `/screen`.
-- `SessionWorkingContext` is durable relevance state, `ContextPacket` is an
-  invocation projection, and `ContextSnapshot` records the exact final packet
-  used by a model call.
-- PR L artifact reuse is bounded same-session reuse as prior context only. It does
-  not memoize workflow outputs, skip a new `/judge`, or inject historical artifacts
-  into current-execution specialist grounding.
-- Provider cache/freshness, Evidence, artifacts, context, and workflow execution are
-  separate concerns and must not be treated as interchangeable storage layers.
-- A canonical Execution may be `running`, `interrupted`, `completed`, `failed`,
-  or `cancelled`. Restart reconciliation uses `running -> interrupted`; only an
-  explicit acquire uses `interrupted -> running`, and the acquire increments a
-  resume generation used to fence stale writers.
-- Lifecycle-backed Executions persist an immutable ExecutionProfile before
-  provider/model work. The profile envelope is generic; `/judge` owns only its
-  typed payload.
-- Durable node outputs are immutable records in `workflow_node_outputs`, not
-  mutable `workflow_steps`. Same semantic writes are idempotent; different
-  semantic writes conflict.
-- `WorkflowRunner` accepts generic completed/skipped restore seeds and emits
-  `workflow.step.restored`; it has no database, domain, or `/judge` knowledge.
-- Specialist reasoning remains Evidence-grounded and typed. Persistence remains
-  owned by workflow/composition boundaries rather than model-generated side effects.
+- `/judge` is an explicit workflow boundary. It owns the Researcher → Bull →
+  Bear → rebuttal → Judge → deterministic evidence check → Verdict path.
+- Bull, Bear, and Judge are workflow-scoped specialists. Other commands do not
+  implicitly invoke the debate pipeline.
+- Natural-language input is handled by `MainFinHarnessAgent`; it does not
+  silently execute `/judge`, `/research`, `/compare`, or `/screen`.
+- Provider cache/freshness, Evidence, artifacts, context, and workflow
+  execution are separate storage and authority boundaries.
+- `SessionWorkingContext` is durable relevance state, `ContextPacket` is a
+  model-invocation projection, and `ContextSnapshot` records the exact final
+  packet used by a ModelCall.
+- Historical artifacts can be reused as bounded same-session context, but they
+  do not memoize a new `/judge` or become authoritative current-run evidence.
+- Persistence is owned by workflow/composition boundaries, not by model output.
 
-## PR M — Financial Data Provider Seam
-
-PR M inverts the financial-data dependency without changing the `/judge` graph,
-the lifecycle/context engine, or the provider retrieval policy.
-
-Before:
+## Canonical lifecycle
 
 ```text
-consumer
-    ↓
-SectorsApi
-    ↓
-SectorsClient / MockSectorsApi
+Session
+  └─ Turn
+      └─ zero or more Execution attempts
+          └─ WorkflowStep / ModelCall / Evidence / Artifact records
 ```
 
-After:
+Every accepted input creates one Turn. A Judge command creates a canonical
+Execution for that Turn. Execution attempts preserve session and turn ownership,
+and terminal state is durable and idempotently enforced.
 
-```text
-consumer
-    ↓
-FinancialDataProvider
-    ↓
-SectorsFinancialDataProvider
-    ↓
-existing Sectors client / cache / freshness policy
-```
-
-`packages/financial-data` owns the provider-neutral domain shapes and the
-`FinancialDataProvider` contract. `packages/sectors-api` retains the Sectors
-HTTP client, response normalization, authentication, cache, freshness policy,
-derived sentiment, error mapping, and deterministic mock. The composition root
-selects the current Sectors-backed implementation and injects it as
-`HarnessContext.financialData`.
-
-PR M invariants:
-
-- workflows and consumers no longer own Sectors provider identity;
-- Sectors remains the only current real provider;
-- provider cache/freshness authority remains in the provider/cache layer;
-- provider response, provider cache, Evidence, Artifact, Context, and Memory
-  remain separate layers;
-- `/judge` behavior and provider request counts remain unchanged;
-- Bull/Bear/Judge remain provider-blind and receive current-Execution Evidence
-  plus typed specialist context only;
-- required financial failures remain fatal, while optional market/news failures
-  retain their existing degrade behavior;
-- natural-language conversation does not auto-run `/judge`;
-- no database migration is needed because provider selection is runtime
-  composition, not durable business state;
-- Verified Financial Snapshot, Capability Registry, and model-runtime
-  generalization are not implemented in PR M.
-
-The architecture transition is:
-
-```text
-A-L complete
-    ↓
-M  Financial Data Provider Seam
-    ↓
-N  Verified Financial Snapshot
-    ↓
-O  Durable resumability foundation
-    ↓
-P  /judge checkpoint codecs + resume planner
-    ↓
-model/runtime generalization
-    ↓
-later financial intelligence layers
-```
-
-## PR N — Verified Financial Snapshot
-
-PR N inserts an immutable, execution-scoped financial-input boundary between
-provider acquisition and reasoning:
-
-```text
-FinancialDataProvider
-        ↓
-normalized provider-neutral observations
-        ↓
-deterministic verification
-        ↓
-accepted Evidence
-        ↓
-finalized VerifiedFinancialSnapshot manifest
-        ↓
-Bull / Bear / Judge
-```
-
-`VerifiedFinancialSnapshot` is deterministic runtime verification, not a claim
-that the provider data is economically true, externally audited, or
-independently corroborated. It records the exact accepted observations for one
-Session → Turn → Execution and is immutable, restart-safe, and unique per
-Execution. A retry with the same canonical payload is idempotent; a different
-payload for the same Execution is a conflict. A new Execution always receives a
-new snapshot even when the provider reuses a fresh cache entry.
-
-V1 covers `company_report` and `quarterly_financials` as required observations,
-plus `daily_transaction`, `foreign_flow`, `news`, `filings`, and `sentiment` as
-optional observations. Optional absence is explicit: `NOT_REQUESTED` means the
-profile disabled the category, while `UNAVAILABLE` means a requested category
-failed or was rejected. Present observations carry provider-neutral provenance
-(`providerId`, `source`, `origin`, `fetchedAt`, `dataAsOf`, `requestedAsOf`,
-`period`, and derived lineage where known) and deterministic verification
-outcomes. Unknown timestamps remain `null`; financial quarter labels remain
-period semantics rather than fabricated dates.
-
-The Sectors cache remains PR E's freshness authority. Snapshot persistence does
-not cache provider responses, decide freshness, or reuse data across
-Executions. Sectors sentiment remains a local derived observation from news and
-foreign-flow inputs; no paid sentiment endpoint is introduced. Bull, Bear, and
-Judge remain provider/snapshot-blind and receive Evidence only. The snapshot is
-not an Artifact, ContextSnapshot, ContextPacket, memory record, or retrieval
-source, and no cross-provider reconciliation or Claim Graph is added.
-
-`collect-sources` is the sole `/judge` financial-input boundary: it verifies
-required and optional results, materializes Evidence only from accepted
-observations, persists the final snapshot manifest with those Evidence IDs, and
-only then allows
-`select-supporting-evidence` and the first Bull call to run. Existing Evidence
-content-hash deduplication and `run_evidence` membership are unchanged; the
-snapshot stores the resulting Evidence IDs instead of changing Evidence rows.
-The durable store is `FinancialSnapshotStoreSqlite` on migration `0012`, with
-lookup by snapshot ID or Execution ID.
-
-## PR O — Durable Resumability Foundation
-
-PR O establishes durable state and generic runtime primitives without exposing
-a user-facing resume flow or attempting to serialize the `/judge` domain graph.
-
-### Lifecycle and restart reconciliation
-
-The canonical Execution state machine is:
+The canonical execution states are:
 
 ```text
 running ───────→ completed
    │             failed
    │             cancelled
    └───────────→ interrupted ───────→ running
-                                  (resumeGeneration + 1)
+                                  resumeGeneration + 1
 ```
 
-`interrupted` is a resumable non-terminal state. `completed`, `failed`, and
-`cancelled` remain terminal. The database store exposes separate
-`interruptExecution` and `acquireInterruptedExecution` operations so an
-interrupted Execution cannot be terminalized or acquired twice concurrently.
-The parent Turn remains `running` while it has only an interrupted attempt.
+`interrupted` is non-terminal. `completed`, `failed`, and `cancelled` are
+terminal. A terminal execution cannot be reopened. Reacquisition updates the
+same Execution row and ID; it does not create a retry Execution.
 
-On startup, `ConversationController` converts abandoned running Executions to
-`interrupted`. If an attempt already completed or failed, canonical terminal
-state still wins. A journal run block backed by an interrupted Execution stays
-visibly running; restart does not invent `run.settled` or `turn.settled` events.
+## Command boundaries
 
-### Immutable execution profiles
+The implemented command surface includes `/judge`, `/screen`, `/search`,
+`/history`, `/session`, `/resume`, `/web`, `/export`, `/version`, setup/status
+commands, and local session controls. `/challenge`, `/compare`,
+`/investigate`, and `/research` remain planned stubs.
 
-Migration `0013_durable_resumability.sql` adds `execution_profiles` and the
-`resume_generation` column. A profile contains the execution identity,
-workflow/version, stable graph fingerprint, command, ticker, creation time, and
-a deterministic semantic fingerprint. The profile is saved after canonical
-Execution creation and before `/judge` can call a provider or model. The
-generic envelope lives in `@harness/session-core`; the typed Judge payload and
-graph identity live in `@harness/command-judge`.
+`/resume` currently displays session state. It is not true same-Execution
+Judge resume. `resumeJudgeRun` remains an explicit full re-run helper and is not
+connected to the durable restore contracts. `/continue` is not implemented.
 
-Profiles are immutable. Repeating the same semantic save is idempotent; an
-identity or payload conflict fails closed. Legacy direct `ExecutionStore` runs
-remain non-resumable and do not receive a profile.
-
-### Immutable workflow node outputs
-
-`workflow_node_outputs` is deliberately separate from the mutable diagnostic
-`workflow_steps` trace. Each output stores a schema version, workflow identity,
-node identity, `completed`/`skipped` status, output kind, dependency fingerprint,
-data-only payload, output fingerprint, completion generation, and creation time.
-Writes are immutable and unique per Execution + node. The store accepts an
-identical semantic retry, rejects a conflicting value, requires a canonical
-Execution profile, and rejects stale resume generations. PR O provides this
-envelope and store; PR P will define the exact `/judge` node codecs and planner.
-
-### Generic runner restore contract
-
-`WorkflowRunner` remains a pure graph scheduler. Its restore seeds contain only
-`nodeId`, `completed` plus a data value, or `skipped`. The runner validates node
-identity, duplicate seeds, disabled-state consistency, and restored dependency
-closure before scheduling the remaining DAG frontier. Restored nodes emit
-`workflow.step.restored` and never emit fresh `started`/`completed` events.
-The CLI trace recorder ignores restore events so replay does not overwrite
-execution timing as if work happened again.
-
-PR O intentionally does not implement `/resume` or `/continue`, does not wire
-`resumeJudgeRun` into the lifecycle, does not add `/judge` output codecs, and
-does not generalize model providers or introduce a distributed scheduler.
-
-## 2. Evidence-First Flow (/judge, termasuk Debate ronde Phase 1)
-
-1. **Researcher** (bukan LLM): fetch `company_report` + `quarterly_financials`
-   and optional enrichment → normalize and verify provider results → materialize
-   accepted observations into Evidence Store with dedup content-hash (SHA-256
-   canonical JSON) → persist one `VerifiedFinancialSnapshot` manifest containing
-   those Evidence IDs.
-2. **Bull** (`claim`): system prompt 2 zona → `generateObject` (Zod) → reasoning + klaim.
-3. **Validasi 3 lapis** (`ClaimValidator`):
-   - Layer 1: struktur (Zod — `evidenceIds` non-kosong, uuid valid)
-   - Layer 2: evidence ID ada di DB (anti-hallucination)
-   - Layer 3: evidence termasuk allowed set run ini (anti cross-run contamination)
-4. **Bear** (`challenge`): klaim Bull + evidence → `generateObject` →
-   counterpoints (`targetClaimId` + `argument` + `strength`). Validasi
-   run-scoped (`validateChallenge`): `targetClaimId` harus klaim milik run ini
-   dan `evidenceIds` Bear harus ada di DB + dalam allowed set.
-5. **Bull rebuttal** (`response`): counterpoints Bear → `generateObject` →
-   reasoning + klaim pertahanan (klaim tervalidasi 3 lapis seperti pada langkah 3).
-6. **Judge**: semua klaim (Bull + rebuttal) + conversation penuh →
-   `generateObject` → judgment rubrik 5 kategori.
-7. Persist: `executions` (state machine running→completed/failed), `agent_messages`
-   (sequence_order 0–4), `claims`, `judgments` — audit trail penuh per `run_id`.
-
-## 3. Prompt & Token/Cache Strategy (addendum §17)
-
-System prompt = 2 zona:
-
-- **Zona [1]**: preamble + evidence block (`renderEvidenceBlock`) — key JSON
-  di-sort rekursif (`sortKeys`) sehingga blok **byte-identical** antar agent
-  dalam satu run. Dilarang data volatil (timestamp, ID acak) di zona ini.
-- **Zona [2]**: persona & instruksi spesifik agent.
-
-Prefix (zona [1] + pemisah) yang identik memanfaatkan **automatic prefix caching**
-OpenAI. LLMClient menggabungkan zona menjadi satu string (lihat Deviasi #1).
-
-`maxTokens` terkunci per tier: agent 2000 (t0.2), router 256 (t0.0) — kontrol biaya.
-
-## 4. Skor Judge — Penegakan Deterministik
-
-LLM hanya menghasilkan breakdown 5 kategori; **skor keseluruhan dihitung ulang
-oleh kode** (`normalizeJudgmentScore`, `packages/shared/src/rubric.ts`):
-
-```
-score = round( Σ wᵢ·sᵢ / Σ wᵢ )   atas kategori non-null saja
-momentum & risk = null selama data market belum di-fetch
-→ bobot 25/20/20 direnormalisasi atas 65
-```
-
-Stance juga dipaksa align: `>60 bullish, <40 bearish, selainnya neutral`.
-Aritmetika LLM tidak dapat diaudit; rumus rubrik bersifat non-negotiable.
-
-## 5. Mock Mode (Development Offline)
-
-- `--mock-sectors`: `MockSectorsApi` menyajikan fixture 5 bank (BBCA, BBRI, BMRI,
-  BBNI, BJTM) dengan data konsisten; ticker tak dikenal melempar `NOT_FOUND`
-  persis seperti client asli (jalur error tetap teruji).
-- `--mock-llm`: `MockLLMClient` deterministik — **bukan template kosong**:
-  - Router: regex intent (ticker IDX 4-huruf, kata kunci beli/tumbuh/overvalued/vs)
-  - Bull: **membaca evidence block dari zona [1]** dan membangun klaim dari angka
-    riil (ROE, growth YoY) dengan confidence berbasis threshold; bila prompt
-    berisi marker debat ("Bear Agent raised the following challenges") → mode
-    rebuttal dengan claim id `rebuttal_N`
-  - Bear: menarget klaim Bull yang tercantum di prompt (id dibaca dari baris
-    `(claim: <id>, Confidence: ...)`) dan membangun argumentasi dari angka
-    evidence dengan strength berbasis threshold
-  - Judge: menghitung jumlah klaim per confidence dari prompt, skor via rubrik;
-    bila conversation berisi `BEAR (challenge)` → summary menyebut debate ronde
-    dan confidence turun ke `moderate`
-  - Output selalu divalidasi dengan Zod schema pemanggil — mock yang menyimpang
-    membuat test gagal, bukan silent.
-
-Kombinasi kedua flag menjalankan seluruh pipeline E2E offline — dipakai oleh
-`apps/cli/test/e2e.test.ts` (spawn proses CLI asli, verifikasi output + state DB).
-
-## 6. Caching (addendum §13)
-
-| Level | Lokasi | TTL |
-|---|---|---|
-| Evidence | SQLite `evidence` (dedup content-hash, persisten) | permanen |
-| Sectors API | file `<home>/cache/sectors_api/*.json` | 24 jam (config) |
-| LLM prompt | sisi provider (prefix caching) | sesuai provider |
-
-Screener tidak di-cache (kriteria bervariasi per panggilan). File cache ditulis
-atomik (tmp + rename), key di-sanitize, file korup = cache miss.
-
-## 7. Error Handling (addendum §21)
-
-Semua error di-map ke `UserFriendlyError { code, message, suggestion }` sebelum
-mencapai terminal: `NOT_FOUND`, `UNAUTHORIZED`, `RATE_LIMIT`, `TIMEOUT`,
-`SERVER_ERROR`, `NETWORK` (Sectors), `EVIDENCE_HALLUCINATION` (validasi —
-termasuk challenge Bear yang menarget claim/evidence asing), `INVALID_TICKER`,
-`MISSING_TICKER`, `VALIDATION_UNAVAILABLE` (gagal **mengeksekusi** validasi → fail
-run, lihat §24-B.3), `NEWS_UNAVAILABLE` (kegagalan researcher news → enrichment
-degrade, lihat §24-A.5), `UNKNOWN_ERROR`.
-Run yang gagal tetap tercatat di `executions` dengan status `failed`.
-
-## 8. Deviations dari Addendum (terdokumentasi)
-
-| # | Addendum | Implementasi | Alasan |
-|---|---|---|---|
-| 1 | Anthropic breakpoint `cache_control` eksplisit di akhir zona [1] | Zona tetap byte-identical, tetapi digabung jadi satu string system prompt | AI SDK 5.0.250 (versi yang terpasang) men-tipekan `system` sebagai `string` saja — per-part `providerOptions` tidak tersedia. Zona [1] byte-identical tetap aktif; breakpoint menyusul saat upgrade AI SDK. |
-| 2 | `renderEvidenceBlock` di `shared/prompt.ts` memakai `JSON.stringify(sortKeys)` pretty | Sama persis (pretty 2-spasi) | Sesuai. `sortKeys`/`canonicalJson` dipindah ke `@harness/shared` (dipakai prompt & dedup), `@harness/evidence` me-re-export agar API lama utuh. |
-| 3 | Endpoint Sectors API (kontrak HTTP) | Terpusat di `packages/sectors-api/src/client.ts` (base URL configurable) | Kontrak API riil belum tersedia; mock mode jadi jalur development. Saat API riil tersedia, hanya file client yang disentuh. |
-| 4 | Retry LLM: `generateWithRetry` di LLMClient | LLMClient retry error ber-`code` retryable (`RATE_LIMIT`/`TIMEOUT`/`SERVER_ERROR`) dengan backoff eksponensial | AI SDK sudah mem-retry `APICallError` 429/5xx secara internal (dengan Retry-After) — lapisan LLMClient adalah defense-in-depth untuk error yang dibungkus, bukan duplikat backoff. |
-| 5 | — | Skor & stance judgment dihitung ulang deterministik di `JudgeAgent` | Aritmetika LLM tidak dapat diaudit; rubrik §15 non-negotiable. |
-| 6 | `pnpm finharness` membuka REPL | Sesuai, ditambah `--mock-sectors` / `--mock-llm` / `--home` | Mock LLM dibutuhkan agar E2E & demo offline deterministik tanpa API key. |
-| 7 | Hints `/evidence`, `/export` di contoh output §19 | Tidak ditampilkan (command belum ada di scope Phase 0) | Core commands Phase 0 = /judge, /screen, /help, /exit + stubs; hint ke command yang tidak ada menyesatkan. |
-| 8 | Ctrl+C saat executing = "cancel immediately" | Best-effort: notifikasi + berhenti di batas fase berikutnya | Node tidak dapat mem-batalkan fetch/AI SDK call yang sedang berjalan; batas fase (researcher→bull→judge) adalah titik cancel yang aman. |
-| 9 | §17 dua-tier LLM hanya menyebut provider OpenAI/Anthropic default | Ditambah `baseURL`/`apiKey` per tier (env `LLM_BASE_URL`/`LLM_API_KEY` global, atau `base_url`/`api_key` per-tier di config.json) — mendukung endpoint OpenAI-compatible apa pun (DeepSeek, OpenRouter, Ollama lokal) | Ekstensi, bukan konflik: default tetap OpenAI/Anthropic bila field kosong. **Keputusan krusial:** `resolveModel` selalu memakai `provider.chat(model)` (chat completions) — call default provider OpenAI memakai Responses API yang hanya ada di OpenAI asli dan akan gagal di endpoint kustom. Teruji dengan fake server OpenAI-compatible (wire-level) di `packages/llm/test/client.test.ts`. |
-| 10 | §15 prompt challenge Bear tidak menampilkan id klaim Bull | Prompt challenge mencantumkan id di tiap baris klaim: `(claim: <claimId>, Confidence: <c>)` | Skema Bear menuntut `targetClaimId` yang valid — id harus terlihat oleh LLM. Tervalidasi run-scoped oleh `ClaimValidator.validateChallenge`. |
-| 11 | §15 tidak mengatur id klaim pada rebuttal Bull | Klaim rebuttal dinormalisasi workflow menjadi `rebuttal_1..n` sebelum persist | `UNIQUE(run_id, claim_id)` — id LLM bebas bisa bentrok dengan klaim asli; normalisasi juga menandai asal claim di audit trail. |
-| 12 | §27 Roadmap: Phase 1 = "Bear Agent + Bull rebuttal, Market Researcher, News Researcher" | Debate ronde (Bear + rebuttal) selesai; **Market & News Researcher terspesifikasi** di addendum §24-A | Addendum v3.1 hanya memberi nama domain data (Daily Transaction, Foreign Flow / News, Filings, Sentiment). Kontrak endpoint, skema evidence, dan desain agent kini dikunci di `addendum_v3.0.md` §24-A — implementasi berjalan langsung di atas kode Phase 0 + Debate ronde tanpa migrasi schema DB. |
-| 13 | — (pola baru, bukan deviasi addendum) | **Tiga pola disiplin diadopsi** sebagai invariant: §24-B (1) "yang dilihat = yang dicatat" — `agent_messages.metadata.seenEvidenceIds` byte-identical dengan evidence block zona [1] + assertion `claim.evidenceIds ⊆ seenEvidenceIds` (bukan warning); (2) replay fixture keyless utk integration/E2E (Task 19) sbg pelengkap mock generatif; (3) **fail-closed** utk jaminan integritas (gagal *mengeksekusi* validasi → run `failed`, bukan silent-lolos), sedangkan enrichment Market/News tetap silent-degrade (§24-A.5) | Diadaptasi dari pola `deepseek-harness/` tanpa dependency baru; tidak menyalin kode DSH. Rincian di `addendum_v3.0.md` §24-B. |
-| 14 | §24-A.2 kontrak endpoint Market/News (path logis vs riil) | **Tercapai/tertutup setelah migrasi v1→v2**: v1 API *discontinued* (HTTP 410 sejak 2026-05-11). Client kini memakai **v2**: base URL `/v2`, auth `Authorization: <key>` **tanpa** prefix Bearer (Bearer → 401), dan jalur: `/company/report/{s}/`, `/financials/quarterly/{s}/` (array), `/daily/{s}/` (array), `/foreign-flow/{s}/` (`{data:[{net_foreign_inflow}]}`), `/news/?symbols=` (`{results}`), `/filings/?symbol=` (`{results}`), `/companies/` (screener). Kontrak diverifikasi terhadap `docs.sectors.app` + panggilan live. Transpormasi v2→canonical terpusat di `client.ts` agar konsumen (agent opaque) tak berubah. |
-| 14b | Screener `roe` di v2 (`/companies/`) | `roe` tidak diekspos `companies` v2 → `ScreenerRow.roe = undefined` (`client.ts:280`), `computeMatchScore:56` `profitable` selalu 0 di real (hanya `growing` aktif). Mock tetap pakai `roe` fixture agar demo `/screen profitable` deterministik. | Low untuk CLI demo; `where=roe>0` sudah dikirim (Task 3) — server memfilter, walau `roe` tetap undefined di row (skor profitable tetap 0 client-side; filter server-side yang berlaku). |
-| 18 | Screener `where` SQL v2 belum dipetakan | `SectorsClient.screen` pakai `GET /companies/?limit=200` + `computeMatchScore` client-side atas `{results}` (deterministik, sesuai `where` mock). `?criteria=` kanonik tidak dikirim; `?where=` SQL-native belum dipakai. | **TERTUTUP 2026-09-03 Phase 3 Task 3**: `buildWhereClause` + `screen` kini kirim `?where=` (`roe>0`, `yoy_quarter_revenue_growth>0`) encode, fallback 400→tanpa where. `ScreenerRow.roe` tetap undefined — skor client-side tidak bergantung `where`. |
-| 16 | §24-A.4 News Researcher "Sentiment" (endpoint v2 tak ada) | `getSentiment` menjadi **turunan**: dari `company_report.overview.tags` + sign foreign-flow (keputusan: tanpa panggilan berbiaya tambahan; news & foreign sudah di-fetch). Filings/news pakai envelope `{results}`; `sectors.sentiment` source evidence tetap dipertahankan dari hasil turunan | v2 tidak punya endpoint sentimen agregat. Konsisten dgn desain opaque evidence; mock LLM membaca `aggregate`/`distribution.negative` dari data evidence yang tetap sama bentuknya. |
-| 17 | §24-A.3 Quarterly Financials & growth (v2) | v2 `/financials/quarterly/{s}/` hanya mengembalikan **satu kuartal** per panggilan (perlu `report_date` untuk kuartal lain). **TERTUTUP 2026-09-03**: `SectorsClient.getQuarterlyFinancials` kini mengisi `revenueGrowthYoy`/`netIncomeGrowthYoy` yang kosong dari `company_report.financials.yoy_quarter_*_growth` (pct, report sudah di-fetch & cached — `getCompanyReport` hit cache). Rubrik growth 20% kini berjalan dengan data asli; `CompanyReport.financials` diperluas `yoyQuarterRevenueGrowth`/`yoyQuarterEarningsGrowth`; fixture mock diselaraskan. | Menghindari N-call per run; kalau `report` tidak tersedia, tetap `undefined` (rubrik renorm). |
-| 15 | §12 kebijakan "env + credential file, tidak pernah materialize ke proses" (Referensi DSH) | Sekadar catatan kebijakan → **diwujudkan**: `loadConfig` kini membaca `.credentials.json` opsional (`~/.finharness/.credentials.json`) dengan prioritas key **env → `.credentials.json` → config.json (legacy) → default**; `config.json` difokuskan ke non-secret | Key mentah dijauhkan dari `config.json` agar isi config aman dibagikan/di-screenshot. `sectors_api.key` / `llm.*.api_key` di `config.json` dipertahankan sebagai fallback backward-compat (test lama tetap lulus). Prioritas: env > credential file > config legacy. |
-| 19 | Phase 2 Task 1 — session helper & pemetaan read-back | `listRuns` + `getExecutionWithArtifacts` di `executionStoreSqlite.ts` memetakan ulang baris **manual inline** (`sourceType`/`JSON.parse` per kolom), bukan memanggil helper existing `toEvidence(row)`. Ini menduplikasi pemetaan snake→camel di luar `schema.ts` (melawan kutipan AGENTS.md "pemetaan eksplisit hanya di schema.ts"). **TERTUTUP 2026-09-03**: `toEvidence`/`EvidenceRow` kini di-`export` dari `evidenceStoreSqlite.ts` dan `getExecutionWithArtifacts` reuse `toEvidence` (bukti konsistensi: test `session.test.ts` `getExecutionWithArtifacts().evidence toEqual getByRun()`). | Refactor hanya menyentuh pemetaan evidence; behavior tak berubah, `pnpm check` tetap hijau (150+ test). |
-| 20 | ORDER deviasi | Tabel Deviations kini tidak kontigu (12,13,14,**14b,18,16,17**,15,19). | Kosmetik; urutan semantik (migrasi → deviasi v2 → phase-2) lebih penting daripada nomor kontigu. Biarkan. |
-| 21 | Phase 2 Task 2 — streamText dua jalur + Agent-Events JSONL | `generateObject` tetap untuk klaim/judgment (zona [1] byte-identical, cache prefix). `LLMClient.streamText` (Vercel `streamText → textStream`) adalah **jalur kedua** hanya untuk narasi/REPL `message.delta`; sengaja **tanpa `withRetry`** (stream tak bisa di-retry tengah jalan). Konsumsi: `for await (const c of client.streamText(...))`. `Agent-Events` di `apps/cli/src/repl/events.ts` (`session/phase/tool/evidence/message.delta`) dipicu `judgeWorkflow(…, events)` default no-op → **E2E tak berubah** (events opt-in, dipanggil hanya bila sink diberikan, dibuktikan `workflow-events.test.ts`). | Mock `MockLLMClient.streamText` yield 3 chunk deterministik; `FakeLLM` di `packages/agent/test/fakes.ts` dilengkapi stub `streamText`. |
-| 22 | Phase 3 Task 1 — LangGraph vs hardcode | Addendum §27 Phase 3: evaluate LangGraph, conditional workflows. **Dievaluasi: tidak adopsi LangGraph** — premature abstraction untuk 2 workflow (AGENTS.md minimal abstraction). Gantikan dengan `Workflow` 50-baris linear + conditional branch di `apps/cli/src/workflows/workflow.ts` (step/branch/run, fail-closed). | Tidak ada dependency baru; `judgeWorkflow` tetap hardcode, `Workflow` hanya dipakai untuk dokumentasi/orchestration ringan; `pnpm check` 191/191. |
-| 23 | Phase 3 Task 2 — Conditional debate + judgment upsert | `judgeWorkflow(…, {conditional})` → extra Bear2 (seq5) + Bull2 (seq6) + Judge2 (seq7) bila `stance neutral` atau `40<=score<=60`; `judgments` `UNIQUE(run_id)` kini **upsert** (`onConflictDoUpdate`) agar overwrite sah untuk conditional. | `conditional.test.ts` 3 tests. Deviasi #23 menutup test "UNIQUE throw" lama → kini `upsert overwrite`. |
-| 24 | Phase 3 Task 3 — Where SQL-native | `buildWhereClause` mapping `profitable→roe>0`, `growing→yoy_quarter_revenue_growth>0`, `screen` kirim `?where=` encode + fallback 400→tanpa where. | Menutup #14b/#18; `where.test.ts` 6 tests, `pnpm check` 191/191. |
-| 25 | Phase 4 — Session UX + Web preview | `/history [--limit]` (listRuns), `/session <runId>` (getExecutionWithArtifacts→markdown), `/resume` alias, `/web [--port]` tiny `node:http` server (GET / + /api/history + /api/run/:id), `JudgeArtifacts.conditionalUsed` badge di renderer. | `/web` tidak auto-start, default 3280 (hindari DSH 3080); `history.test.ts` (3) + `web.test.ts` (3), `pnpm check` 197/197. |
-| 26 | Phase 5 — Version + Metrics | `package.json` `0.1.0→0.2.0-rc`, `VERSION` dari `package.json` + `/version` command, `--version` CLI flag, `formatDuration` + `/history` `Time Xs`, `renderHelp` lengkap (history/session/resume/web/export/version). | Fallback `0.1.0` bila file tak ada; `version.test.ts` (3) + `metrics.test.ts` (3), `pnpm check` 203/203. |
-| 27 | Phase 6 — Final RC | `0.2.0-rc→0.2.0` + `eval.md` agregat 0→6 vs addendum §04–§29, gate final. **Stop di Phase 6** (Phase 7 pgvector/Tauri deferred Future). | `eval.md` + `pnpm check` 203/203, `--version` → `0.2.0`. |
-| 28 | Phase 7 — Future Vector Prototype (lanjutan `lanjut`) | `vector.ts` `mockEmbedding` 8-dim + `cosineSimilarity`, `search.ts` `searchEvidence` (keywordOverlap + cosine), `/search <query> [--run --limit]` + `renderSearchResult`, normalized vision DDL docs only (tanpa migrasi/pgvector real). | Mock placeholder pgvector Future; `vector.test.ts` (4) + `search.test.ts` (4), `pnpm check` **211/211**. |
-| 29 | Phase 8 — Release & Distribution (lanjutan) | `.github/workflows/ci.yml` (`pnpm check` Node22), `CHANGELOG.md` Phase0→8, `README.md` polish badge `v0.3.0` + commands lengkap, bump `0.2.0→0.3.0`. | Hardening pasca-Future; `pnpm check` tetap **211/211**. |
-| 30 | Phase 9A — Real Future (lanjutan 9A) | `0002_normalized.sql` real migration + `schema.ts` `financials_normalized`/`daily_normalized` + `NormalizedStore` upsert, `vector.ts` `getEmbedding` (LLM→fallback mock), `Workflow.run({signal})` + `judgeWorkflow({signal})` abort check. | Real minimal offline-safe; `normalized.test.ts` (4) + `abort.test.ts` (4), `pnpm check` **219/219** (35 files). |
-
-## 9. Struktur Data (ringkas)
-
-- `executions`: state machine `running → interrupted|completed|failed|cancelled`,
-  with `interrupted → running` only through an acquire (transisi ganda dilarang)
-- `execution_profiles`: immutable semantic profile per canonical Execution
-- `workflow_node_outputs`: immutable typed checkpoint envelopes per Execution + node
-- `evidence`: `UNIQUE(content_hash)` — dedup lintas run; `data` = JSON TEXT
-- `agent_messages`: `UNIQUE(run_id, message_id)`, urut `sequence_order`
-- `claims`: `UNIQUE(run_id, claim_id)`
-- `judgments`: `UNIQUE(run_id)`, `breakdown` JSON TEXT (5 kategori)
-
-Konvensi: **snake_case di DB ↔ camelCase di TS/Zod**, dipetakan eksplisit di
-`packages/database/src/schema.ts` (satu-satunya tempat yang tahu dua konvensi).
-
-### Canonical lifecycle foundation (PR A)
-
-`ResearchSessionStore` adalah persistence boundary untuk relasi durable
-`Session -> Turn -> Execution`, bukan pemilik workflow, context, artifact,
-journal projection, cache, atau memory. Setiap input yang diterima akan menjadi
-satu Turn setelah wiring production di PR B; Turn dapat memiliki nol atau banyak
-Execution attempt.
-
-Migrasi `0007_canonical_lifecycle.sql` mempertahankan `research_turns.run_id`
-sebagai kolom transisi nullable tanpa constraint unik, lalu memindahkan ownership
-ke `executions.session_id`, `executions.turn_id`, dan `executions.attempt`. Relasi
-lama di-backfill sebagai attempt 1. Execution lama tanpa research turn tetap
-valid dan tidak dipaksa memiliki relasi palsu. Status terminal execution canonical
-mencakup `completed`, `failed`, dan `cancelled`; PR O menambahkan `interrupted`
-sebagai resumable non-terminal.
-
-### Live lifecycle and journal linkage (PR B)
-
-`createHarnessSession` adalah composition boundary untuk request live. Setiap
-input yang diterima membuat tepat satu Turn melalui `ResearchSessionStore`, lalu
-menyelesaikannya sebagai `completed`, `failed`, atau `stopped`. Percakapan biasa
-tidak membuat Execution. `/judge` membuat Execution canonical untuk Turn yang
-sama, tetapi tetap menjalankan pipeline manual yang ada; pemindahan execution
-truth ke `WorkflowRunner` dikerjakan di PR C (selesai — Deviation #33).
-
-Command yang presentasinya ditangani lokal oleh workspace TTY (`/help`, menu,
-`/context`, dan `/new`) tetap melewati boundary lifecycle yang sama; UI tidak
-boleh membuat jalur input kedua. Saat restart, proyeksi journal yang masih
-`running` direkonsiliasi terhadap lifecycle canonical: status terminal canonical
-diproyeksikan apa adanya, sedangkan Execution yang sungguh terputus dipindahkan
-ke `interrupted` dan Turn induknya tetap `running` sampai ada penyelesaian nyata.
-
-`ConversationJournal` hanya menyimpan audit/replay append-only. Event baru
-memakai payload version 1 dan membawa `turnId`, `executionId` bila ada,
-`correlationId`, serta rantai `causationId`; `sessionId`, sequence, dan timestamp
-tetap berada pada envelope journal. Event lama tanpa metadata itu tetap dapat
-dibaca. Pembuatan Session tidak lagi dimiliki journal.
-
-### SessionWorkingContext (PR D)
-
-Working context adalah materialized view **versioned** dari "apa yang masih
-relevan di satu session" — reference state terstruktur, bukan history. Journal
-tetap pemilik urutan kejadian; `SessionWorkingContext` hanya memiliki yang masih
-relevan. Contract: `packages/session/core/src/workingContext.ts`
-(`applyWorkingContextPatch` murni, `assertWorkingContextCommit` untuk CAS,
-`deriveWorkingContextPatch` hanya dari baris durable). Storage:
-`session_context_versions` (migrasi `0008`) + `WorkingContextStoreSqlite`
-(`current`/`at`/`history`/`commit`); versi lama tetap terbaca dan tidak ada pointer
-"current" terpisah, sehingga tidak ada state turunan yang bisa drift.
-
-Updater tunggal ada di `apps/cli/src/repl/workingContext.ts`, dipanggil dari
-composition boundary setelah Turn settle `completed`:
+## Financial evidence flow
 
 ```text
-/judge BBRI         → activeSubjects=[BBRI], currentIntent=judge,
-                      activeVerdictRef={kind:'judgment', executionId} (resolve via judgments.getByRun)
-kenapa BBRI turun?  → currentIntent=conversation (Turn tanpa Execution; subject tetap)
-Turn failed/stopped → tidak publish apa pun
+FinancialDataProvider
+        ↓
+selective retrieval + freshness policy
+        ↓
+provider normalization and deterministic verification
+        ↓
+Evidence Store
+        ↓
+VerifiedFinancialSnapshot
+        ↓
+Bull / Bear / Judge reasoning
 ```
 
-Dua guard compare-and-set menolak penulis stale: `expectedVersion` lama
-(`STALE_CONTEXT_VERSION`) dan prefix journal lama (`STALE_SOURCE_SEQUENCE`).
-`sourceSequence` adalah sequence kanonik `turn.started` milik Turn yang diterima,
-bukan journal tail saat settlement, sehingga completion Turn lama tidak dapat
-terlihat causally lebih baru hanya karena selesai belakangan.
-Journal menerima satu event referensi `session.context.updated` per versi; payload
-context tidak diduplikasi ke journal, dan kegagalan append tidak membatalkan versi
-durable (diperbaiki deterministik saat restore). Field yang belum punya produsen
-durable (thesis/bull/bear/risk ref, focus topics, pinned refs, user assertion,
-summary ref) dibiarkan kosong — bukan diarang; PR F/G yang mengisinya. PR E
-(freshness/reuse provider) sengaja tidak ada di sini: working context hanya
-mereferensikan, tidak pernah mengotorisasi reuse data eksternal.
+Required Company Report and Quarterly Financials must verify before reasoning.
+Optional Market and News enrichment is represented explicitly as
+`NOT_REQUESTED` or `UNAVAILABLE` when absent. Sentiment is derived from the
+accepted financial observations rather than treated as an untracked paid call.
 
-### ContextPacket (PR G)
+Every canonical Execution receives its own immutable verified snapshot. A
+provider cache is an acquisition optimization, not a snapshot or Evidence
+authority.
 
-`@harness/context` projects the captured `SessionWorkingContext` into one
-immutable, invocation-scoped `ContextPacket`; it is not journal history or a
-provider-cache payload. PR L adds bounded same-session Artifact Retrieval by
-exact subject and existing artifact kind, followed by structural validity
-checks against the completed source Execution. The Reference Resolver resolves
-explicit active/pinned refs plus retrieved candidates, the deterministic
-Context Policy selects eligible candidates, and the Context Assembler emits
-stable thesis/Bull/Bear/Verdict/pinned/retrieved ordering with artifact-ID
-deduplication and provenance. Retrieved artifacts are prior context only when
-freshness is unknown; provider freshness remains PR E's authority. PR L does
-not memoize workflow outputs, expand Evidence, call providers/models, mutate
-working context, or search across sessions. Bull/Bear/Judge remain `/judge`-
-scoped specialists and receive current-Execution context only.
+Evidence is execution-scoped for reasoning and carries provenance and content
+identity. Claims must reference allowed Evidence, Bear challenges must target
+valid Bull claims, and score/stance normalization is deterministic code.
 
-### ContextSnapshot (PR H)
+## Context engine
 
-`ContextSnapshot` is the immutable durable record of the exact structured
-`ContextPacket` used for one invocation. Its canonical SHA-256 fingerprint
-excludes only operational creation time; packet trust distinctions, provenance,
-source refs, selected artifact IDs, diagnostics, and stable ordering are
-preserved. `ModelCall.contextSnapshotId` is nullable for existing/transitional
-calls that did not consume a ContextPacket; explicitly supplied context cannot
-silently degrade to a null link. PR H does not inject context into agents,
-render prompts, count tokens, or change provider behavior.
-
-### Rencana PR berikutnya (Core Refactor Plan)
-
-Urutan PR dan definisinya yang mengikat ada di `docs/core/03-CONTEXT-AND-MEMORY.md`
-§21 (PR A–PR L) dan `docs/core/13-CORE-REFACTOR-PLAN.md` §8. PR A–PR G selesai;
-**PR E = selective provider retrieval + freshness policy** disisipkan setelah PR D
-dan sebelum integrasi Context Engine pertama:
-permintaan Sectors menjadi demand-driven per requirement node, data yang masih
-valid di-reuse, hanya yang stale/missing/incompatible di-refresh, `fetchedAt` /
-`dataAsOf` / `period` / `requestedAsOf` tetap dibedakan, dan cache identity
-memuat operation/argumen/asOf/period. PR E tidak mengimplementasikan ContextPacket,
-Context Engine, capability registry, atau provider abstraction generik; boundary
-Context Engine ↔ provider dicatat di `03-CONTEXT-AND-MEMORY.md` §12.
-
-### Context Budget (PR J)
-
-After assembly, the CLI budgets the rendered `ContextPacket` against the
-selected agent's configured context-window capability, output reserve, prompt
-components, and deterministic safety margin. Structural compaction proceeds in
-stable trust-preserving stages (open questions, assumptions, assertions,
-typed artifact projections, then lower-priority artifacts according to focus).
-It does not mutate durable artifacts or working context and makes no provider or
-LLM calls. Only the final packet that fits is persisted as `ContextSnapshot` and
-sent to `MainFinHarnessAgent`; an impossible required context fails before
-snapshot/model invocation. Counts are explicitly conservative estimates, and
-the existing model usage metadata remains authoritative for actual provider
-accounting.
-
-## 10. Pengujian
-
-```
-packages/**/test  — unit: hash, cache, client (fetch di-inject), LLM
-                    (MockLanguageModelV2), agent (fakes), store SQLite
-apps/cli/test     — parser, config, E2E (spawn CLI asli, mock mode,
-                    verifikasi output & state DB)
+```text
+SessionWorkingContext
+        ↓
+reference resolution + bounded artifact retrieval
+        ↓
+artifact validity
+        ↓
+context policy
+        ↓
+context assembler
+        ↓
+token budget + deterministic compaction
+        ↓
+ContextSnapshot → ModelCall
 ```
 
-E2E memverifikasi: flow penuh dengan Debate ronde (5 pesan berurutan:
-researcher → bull claim → bear challenge → bull response → judge decision),
-integritas evidenceIds claim ⊆ evidence run, klaim rebuttal tersimpan,
-skor konsisten dengan breakdown (renormalisasi), ticker tidak ditemukan →
-run `failed` + error ramah, routing natural language, screener, stub.
+Working context is a versioned materialized view of durable relevance, not a
+journal replay. Context snapshots are immutable invocation records. Model calls
+link to the exact snapshot when one is used. Conversation context may reuse
+valid same-session research references, but it does not turn historical output
+into current-run evidence or trigger a hidden workflow.
+
+## Workflow runtime
+
+`WorkflowRunner` is the generic dependency-aware scheduler. A definition
+contains stable node IDs, dependency IDs, required/optional semantics, optional
+profile gates, and composition-owned adapters. The runner:
+
+- validates node identity and dependency references;
+- computes a DAG frontier rather than assuming a linear sequence;
+- runs independent ready nodes concurrently;
+- propagates required failures and optional degradation;
+- supports cancellation at node boundaries;
+- emits workflow lifecycle events for projection and trace persistence.
+
+The production `/judge` definition has 15 stable nodes. Financial retrieval,
+Evidence policy, model calls, and persistence adapters remain outside the
+generic runner and are supplied by the command composition layer.
+
+## Durable resumability foundation — PR O
+
+PR O is complete and merged. It provides generic primitives; it does not
+implement the user-facing PR P resume flow.
+
+```text
+ResearchExecution
+  ├─ lifecycle status
+  ├─ resume generation
+  ├─ immutable ExecutionProfile
+  ├─ WorkflowStep diagnostic trace
+  └─ immutable WorkflowNodeOutput
+            ↓
+future PR P Resume Planner
+            ↓
+validated restored values
+            ↓
+generic WorkflowRunner
+```
+
+### Restart reconciliation
+
+On local CLI startup, abandoned `running` canonical Executions are reconciled
+to `interrupted`. The parent Turn remains `running` while it has only an
+interrupted attempt. Reconciliation does not acquire, rerun, create a new
+Execution, publish working context, or publish final artifacts. It repairs the
+durable lifecycle/projection boundary only.
+
+The local CLI assumes the previous runtime is gone when it starts. There is no
+heartbeat, distributed lease, worker registry, or multi-process liveness claim.
+
+### ExecutionProfile
+
+`ExecutionProfile` is the immutable semantic configuration for one canonical
+Execution. The generic envelope contains execution identity, workflow ID and
+version, deterministic graph fingerprint, command, ticker, typed JSON payload,
+semantic fingerprint, and creation metadata. The Judge payload records the
+actual reasoning mode, conditional flag, researcher flags, provider, and model
+captured before provider/model work.
+
+The profile fingerprint is canonical JSON hashed with SHA-256. It excludes
+timestamps, function source, machine paths, and environment-specific metadata.
+The profile is saved before lifecycle-backed `/judge` provider or model work.
+Same-semantic retries are idempotent; semantic drift conflicts and never
+overwrites the original profile.
+
+### Workflow identity
+
+Judge uses an explicit workflow version. The generic graph fingerprint covers
+workflow identity/version, node IDs, dependency arrays, required/optional
+semantics, executor identity, and whether a node is conditionally enabled. It
+does not serialize JavaScript functions, closures, labels, timestamps, or paths.
+Runtime profile data distinguishes conditional execution configuration without
+hashing executable predicates.
+
+### WorkflowNodeOutput
+
+`WorkflowNodeOutput` is a separate immutable, data-only envelope for a future
+restore planner. It contains execution and workflow identity, node identity,
+status (`completed` or `skipped`), output kind, dependency fingerprint, payload
+or references, output fingerprint, completion generation, and creation time.
+
+The store requires a canonical lifecycle Execution and matching ExecutionProfile,
+enforces workflow identity and current resume generation, rejects stale writers,
+and allows one output per Execution + node. Semantic retries are idempotent;
+conflicting values fail closed. Generation fences writers but is not part of
+semantic output identity.
+
+Payloads are JSON data only. They must not contain functions, clients, streams,
+open handles, abort controllers, credentials, or raw provider transport state.
+
+### Restore contract
+
+The generic runner accepts validated completed/skipped restore seeds:
+
+```ts
+type WorkflowRestoreSeed =
+  | { nodeId: string; status: 'completed'; value: unknown }
+  | { nodeId: string; status: 'skipped' };
+```
+
+Restored nodes do not execute `node.run`. Completed values are available to
+downstream inputs; skipped nodes satisfy dependencies with `undefined`. The
+runner rejects unknown/duplicate nodes, invalid statuses, disabled-state
+contradictions, and missing restored dependencies. Restored nodes emit
+`workflow.step.restored`, not synthetic `started` or `completed` events.
+
+The diagnostic `workflow_steps` trace is not automatically a checkpoint. A
+future planner must require a valid immutable node output before reusing a
+completed step.
+
+## Storage authority matrix
+
+| Store | Authority |
+|---|---|
+| ConversationJournal | append-only conversation audit and projection input |
+| SessionWorkingContext | versioned durable relevance state |
+| Evidence | accepted source observations and provenance |
+| FinancialSnapshot | verified execution-scoped financial input manifest |
+| ContextSnapshot | exact model invocation context |
+| ArtifactStore | semantic Bull/Bear/Verdict research products |
+| WorkflowStep | diagnostic execution trace |
+| WorkflowNodeOutput | immutable future continuation data |
+| ExecutionProfile | immutable run configuration |
+
+These stores are intentionally not interchangeable. Checkpoint/resume is not
+provider-cache reuse, artifact reuse, context replay, or journal replay.
+
+## Failure and restart semantics
+
+Required workflow failures settle the canonical Execution as `failed`; user
+cancellation settles it as `cancelled`. Process loss is represented as
+`interrupted` and remains visible for future acquisition. Final artifact
+publication and working-context updates occur only after the surrounding Turn
+and Execution semantics permit them. The remaining completion/publication crash
+window is a future hardening concern, not an implicit resume guarantee.
+
+Errors cross the CLI boundary as structured user-facing errors. Internal
+conflicts remain diagnosable without persisting secrets or exposing raw
+credentials.
+
+## Current roadmap
+
+The current and future milestone order is maintained in
+[`docs/ROADMAP.md`](docs/ROADMAP.md). The next milestone is:
+
+**PR P — `/judge` Same-Execution Checkpoint / Resume**
+
+PR P must restore the same Execution's validated snapshot, Evidence, and typed
+debate outputs, compute a safe DAG frontier, continue the interrupted work, and
+repair final publication. It must not be described as a generic workflow rerun
+or artifact reuse.
