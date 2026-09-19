@@ -9,11 +9,12 @@ import {
   createJudgeWorkflow,
 } from '@harness/command-judge';
 import { openDb, type FinharnessDatabase } from '@harness/database';
+import { createWorkflowNodeOutput } from '@harness/session-core';
 import { buildContext } from '../src/context';
 import { loadConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
 import { createJudgeNodeExecutors } from '../src/workflows/judgeNodes';
-import { JudgeCheckpointWriter } from '../src/workflows/judgeCheckpoint';
+import { decodeJudgeCheckpoint, JudgeCheckpointWriter } from '../src/workflows/judgeCheckpoint';
 
 describe('PR P same-Execution Judge resume', () => {
   let homeDir: string;
@@ -67,7 +68,7 @@ describe('PR P same-Execution Judge resume', () => {
     await db.executionProfiles.save(profile);
 
     const decision = {};
-    const prefix = { ...definition, nodes: definition.nodes.slice(0, 5) };
+    const prefix = { ...definition, nodes: definition.nodes.slice(0, 7) };
     const writer = new JudgeCheckpointWriter({ db, execution, profile, definition });
     const executors = createJudgeNodeExecutors({
       ctx: context,
@@ -110,6 +111,8 @@ describe('PR P same-Execution Judge resume', () => {
       turnId: turn.id, executionId: execution.id, correlationId: turn.id,
     });
 
+    db.raw.close();
+    db = openDb({ homeDir });
     const events: Array<{ type: string; runId?: string; status?: string }> = [];
     const runtime = await createHarnessSession(db, config, {
       write: () => {},
@@ -137,5 +140,22 @@ describe('PR P same-Execution Judge resume', () => {
       status: 'completed',
       resumeGeneration: 1,
     });
+  });
+
+  it('rejects a malformed typed model payload before it can become a restore seed', async () => {
+    const output = createWorkflowNodeOutput({
+      executionId: 'run_corrupt_checkpoint', workflowId: 'judge', workflowVersion: 2,
+      nodeId: 'round-1-bull-thesis', status: 'completed', outputKind: 'judge.bull-thesis.v1',
+      dependencyFingerprint: 'a'.repeat(64),
+      payload: {
+        response: { reasoning: '', claims: [], evidenceIds: [] },
+        claims: [], audit: { subagent: 'bull', skills: [] },
+      } as never,
+      completionGeneration: 0, createdAt: new Date().toISOString(),
+    });
+
+    await expect(decodeJudgeCheckpoint(
+      'round-1-bull-thesis', output, undefined as never, { id: output.executionId, ticker: 'BBCA' } as never,
+    )).rejects.toThrow();
   });
 });

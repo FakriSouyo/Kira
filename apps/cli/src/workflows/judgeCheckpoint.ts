@@ -20,7 +20,9 @@ import {
 import type { WorkflowDefinition, WorkflowNode, WorkflowRestoreSeed } from '@harness/command-core';
 import { createWorkflowNodeOutput, type JsonValue, type WorkflowNodeOutput } from '@harness/session-core';
 import type { Evidence } from '@harness/schemas';
+import { BearCounterpointSchema, BearLLMOutputSchema, BullLLMOutputSchema, ClaimSchema, JudgmentSchema } from '@harness/schemas';
 import type { ArtifactEnvelope } from '@harness/schemas';
+import { verifyFinancialObservation } from '@harness/financial-data';
 import type { SubagentResult } from '@harness/subagent-core';
 import type { LLMCallMetadata } from '@harness/llm';
 import type { FinharnessDatabase } from '@harness/database';
@@ -262,6 +264,42 @@ function auditFromPayload(payload: Record<string, unknown>): JudgeModelAudit | u
   return payload.audit && typeof payload.audit === 'object' ? payload.audit as unknown as JudgeModelAudit : undefined;
 }
 
+function assertStringArray(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) throw new Error(`Judge checkpoint has an invalid ${label}`);
+  return value;
+}
+
+function assertModelAudit(value: unknown): JudgeModelAudit {
+  if (typeof value !== 'object' || value === null) throw new Error('Judge checkpoint has an invalid model audit');
+  const audit = value as Record<string, unknown>;
+  if (typeof audit.subagent !== 'string' || !Array.isArray(audit.skills)
+    || audit.skills.some(skill => typeof skill !== 'object' || skill === null
+      || typeof (skill as Record<string, unknown>).name !== 'string'
+      || typeof (skill as Record<string, unknown>).contentHash !== 'string')) {
+    throw new Error('Judge checkpoint has an invalid model audit');
+  }
+  if (audit.contextSnapshotId !== undefined && audit.contextSnapshotId !== null && typeof audit.contextSnapshotId !== 'string') {
+    throw new Error('Judge checkpoint has an invalid ContextSnapshot reference');
+  }
+  if (audit.modelCall !== undefined) {
+    if (typeof audit.modelCall !== 'object' || audit.modelCall === null) throw new Error('Judge checkpoint has an invalid ModelCall audit');
+    const call = audit.modelCall as Record<string, unknown>;
+    const nullableNumber = (item: unknown) => item === null || (typeof item === 'number' && Number.isFinite(item));
+    if (typeof call.provider !== 'string' || typeof call.model !== 'string'
+      || !nullableNumber(call.inputTokens) || !nullableNumber(call.outputTokens)
+      || !nullableNumber(call.cachedInputTokens) || !nullableNumber(call.totalTokens)
+      || (call.finishReason !== null && typeof call.finishReason !== 'string')
+      || typeof call.latencyMs !== 'number' || !Number.isFinite(call.latencyMs)) {
+      throw new Error('Judge checkpoint has an invalid ModelCall audit');
+    }
+  }
+  return audit as unknown as JudgeModelAudit;
+}
+
+function assertSameSemanticParts(left: unknown, right: unknown, label: string): void {
+  if (canonicalJson(left) !== canonicalJson(right)) throw new Error(`Judge checkpoint ${label} does not match its normalized payload`);
+}
+
 /** Validates durable Judge outputs before acquisition and derives the restore frontier. */
 export async function planJudgeResume(params: {
   db: FinharnessDatabase;
@@ -363,23 +401,59 @@ export async function decodeJudgeCheckpoint(
   if (!output.payload) throw new Error(`Judge checkpoint ${execution.id}/${nodeId} is completed without a payload`);
   const payload = output.payload as Record<string, unknown>;
   switch (nodeId) {
-    case 'identify-company': return payload as unknown as JudgeFinancialCheckpoint;
-    case 'fetch-financials': return payload as unknown as JudgeQuarterlyCheckpoint;
-    case 'fetch-market-data': return payload.outcome === 'optional-failure' ? undefined : payload as unknown as { daily: unknown; foreign: unknown };
-    case 'fetch-news': return payload.outcome === 'optional-failure' ? undefined : payload as unknown as { news: unknown; filings: unknown; sentiment: unknown };
+    case 'identify-company':
+      verifyFinancialObservation('company_report', payload as unknown as JudgeFinancialCheckpoint, execution.ticker);
+      return payload as unknown as JudgeFinancialCheckpoint;
+    case 'fetch-financials':
+      verifyFinancialObservation('quarterly_financials', payload as unknown as JudgeQuarterlyCheckpoint, execution.ticker);
+      return payload as unknown as JudgeQuarterlyCheckpoint;
+    case 'fetch-market-data':
+      if (payload.outcome === 'optional-failure') {
+        if (typeof payload.errorCode !== 'string' || payload.errorCode.length === 0) throw new Error(`Judge checkpoint ${execution.id}/${nodeId} has an invalid optional failure`);
+        return undefined;
+      }
+      if (payload.outcome !== 'succeeded' || typeof payload.daily !== 'object' || payload.daily === null || typeof payload.foreign !== 'object' || payload.foreign === null) {
+        throw new Error(`Judge checkpoint ${execution.id}/${nodeId} has an invalid market payload`);
+      }
+      verifyFinancialObservation('daily_transaction', payload.daily as never, execution.ticker);
+      verifyFinancialObservation('foreign_flow', payload.foreign as never, execution.ticker);
+      return { daily: payload.daily, foreign: payload.foreign };
+    case 'fetch-news':
+      if (payload.outcome === 'optional-failure') {
+        if (typeof payload.errorCode !== 'string' || payload.errorCode.length === 0) throw new Error(`Judge checkpoint ${execution.id}/${nodeId} has an invalid optional failure`);
+        return undefined;
+      }
+      if (payload.outcome !== 'succeeded' || typeof payload.news !== 'object' || payload.news === null || typeof payload.filings !== 'object' || payload.filings === null || typeof payload.sentiment !== 'object' || payload.sentiment === null) {
+        throw new Error(`Judge checkpoint ${execution.id}/${nodeId} has an invalid news payload`);
+      }
+      verifyFinancialObservation('news', payload.news as never, execution.ticker);
+      verifyFinancialObservation('filings', payload.filings as never, execution.ticker);
+      verifyFinancialObservation('sentiment', payload.sentiment as never, execution.ticker);
+      return { news: payload.news, filings: payload.filings, sentiment: payload.sentiment };
     case 'collect-sources': {
       const manifest = payload as unknown as JudgeCollectedSourcesCheckpoint;
+      if (typeof manifest.snapshotId !== 'string' || typeof manifest.snapshotFingerprint !== 'string'
+        || typeof manifest.marketAvailable !== 'boolean' || typeof manifest.newsAvailable !== 'boolean') {
+        throw new Error(`Judge checkpoint ${execution.id}/${nodeId} has an invalid source manifest`);
+      }
+      const evidenceIds = assertStringArray(manifest.evidenceIds, 'source manifest evidence IDs');
+      const marketEvidenceIds = assertStringArray(manifest.marketEvidenceIds, 'market evidence IDs');
+      const newsEvidenceIds = assertStringArray(manifest.newsEvidenceIds, 'news evidence IDs');
+      const evidenceSet = new Set(evidenceIds);
+      if ([...marketEvidenceIds, ...newsEvidenceIds].some(id => !evidenceSet.has(id))) {
+        throw new Error(`Judge checkpoint ${execution.id}/${nodeId} references Evidence outside its manifest`);
+      }
       const snapshot = await db.financialSnapshots.getById(manifest.snapshotId);
       if (!snapshot || snapshot.executionId !== execution.id || snapshot.subject.ticker !== execution.ticker || snapshot.fingerprint !== manifest.snapshotFingerprint) {
         throw new Error(`Judge checkpoint ${execution.id}/collect-sources has an invalid FinancialSnapshot reference`);
       }
-      if (!sameIds([...snapshot.materializedEvidenceIds], manifest.evidenceIds)) throw new Error('Judge checkpoint evidence set conflicts with FinancialSnapshot');
-      const all = await restoreEvidence(db, manifest.evidenceIds, execution, execution.ticker);
-      const marketIds = new Set(manifest.marketEvidenceIds);
-      const newsIds = new Set(manifest.newsEvidenceIds);
+      if (!sameIds([...snapshot.materializedEvidenceIds], evidenceIds)) throw new Error('Judge checkpoint evidence set conflicts with FinancialSnapshot');
+      const all = await restoreEvidence(db, evidenceIds, execution, execution.ticker);
+      const marketIds = new Set(marketEvidenceIds);
+      const newsIds = new Set(newsEvidenceIds);
       return {
         evidence: all.filter(item => !marketIds.has(item.id) && !newsIds.has(item.id)),
-        evidenceIds: manifest.evidenceIds,
+        evidenceIds,
         marketEvidence: all.filter(item => marketIds.has(item.id)),
         newsEvidence: all.filter(item => newsIds.has(item.id)),
         marketAvailable: manifest.marketAvailable,
@@ -389,31 +463,61 @@ export async function decodeJudgeCheckpoint(
     }
     case 'select-supporting-evidence': {
       const selection = payload as unknown as JudgeEvidenceSelectionCheckpoint;
-      const evidence = await restoreEvidence(db, selection.evidenceIds, execution, execution.ticker);
-      return { ...selection, evidence, evidenceZone: buildEvidenceZoneForRestore(execution.ticker, evidence) } satisfies EvidenceSelection;
+      if (typeof selection.marketAvailable !== 'boolean' || typeof selection.newsAvailable !== 'boolean') throw new Error(`Judge checkpoint ${execution.id}/${nodeId} has an invalid evidence selection`);
+      const evidenceIds = assertStringArray(selection.evidenceIds, 'selected evidence IDs');
+      const evidence = await restoreEvidence(db, evidenceIds, execution, execution.ticker);
+      return { ...selection, evidenceIds, evidence, evidenceZone: buildEvidenceZoneForRestore(execution.ticker, evidence) } satisfies EvidenceSelection;
     }
     case 'round-1-bull-thesis':
     case 'round-2-bull-rebuttal':
     case 'conditional-bull-rebuttal': {
       const checkpoint = payload as unknown as JudgeBullCheckpoint;
-      return { response: checkpoint.response as unknown as BullAnalysisResponse, claims: checkpoint.claims, result: resultFromAudit(checkpoint.audit, checkpoint.response) } satisfies ThesisTurn;
+      BullLLMOutputSchema.parse(checkpoint.response);
+      const claims = ClaimSchema.array().parse(checkpoint.claims);
+      if (typeof (checkpoint.response as Record<string, unknown>).messageId !== 'string') throw new Error(`Judge checkpoint ${execution.id}/${nodeId} has no message identity`);
+      const audit = assertModelAudit(checkpoint.audit);
+      return { response: checkpoint.response as unknown as BullAnalysisResponse, claims, result: resultFromAudit(audit, checkpoint.response) } satisfies ThesisTurn;
     }
     case 'round-1-bear-challenge':
     case 'conditional-bear-rechallenge': {
       const checkpoint = payload as unknown as JudgeBearCheckpoint;
-      return { response: checkpoint.response as unknown as BearChallengeResponse, result: resultFromAudit(checkpoint.audit, checkpoint.response) } satisfies ChallengeTurn;
+      const response = BearLLMOutputSchema.parse(checkpoint.response);
+      const counterpoints = BearCounterpointSchema.array().parse(checkpoint.counterpoints);
+      if (typeof (checkpoint.response as Record<string, unknown>).messageId !== 'string') throw new Error(`Judge checkpoint ${execution.id}/${nodeId} has no message identity`);
+      assertSameSemanticParts(response.counterpoints, counterpoints, `${execution.id}/${nodeId} counterpoints`);
+      const audit = assertModelAudit(checkpoint.audit);
+      return { response: checkpoint.response as unknown as BearChallengeResponse, result: resultFromAudit(audit, checkpoint.response) } satisfies ChallengeTurn;
     }
     case 'evaluate-arguments':
     case 'resolve-conflicts': {
       const checkpoint = payload as unknown as JudgeEvaluationCheckpoint;
-      return { judgment: checkpoint.judgment, allClaims: checkpoint.allClaims, needsExtra: checkpoint.needsExtra, result: resultFromAudit(checkpoint.audit, checkpoint.judgment) } satisfies JudgeTurn;
+      const judgment = JudgmentSchema.parse(checkpoint.judgment);
+      if (judgment.ticker.toUpperCase() !== execution.ticker.toUpperCase() || typeof checkpoint.needsExtra !== 'boolean') {
+        throw new Error(`Judge checkpoint ${execution.id}/${nodeId} has an invalid evaluation payload`);
+      }
+      const allClaims = ClaimSchema.array().parse(checkpoint.allClaims);
+      const audit = assertModelAudit(checkpoint.audit);
+      return { judgment, allClaims, needsExtra: checkpoint.needsExtra, result: resultFromAudit(audit, checkpoint.judgment) } satisfies JudgeTurn;
     }
-    case 'check-evidence': return payload as unknown as JudgeEvidenceAuditCheckpoint;
-    case 'synthesize-verdict': return payload as unknown as JudgeVerdictCheckpoint as SynthesisTurn;
+    case 'check-evidence': {
+      const audit = payload as unknown as JudgeEvidenceAuditCheckpoint;
+      if (!Number.isInteger(audit.claims) || audit.claims < 0 || !Number.isInteger(audit.challenges) || audit.challenges < 0) {
+        throw new Error(`Judge checkpoint ${execution.id}/${nodeId} has invalid evidence audit counts`);
+      }
+      return { ...audit, evidenceIds: assertStringArray(audit.evidenceIds, 'audited evidence IDs') };
+    }
+    case 'synthesize-verdict': {
+      const verdict = payload as unknown as JudgeVerdictCheckpoint;
+      const judgment = JudgmentSchema.parse(verdict.judgment);
+      if (judgment.ticker.toUpperCase() !== execution.ticker.toUpperCase() || (verdict.rounds !== 1 && verdict.rounds !== 2)) {
+        throw new Error(`Judge checkpoint ${execution.id}/${nodeId} has an invalid verdict payload`);
+      }
+      return { judgment, rounds: verdict.rounds } satisfies SynthesisTurn;
+    }
   }
 }
 
-function checkpointMessage(nodeId: JudgeNodeId, runId: string, ticker: string, payload: Record<string, unknown>): {
+function checkpointMessage(nodeId: JudgeNodeId, runId: string, ticker: string, payload: Record<string, unknown>, seenEvidenceIds: string[]): {
   messageId: string; agent: 'researcher' | 'bull' | 'bear' | 'judge'; messageType: 'observation' | 'claim' | 'challenge' | 'response' | 'decision'; content: string; evidenceIds: string[]; sequenceOrder: number; metadata: Record<string, unknown>;
 } | undefined {
   if (nodeId === 'collect-sources') {
@@ -433,7 +537,7 @@ function checkpointMessage(nodeId: JudgeNodeId, runId: string, ticker: string, p
       agent: 'bull', messageType: nodeId === 'round-1-bull-thesis' ? 'claim' : 'response',
       content: response.reasoning ?? '', evidenceIds: response.evidenceIds ?? [],
       sequenceOrder: conditional ? 6 : nodeId === 'round-2-bull-rebuttal' ? 3 : 1,
-      metadata: { claimCount: Array.isArray(payload.claims) ? payload.claims.length : 0 },
+      metadata: { claimCount: Array.isArray(payload.claims) ? payload.claims.length : 0, seenEvidenceIds, ...(conditional ? { conditional: true } : {}) },
     };
   }
   if (nodeId === 'round-1-bear-challenge' || nodeId === 'conditional-bear-rechallenge') {
@@ -444,7 +548,7 @@ function checkpointMessage(nodeId: JudgeNodeId, runId: string, ticker: string, p
       messageId: conditional ? `${response.messageId}_conditional` : response.messageId,
       agent: 'bear', messageType: 'challenge', content, evidenceIds: response.evidenceIds ?? [],
       sequenceOrder: conditional ? 5 : 2,
-      metadata: { challengeCount: response.counterpoints?.length ?? 0 },
+      metadata: { challengeCount: response.counterpoints?.length ?? 0, seenEvidenceIds, ...(conditional ? { conditional: true } : {}) },
     };
   }
   if (nodeId === 'evaluate-arguments' || nodeId === 'resolve-conflicts') {
@@ -454,7 +558,7 @@ function checkpointMessage(nodeId: JudgeNodeId, runId: string, ticker: string, p
       messageId: conditional ? `judge_${runId}_conditional` : `judge_${runId}`,
       agent: 'judge', messageType: 'decision', content: judgment.summary, evidenceIds: [],
       sequenceOrder: conditional ? 7 : 4,
-      metadata: { score: judgment.score, stance: judgment.stance, conditional },
+      metadata: { score: judgment.score, stance: judgment.stance, conditional, seenEvidenceIds },
     };
   }
   return undefined;
@@ -467,6 +571,11 @@ export async function repairJudgeProjections(params: {
   outputs: WorkflowNodeOutput[];
 }): Promise<void> {
   const definition = createJudgeWorkflow();
+  const selectionOutput = params.outputs.find(output => output.nodeId === 'select-supporting-evidence' && output.status === 'completed');
+  const seenEvidenceIds = selectionOutput?.payload && typeof selectionOutput.payload === 'object'
+    && Array.isArray((selectionOutput.payload as Record<string, unknown>).evidenceIds)
+    ? (selectionOutput.payload as { evidenceIds: unknown[] }).evidenceIds.filter((id): id is string => typeof id === 'string')
+    : [];
   for (const output of params.outputs) {
     const nodeId = output.nodeId as JudgeNodeId;
     const node = definition.nodes.find(candidate => candidate.id === nodeId);
@@ -492,7 +601,7 @@ export async function repairJudgeProjections(params: {
     }
     if (output.status !== 'completed' || output.payload === null) continue;
     const completedPayload = output.payload as Record<string, unknown>;
-    const message = checkpointMessage(nodeId, params.execution.id, params.execution.ticker, completedPayload);
+    const message = checkpointMessage(nodeId, params.execution.id, params.execution.ticker, completedPayload, seenEvidenceIds);
     if (message) {
       await params.db.conversation.addMessage({ runId: params.execution.id, ...message });
     }
@@ -518,7 +627,7 @@ export async function repairJudgeProjections(params: {
           cachedInputTokens: null, totalTokens: null, finishReason: null, latencyMs: 0,
         };
         await params.db.sessions.recordModelCall({
-          callId: `call_${params.execution.id}_${nodeId}`,
+          callId: `call_${params.execution.id}_${nodeId}_1`,
           runId: params.execution.id,
           stepId,
           subagent: audit.subagent,
