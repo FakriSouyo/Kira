@@ -144,6 +144,27 @@ record, not a provider cache, artifact, context snapshot, or conversational
 memory. Provider cache reuse may occur, but every new Execution gets its own
 snapshot.
 
+### Durable resumability foundation
+
+PR O adds the storage and runtime contracts needed for future checkpoint
+resume without changing the current `/judge` workflow behavior:
+
+- canonical Executions may be `running`, `interrupted`, `completed`, `failed`,
+  or `cancelled`; restart reconciliation marks abandoned work `interrupted`
+  and leaves its parent Turn running;
+- each lifecycle-backed Execution records an immutable semantic profile before
+  provider or model work begins;
+- immutable typed node-output envelopes live in `workflow_node_outputs`, with
+  semantic fingerprints, idempotent writes, conflict detection, and resume
+  generation fencing;
+- the generic `WorkflowRunner` can restore completed/skipped nodes and emits a
+  distinct restore event, while remaining unaware of SQLite and `/judge`.
+
+The current `/resume` command remains display-only, and the legacy
+`resumeJudgeRun` helper remains an explicit full re-run. PR P is reserved for
+the `/judge`-specific output codecs and resume planner that may consume these
+contracts.
+
 ### Selective financial retrieval
 
 FinHarness avoids fetching every provider endpoint for every request.
@@ -295,7 +316,7 @@ Local OpenAI-compatible endpoints such as Ollama or LM Studio can be configured 
 | `/screen [CRITERIA]` | Screen stocks using supported criteria |
 | `/history [--limit N]` | List recent runs |
 | `/session <runId>` | Show persisted run artifacts |
-| `/resume <runId>` | Display/resume-compatible session view |
+| `/resume <runId>` | Display-only session view (resume planner deferred) |
 | `/search <query>` | Search persisted evidence using keyword + vector prototype |
 | `/export <runId> [--format json\|md\|html]` | Export a run and its audit trail |
 | `/web [--port N]` | Start the lightweight local web preview |
@@ -411,6 +432,8 @@ Important persisted concepts include:
 - SessionWorkingContext versions
 - ContextSnapshots
 - VerifiedFinancialSnapshots
+- ExecutionProfiles
+- WorkflowNodeOutputs
 - ModelCall linkage
 
 The journal is an append-only audit/replay source. It is not the owner of session context.
@@ -466,10 +489,11 @@ K  Specialist context for Bull/Bear/Judge
 L  Artifact-aware retrieval + validity + prior-context reuse
  M  Financial Data Provider Seam
  N  Verified Financial Snapshot
+ O  Durable Resumability Foundation
 ```
 
-A-L and PR M are complete and merged into `master`; PR N is complete on this
-branch pending review and merge.
+A-L and PR M are complete and merged into `master`; PR N and PR O are complete
+on this branch pending review and merge.
 
 PR M adds the Financial Data Provider Seam; PR N adds the verified input boundary:
 
@@ -477,18 +501,19 @@ PR M adds the Financial Data Provider Seam; PR N adds the verified input boundar
 A-L  Stateful lifecycle/context foundation  COMPLETE
  M   Financial Data Provider Seam           COMPLETE
  N   Verified Financial Snapshot             COMPLETE
+ O   Durable Resumability Foundation         COMPLETE
 ```
 
 ## Next architecture work
 
-The next planned architecture phase starts from the PR N snapshot boundary
+The next planned architecture phase starts from the PR O resumability boundary
 rather than replacing the A-L foundation.
 
-Current direction after PR N:
+Current direction after PR O:
 
-1. model/runtime generalization
-2. Capability Registry + typed capability/tool runtime
-3. checkpoint/resume
+1. PR P: `/judge`-specific checkpoint codecs and resume planner
+2. model/runtime generalization
+3. Capability Registry + typed capability/tool runtime
 4. Evidence Policy + Claim Graph
 5. reusable research subgraphs
 6. Risk Committee

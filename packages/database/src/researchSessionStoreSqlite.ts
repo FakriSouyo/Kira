@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, isNull, max } from 'drizzle-orm';
+import { and, asc, eq, isNull, max, or } from 'drizzle-orm';
 import type {
   ModelCallRecord,
   ResearchExecution,
@@ -30,6 +30,7 @@ function toExecution(row: typeof executions.$inferSelect): ResearchExecution {
     error: row.error,
     createdAt: row.createdAt,
     completedAt: row.completedAt,
+    resumeGeneration: row.resumeGeneration,
   };
 }
 
@@ -96,9 +97,10 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
       const row = tx.select().from(researchTurns).where(eq(researchTurns.id, turnId)).limit(1).get();
       if (!row) throw new Error(`Turn ${turnId} not found`);
       const runningExecution = tx.select({ id: executions.id }).from(executions)
-        .where(and(eq(executions.turnId, turnId), eq(executions.status, 'running'))).limit(1).get();
+        .where(and(eq(executions.turnId, turnId), or(eq(executions.status, 'running'), eq(executions.status, 'interrupted')))).limit(1).get();
       if (runningExecution) {
-        throw new Error(`Turn ${turnId} cannot settle while execution ${runningExecution.id} is running`);
+        const execution = tx.select({ status: executions.status }).from(executions).where(eq(executions.id, runningExecution.id)).limit(1).get();
+        throw new Error(`Turn ${turnId} cannot settle while execution ${runningExecution.id} is ${execution?.status ?? 'active'}`);
       }
       const settled = transitionTurn(row as ResearchTurn, status, requestedAt ?? new Date().toISOString());
       const updated = tx.update(researchTurns).set({ status: settled.status, completedAt: settled.completedAt })
@@ -124,6 +126,9 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
       const runningExecution = tx.select({ id: executions.id }).from(executions)
         .where(and(eq(executions.turnId, params.turnId), eq(executions.status, 'running'))).limit(1).get();
       if (runningExecution) throw new Error(`Turn ${params.turnId} already has a running execution`);
+      const interruptedExecution = tx.select({ id: executions.id }).from(executions)
+        .where(and(eq(executions.turnId, params.turnId), eq(executions.status, 'interrupted'))).limit(1).get();
+      if (interruptedExecution) throw new Error(`Turn ${params.turnId} already has an interrupted execution ${interruptedExecution.id}`);
       const attemptRow = tx.select({ value: max(executions.attempt) }).from(executions)
         .where(eq(executions.turnId, params.turnId)).get();
       const now = new Date().toISOString();
@@ -139,6 +144,7 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
         error: null,
         createdAt: now,
         completedAt: null,
+        resumeGeneration: 0,
       };
       tx.insert(executions).values(execution).run();
       tx.update(researchSessions).set({ updatedAt: now }).where(eq(researchSessions.id, params.sessionId)).run();
@@ -148,6 +154,10 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
 
   async settleExecution(...args: Parameters<ResearchSessionStore['settleExecution']>): Promise<ResearchExecution> {
     const [executionId, status, result = {}] = args;
+    const requestedStatus = status as string;
+    if (requestedStatus === 'running' || requestedStatus === 'interrupted') {
+      throw new Error(`Execution ${executionId} must use its dedicated lifecycle transition for ${requestedStatus}`);
+    }
     return this.db.transaction((tx) => {
       const current = tx.select().from(executions).where(eq(executions.id, executionId)).limit(1).get();
       if (!current) throw new Error(`Execution ${executionId} not found`);
@@ -168,6 +178,47 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
       }
       const settled = tx.select().from(executions).where(eq(executions.id, executionId)).limit(1).get();
       return toExecution(settled!);
+    });
+  }
+
+  async interruptExecution(executionId: string, error = 'Interrupted before the execution reached a terminal state.'): Promise<ResearchExecution> {
+    return this.db.transaction((tx) => {
+      const current = tx.select().from(executions).where(eq(executions.id, executionId)).limit(1).get();
+      if (!current) throw new Error(`Execution ${executionId} not found`);
+      if (current.status !== 'running') {
+        throw new Error(`Execution ${executionId} cannot transition from ${current.status} to interrupted`);
+      }
+      const interruptedAt = new Date().toISOString();
+      const updated = tx.update(executions).set({ status: 'interrupted', error, completedAt: null })
+        .where(and(eq(executions.id, executionId), eq(executions.status, 'running'))).run();
+      if (updated.changes !== 1) throw new Error(`Execution ${executionId} did not interrupt atomically`);
+      if (current.sessionId) {
+        tx.update(researchSessions).set({ updatedAt: interruptedAt }).where(eq(researchSessions.id, current.sessionId)).run();
+      }
+      return toExecution(tx.select().from(executions).where(eq(executions.id, executionId)).limit(1).get()!);
+    });
+  }
+
+  async acquireInterruptedExecution(executionId: string): Promise<ResearchExecution> {
+    return this.db.transaction((tx) => {
+      const current = tx.select().from(executions).where(eq(executions.id, executionId)).limit(1).get();
+      if (!current) throw new Error(`Execution ${executionId} not found`);
+      if (current.status !== 'interrupted') {
+        throw new Error(`Execution ${executionId} cannot transition from ${current.status} to running`);
+      }
+      const resumedAt = new Date().toISOString();
+      const updated = tx.update(executions).set({
+        status: 'running',
+        error: null,
+        completedAt: null,
+        executionTime: null,
+        resumeGeneration: current.resumeGeneration + 1,
+      }).where(and(eq(executions.id, executionId), eq(executions.status, 'interrupted'))).run();
+      if (updated.changes !== 1) throw new Error(`Execution ${executionId} was acquired concurrently`);
+      if (current.sessionId) {
+        tx.update(researchSessions).set({ updatedAt: resumedAt }).where(eq(researchSessions.id, current.sessionId)).run();
+      }
+      return toExecution(tx.select().from(executions).where(eq(executions.id, executionId)).limit(1).get()!);
     });
   }
 

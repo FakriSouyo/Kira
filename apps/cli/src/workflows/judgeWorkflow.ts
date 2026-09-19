@@ -2,6 +2,7 @@ import type { ExecutionRun } from '@harness/execution';
 import type { ArtifactEnvelope, DurableArtifactRef, Evidence, Judgment } from '@harness/schemas';
 import {
   createJudgeCommandContext, createJudgeWorkflow,
+  createJudgeExecutionProfile,
   type JudgeRoundDecision,
 } from '@harness/command-judge';
 import { WorkflowRunner, WorkflowStepError, type WorkflowEvent } from '@harness/command-core';
@@ -79,6 +80,7 @@ function stepStatus(event: WorkflowEvent): UiWorkflowStepStatus {
   switch (event.type) {
     case 'workflow.step.started': return 'running';
     case 'workflow.step.skipped': return 'skipped';
+    case 'workflow.step.restored': return event.status === 'completed' ? 'completed' : 'skipped';
     case 'workflow.step.completed': return 'completed';
     case 'workflow.step.cancelled': return 'cancelled';
     default: return 'failed';
@@ -123,7 +125,7 @@ export async function judgeWorkflow(
   opts: { conditional?: boolean; reasoning?: boolean; signal?: AbortSignal; lifecycle?: { sessionId: string; turnId: string } } = {},
 ): Promise<JudgeArtifacts> {
   const startedAt = Date.now();
-  const run: ExecutionRun = opts.lifecycle
+  const run = opts.lifecycle
     ? await ctx.db.sessions.createExecution({ ...opts.lifecycle, ticker, command: 'judge' })
     : await ctx.db.execution.createRun({ ticker, command: 'judge' });
   const lifecycleIds = opts.lifecycle
@@ -134,6 +136,23 @@ export async function judgeWorkflow(
   try {
     events({ type: 'session.start', runId: run.id, ...lifecycleIds, ticker });
     const definition = createJudgeWorkflow();
+    const reasoning = Boolean(opts.reasoning);
+    const conditional = Boolean(opts.conditional);
+    // Capture the immutable semantic envelope before any provider/model work.
+    // Legacy direct runs intentionally remain outside the resumable contract.
+    if (opts.lifecycle) {
+      if (!ctx.config) throw new Error('Canonical judge execution requires runtime configuration for its execution profile');
+      await ctx.db.executionProfiles.save(createJudgeExecutionProfile({
+        executionId: run.id,
+        ticker,
+        reasoningMode: reasoning ? 'reasoning' : 'usual',
+        conditional,
+        researchers: ctx.researchers,
+        provider: ctx.config.llm.agent.provider,
+        model: ctx.config.llm.agent.model,
+        createdAt: run.createdAt,
+      }));
+    }
     events({
       type: 'workflow.plan',
       workflowId: definition.id,
@@ -157,8 +176,6 @@ export async function judgeWorkflow(
     });
 
     const decision: JudgeRoundDecision = {};
-    const reasoning = Boolean(opts.reasoning);
-    const conditional = Boolean(opts.conditional);
     const executors = createJudgeNodeExecutors({
       ctx, ticker, runId: run.id, events, progress, decision, reasoning, conditional,
       executionStartedAt: run.createdAt,
@@ -187,7 +204,7 @@ export async function judgeWorkflow(
     const judgeTurn = resolved ?? firstVerdict;
 
     const executionTimeSeconds = (Date.now() - startedAt) / 1000;
-    const completed: ExecutionRun = opts.lifecycle
+    const completed = opts.lifecycle
       ? await ctx.db.sessions.settleExecution(run.id, 'completed', { executionTimeSeconds })
       : await ctx.db.execution.completeRun(run.id, executionTimeSeconds);
     executionSettled = true;
@@ -243,7 +260,7 @@ export async function judgeWorkflow(
     });
     events({ type: 'session.complete', runId: run.id, ...lifecycleIds, status: 'completed' });
     return {
-      run: completed,
+      run: completed as ExecutionRun,
       evidence: collected.evidence.slice(0, 2),
       marketEvidence: collected.marketEvidence,
       newsEvidence: collected.newsEvidence,

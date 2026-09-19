@@ -66,6 +66,9 @@ export class WorkflowTraceRecorder {
       parentNodeIds: node.dependsOn ?? [], ...(details.subagent ? { subagent: details.subagent } : {}),
       skills: details.skills, ...(details.summary ? { summary: details.summary } : {}),
     };
+    // Restored outputs are already durable; do not rewrite timing/status as if
+    // the node executed in this process.
+    if (event.type === 'workflow.step.restored') return;
     if (event.type === 'workflow.step.started') await this.options.store.saveStep({ ...common, status: 'running' });
     else if (event.type === 'workflow.step.skipped') await this.options.store.saveStep({ ...common, status: 'skipped', summary: event.reason });
     else if (event.type === 'workflow.step.completed') await this.options.store.saveStep({ ...common, status: 'completed', durationMs: event.durationMs });

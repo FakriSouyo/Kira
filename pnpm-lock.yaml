@@ -110,13 +110,20 @@ importers:
         specifier: workspace:*
         version: link:../../packages/subagent/researcher
 
-  packages/command/core: {}
+  packages/command/core:
+    dependencies:
+      '@harness/shared':
+        specifier: workspace:*
+        version: link:../../shared
 
   packages/command/judge:
     dependencies:
       '@harness/command-core':
         specifier: workspace:*
         version: link:../core
+      '@harness/session-core':
+        specifier: workspace:*
+        version: link:../../session/core
       '@harness/subagent-bear':
         specifier: workspace:*
         version: link:../../subagent/bear

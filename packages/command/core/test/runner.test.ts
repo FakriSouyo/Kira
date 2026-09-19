@@ -157,4 +157,62 @@ describe('WorkflowRunner', () => {
     });
     expect(events.some((event) => event.type === 'workflow.step.started' && event.nodeId === 'judge')).toBe(false);
   });
+
+  it('restores completed and skipped nodes without executing or emitting fresh lifecycle events', async () => {
+    const events: WorkflowEvent[] = [];
+    const calls: string[] = [];
+    const definition: WorkflowDefinition<{ reasoning: boolean }> = {
+      id: 'restore-ready',
+      nodes: [
+        { id: 'research', label: 'Research', run: async () => { calls.push('research'); return 'evidence'; } },
+        {
+          id: 'debate',
+          label: 'Debate',
+          dependsOn: ['research'],
+          enabled: (context) => context.reasoning,
+          run: async () => { calls.push('debate'); return 'debate'; },
+        },
+        {
+          id: 'summary',
+          label: 'Summary',
+          dependsOn: ['research', 'debate'],
+          run: async (_context, inputs) => { calls.push('summary'); return `${inputs.research}/${inputs.debate ?? 'usual'}`; },
+        },
+      ],
+    };
+
+    const result = await new WorkflowRunner({ onEvent: (event) => events.push(event) }).run(
+      definition,
+      { reasoning: false },
+      { restored: [
+        { nodeId: 'research', status: 'completed', value: 'restored evidence' },
+        { nodeId: 'debate', status: 'skipped' },
+      ] },
+    );
+
+    expect(result).toEqual({ research: 'restored evidence', debate: undefined, summary: 'restored evidence/usual' });
+    expect(calls).toEqual(['summary']);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'workflow.step.restored', nodeId: 'research', status: 'completed' }));
+    expect(events).toContainEqual(expect.objectContaining({ type: 'workflow.step.restored', nodeId: 'debate', status: 'skipped' }));
+    expect(events.some((event) => event.type === 'workflow.step.started' && ['research', 'debate'].includes(event.nodeId))).toBe(false);
+    expect(events.some((event) => event.type === 'workflow.step.completed' && ['research', 'debate'].includes(event.nodeId))).toBe(false);
+  });
+
+  it('rejects malformed restore seeds before running any node', async () => {
+    const calls: string[] = [];
+    const definition: WorkflowDefinition<{}> = {
+      id: 'restore-invalid',
+      nodes: [{ id: 'research', label: 'Research', run: async () => { calls.push('research'); return 'evidence'; } }],
+    };
+
+    await expect(new WorkflowRunner().run(definition, {}, {
+      restored: [{ nodeId: 'missing', status: 'completed', value: 'nope' } as never],
+    })).rejects.toThrow(/unknown node/i);
+    expect(calls).toEqual([]);
+
+    await expect(new WorkflowRunner().run(definition, {}, {
+      restored: [{ nodeId: 'research', status: 'running' } as never],
+    })).rejects.toThrow(/invalid status/i);
+    expect(calls).toEqual([]);
+  });
 });
