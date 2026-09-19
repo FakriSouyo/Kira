@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { canonicalJson } from '@harness/shared';
+
 export interface WorkflowNode<TContext> {
   id: string;
   label: string;
@@ -24,6 +27,7 @@ interface StepEventBase {
 export type WorkflowEvent =
   | (StepEventBase & { type: 'workflow.step.started' })
   | (StepEventBase & { type: 'workflow.step.skipped'; reason: 'disabled' })
+  | (StepEventBase & { type: 'workflow.step.restored'; status: 'completed' | 'skipped' })
   | (StepEventBase & { type: 'workflow.step.completed'; durationMs: number })
   | (StepEventBase & { type: 'workflow.step.cancelled'; durationMs: number })
   | (StepEventBase & { type: 'workflow.step.failed'; durationMs: number; required: boolean; error: string });
@@ -35,6 +39,27 @@ export interface WorkflowRunnerOptions {
 
 export interface WorkflowRunOptions {
   signal?: AbortSignal;
+  restored?: readonly WorkflowRestoreSeed[];
+}
+
+export type WorkflowRestoreSeed =
+  | { nodeId: string; status: 'completed'; value: unknown }
+  | { nodeId: string; status: 'skipped' };
+
+/** Stable, data-only identity for a workflow graph; runtime functions are intentionally excluded. */
+export function workflowGraphFingerprint<TContext>(definition: WorkflowDefinition<TContext>, workflowVersion: number): string {
+  const graph = {
+    workflowId: definition.id,
+    workflowVersion,
+    nodes: definition.nodes.map((node) => ({
+      id: node.id,
+      dependsOn: node.dependsOn ?? [],
+      required: node.required !== false,
+      executor: node.executor ?? null,
+      conditional: node.enabled !== undefined,
+    })),
+  };
+  return createHash('sha256').update(canonicalJson(graph)).digest('hex');
 }
 
 /** Required workflow-node failure with a stable code for application error mapping. */
@@ -75,12 +100,52 @@ export class WorkflowRunner {
   ): Promise<Record<string, unknown>> {
     const remaining = [...definition.nodes];
     const knownIds = new Set(remaining.map((node) => node.id));
+    if (knownIds.size !== remaining.length) throw new Error(`Workflow ${definition.id} contains duplicate node ids`);
     const finished = new Set<string>();
     const values: Record<string, unknown> = {};
     for (const node of remaining) {
       for (const dependency of node.dependsOn ?? []) {
         if (!knownIds.has(dependency)) throw new Error(`Workflow node ${node.id} depends on unknown node ${dependency}`);
       }
+    }
+
+    const restoredIds = new Set<string>();
+    for (const seed of options.restored ?? []) {
+      const rawSeed = seed as unknown as { nodeId: string; status: unknown };
+      if (rawSeed.status !== 'completed' && rawSeed.status !== 'skipped') {
+        throw new Error(`Workflow restore node ${rawSeed.nodeId} has invalid status ${String(rawSeed.status)}`);
+      }
+      if (!knownIds.has(seed.nodeId)) throw new Error(`Workflow restore references unknown node ${seed.nodeId}`);
+      if (restoredIds.has(seed.nodeId)) throw new Error(`Workflow restore contains duplicate node ${seed.nodeId}`);
+      restoredIds.add(seed.nodeId);
+      const node = remaining.find((candidate) => candidate.id === seed.nodeId)!;
+      const enabled = node.enabled?.(context) !== false;
+      if (seed.status === 'skipped' && Object.prototype.hasOwnProperty.call(seed, 'value')) {
+        throw new Error(`Workflow restore skipped node ${seed.nodeId} cannot contain a value`);
+      }
+      if (seed.status === 'completed' && !enabled) {
+        throw new Error(`Workflow restore completed node ${seed.nodeId} is disabled by the current profile`);
+      }
+      if (seed.status === 'skipped' && enabled) {
+        throw new Error(`Workflow restore skipped node ${seed.nodeId} is enabled by the current profile`);
+      }
+      for (const dependency of node.dependsOn ?? []) {
+        if (!restoredIds.has(dependency) && !(options.restored ?? []).some((candidate) => candidate.nodeId === dependency)) {
+          throw new Error(`Workflow restore node ${seed.nodeId} is missing restored dependency ${dependency}`);
+        }
+      }
+      finished.add(node.id);
+      values[node.id] = seed.status === 'completed' ? seed.value : undefined;
+      await this.onEvent({
+        type: 'workflow.step.restored',
+        workflowId: definition.id,
+        nodeId: node.id,
+        label: node.label,
+        status: seed.status,
+      });
+    }
+    for (const node of remaining.filter((candidate) => restoredIds.has(candidate.id))) {
+      remaining.splice(remaining.indexOf(node), 1);
     }
 
     while (remaining.length > 0) {

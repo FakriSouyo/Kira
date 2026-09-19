@@ -1,8 +1,9 @@
 export * from './conversation';
 export * from './workingContext';
 export * from './artifact';
+export * from './resumability';
 export type TurnStatus = 'running' | 'completed' | 'failed' | 'stopped';
-export type ExecutionStatus = 'running' | 'completed' | 'failed' | 'cancelled';
+export type ExecutionStatus = 'running' | 'interrupted' | 'completed' | 'failed' | 'cancelled';
 
 export interface ResearchSession {
   id: string;
@@ -39,6 +40,8 @@ export interface ResearchExecution {
   error: string | null;
   createdAt: string;
   completedAt: string | null;
+  /** Monotonically increasing fencing generation for resumable attempts. */
+  resumeGeneration: number;
 }
 
 export interface ModelUsage {
@@ -136,15 +139,32 @@ export interface ResearchSessionStore {
   /** Atomically settles a running execution exactly once. */
   settleExecution(
     executionId: string,
-    status: Exclude<ExecutionStatus, 'running'>,
+    status: Exclude<ExecutionStatus, 'running' | 'interrupted'>,
     result?: { executionTimeSeconds?: number; error?: string; completedAt?: string },
   ): Promise<ResearchExecution>;
+  /** Converts an in-flight execution into a resumable interruption. */
+  interruptExecution(executionId: string, error?: string): Promise<ResearchExecution>;
+  /** Claims an interrupted execution for one new runtime generation. */
+  acquireInterruptedExecution(executionId: string): Promise<ResearchExecution>;
   saveStep(params: { stepId?: string; runId: string; nodeId: string; parentNodeIds: string[]; subagent?: string; skills: SkillAuditReference[]; status: WorkflowStepStatus; durationMs?: number; summary?: string; error?: string }): Promise<WorkflowStepRecord>;
   recordModelCall(params: { callId?: string; runId?: string; turnId?: string; stepId?: string; subagent: string; provider: string; model: string; attempt: number; inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; totalTokens: number | null; latencyMs: number; finishReason: string | null; cost: number | null; currency: string | null; contextSnapshotId?: string | null }): Promise<ModelCallRecord>;
   getSessionArtifacts(sessionId: string): Promise<ResearchSessionArtifacts>;
 }
 
 const TERMINAL_STATUSES = new Set<TurnStatus>(['completed', 'failed', 'stopped']);
+
+const SETTLED_EXECUTION_STATUSES = new Set<ExecutionStatus>(['completed', 'failed', 'cancelled']);
+
+/** Applies the only valid execution lifecycle transition. */
+export function transitionExecution(execution: ResearchExecution, status: ExecutionStatus, at: string): ResearchExecution {
+  if (execution.status === 'running' && (status === 'interrupted' || SETTLED_EXECUTION_STATUSES.has(status))) {
+    return { ...execution, status, completedAt: status === 'interrupted' ? null : at };
+  }
+  if (execution.status === 'interrupted' && status === 'running') {
+    return { ...execution, status, error: null, completedAt: null, resumeGeneration: execution.resumeGeneration + 1 };
+  }
+  throw new Error(`Execution ${execution.id} cannot transition from ${execution.status} to ${status}`);
+}
 
 /** Applies the only valid turn settlement transition and stamps its completion time. */
 export function transitionTurn(turn: ResearchTurn, status: TurnStatus, at: string): ResearchTurn {

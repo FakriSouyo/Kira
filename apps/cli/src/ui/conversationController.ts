@@ -76,9 +76,7 @@ export class ConversationController {
     for (const entry of entries) if (entry.payload.turnId) lastByTurn.set(entry.payload.turnId, entry);
     for (const execution of executions.values()) {
       if (execution.status === 'running') {
-        executions.set(execution.id, await this.db.sessions.settleExecution(execution.id, 'cancelled', {
-          error: 'Interrupted before the execution reached a terminal state.',
-        }));
+        executions.set(execution.id, await this.db.sessions.interruptExecution(execution.id));
       }
     }
     const settledTurns: Array<{ id: string; state: 'completed' | 'failed' | 'cancelled' }> = [];
@@ -89,7 +87,10 @@ export class ConversationController {
         ? 'completed' as const
         : attempts.some(execution => execution.status === 'failed')
           ? 'failed' as const
-          : 'stopped' as const;
+          : attempts.some(execution => execution.status === 'interrupted')
+            ? null
+            : 'stopped' as const;
+      if (status === null) continue;
       await this.db.sessions.settleTurn(turn.id, status);
       settledTurns.push({ id: turn.id, state: status === 'stopped' ? 'cancelled' : status });
     }
@@ -102,6 +103,9 @@ export class ConversationController {
         const execution = executions.get(block.id);
         const origin = origins.get(block.id);
         const turnId = execution?.turnId ?? origin?.payload.turnId;
+        // An interrupted canonical execution is intentionally left visible and
+        // resumable; no terminal projection or turn settlement is synthesized.
+        if (execution?.status === 'interrupted') continue;
         const state = execution?.status === 'completed' ? 'completed'
           : execution?.status === 'failed' ? 'failed'
             : 'cancelled';

@@ -13,3 +13,5 @@ export { WorkingContextStoreSqlite } from './workingContextStoreSqlite';
 export { ArtifactStoreSqlite } from './artifactStoreSqlite';
 export { ContextSnapshotStoreSqlite } from './contextSnapshotStoreSqlite';
 export { FinancialSnapshotStoreSqlite } from './financialSnapshotStoreSqlite';
+export { ExecutionProfileStoreSqlite } from './executionProfileStoreSqlite';
+export { WorkflowNodeOutputStoreSqlite } from './workflowNodeOutputStoreSqlite';

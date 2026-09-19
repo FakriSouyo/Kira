@@ -41,6 +41,7 @@ export const executions = sqliteTable('executions', {
   error: text('error'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
   completedAt: text('completed_at'),
+  resumeGeneration: integer('resume_generation').notNull().default(0),
 }, (table) => [
   uniqueIndex('executions_turn_attempt_uniq').on(table.turnId, table.attempt).where(sql`${table.turnId} IS NOT NULL`),
 ]);
@@ -127,6 +128,39 @@ export const financialSnapshots = sqliteTable('financial_snapshots', {
   createdAt: text('created_at').notNull(),
   finalizedAt: text('finalized_at').notNull(),
 }, (table) => [unique('financial_snapshots_execution_uniq').on(table.executionId)]);
+
+/** PR O: immutable semantic configuration captured before provider/model work. */
+export const executionProfiles = sqliteTable('execution_profiles', {
+  executionId: text('execution_id').primaryKey().references(() => executions.id, { onDelete: 'cascade' }),
+  schemaVersion: integer('schema_version').notNull(),
+  workflowId: text('workflow_id').notNull(),
+  workflowVersion: integer('workflow_version').notNull(),
+  graphFingerprint: text('graph_fingerprint').notNull(),
+  command: text('command').notNull(),
+  ticker: text('ticker').notNull(),
+  payloadJson: text('payload_json').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+/** PR O: immutable, typed, execution-scoped node outputs for future restore planning. */
+export const workflowNodeOutputs = sqliteTable('workflow_node_outputs', {
+  outputId: text('output_id').primaryKey(),
+  schemaVersion: integer('schema_version').notNull(),
+  executionId: text('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  workflowId: text('workflow_id').notNull(),
+  workflowVersion: integer('workflow_version').notNull(),
+  nodeId: text('node_id').notNull(),
+  status: text('status').notNull(),
+  outputKind: text('output_kind').notNull(),
+  dependencyFingerprint: text('dependency_fingerprint').notNull(),
+  outputFingerprint: text('output_fingerprint').notNull(),
+  payloadJson: text('payload_json'),
+  completionGeneration: integer('completion_generation').notNull(),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  unique('workflow_node_outputs_execution_node_uniq').on(table.executionId, table.nodeId),
+]);
 
 export const financialsNormalized = sqliteTable('financials_normalized', {
   id: text('id').primaryKey(),

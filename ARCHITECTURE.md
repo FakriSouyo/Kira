@@ -1,9 +1,11 @@
-# ARCHITECTURE - FinHarness Stateful Financial Agent Harness (A-L baseline + PR M/N)
+# ARCHITECTURE - FinHarness Stateful Financial Agent Harness (A-L baseline + PR M/N/O)
 
 Dokumen teknis untuk current runtime, keputusan desain, dan historical deviations.
 PR A-L adalah baseline stateful harness saat ini. PR M menambahkan seam provider
-financial yang tetap mempertahankan perilaku A-L. Bagian phase/addendum yang lebih
-lama tetap dipertahankan di bawah sebagai audit trail keputusan sebelumnya.
+financial yang tetap mempertahankan perilaku A-L, PR N menambahkan verified
+financial snapshots, dan PR O menambahkan durable resumability foundations.
+Bagian phase/addendum yang lebih lama tetap dipertahankan di bawah sebagai audit
+trail keputusan sebelumnya.
 
 ## 1. Current Runtime Layers & Invariants
 
@@ -59,6 +61,18 @@ Current invariants:
   into current-execution specialist grounding.
 - Provider cache/freshness, Evidence, artifacts, context, and workflow execution are
   separate concerns and must not be treated as interchangeable storage layers.
+- A canonical Execution may be `running`, `interrupted`, `completed`, `failed`,
+  or `cancelled`. Restart reconciliation uses `running -> interrupted`; only an
+  explicit acquire uses `interrupted -> running`, and the acquire increments a
+  resume generation used to fence stale writers.
+- Lifecycle-backed Executions persist an immutable ExecutionProfile before
+  provider/model work. The profile envelope is generic; `/judge` owns only its
+  typed payload.
+- Durable node outputs are immutable records in `workflow_node_outputs`, not
+  mutable `workflow_steps`. Same semantic writes are idempotent; different
+  semantic writes conflict.
+- `WorkflowRunner` accepts generic completed/skipped restore seeds and emits
+  `workflow.step.restored`; it has no database, domain, or `/judge` knowledge.
 - Specialist reasoning remains Evidence-grounded and typed. Persistence remains
   owned by workflow/composition boundaries rather than model-generated side effects.
 
@@ -123,9 +137,11 @@ M  Financial Data Provider Seam
     ↓
 N  Verified Financial Snapshot
     ↓
-model/runtime generalization
+O  Durable resumability foundation
     ↓
-capability/tool runtime
+P  /judge checkpoint codecs + resume planner
+    ↓
+model/runtime generalization
     ↓
 later financial intelligence layers
 ```
@@ -184,6 +200,73 @@ content-hash deduplication and `run_evidence` membership are unchanged; the
 snapshot stores the resulting Evidence IDs instead of changing Evidence rows.
 The durable store is `FinancialSnapshotStoreSqlite` on migration `0012`, with
 lookup by snapshot ID or Execution ID.
+
+## PR O — Durable Resumability Foundation
+
+PR O establishes durable state and generic runtime primitives without exposing
+a user-facing resume flow or attempting to serialize the `/judge` domain graph.
+
+### Lifecycle and restart reconciliation
+
+The canonical Execution state machine is:
+
+```text
+running ───────→ completed
+   │             failed
+   │             cancelled
+   └───────────→ interrupted ───────→ running
+                                  (resumeGeneration + 1)
+```
+
+`interrupted` is a resumable non-terminal state. `completed`, `failed`, and
+`cancelled` remain terminal. The database store exposes separate
+`interruptExecution` and `acquireInterruptedExecution` operations so an
+interrupted Execution cannot be terminalized or acquired twice concurrently.
+The parent Turn remains `running` while it has only an interrupted attempt.
+
+On startup, `ConversationController` converts abandoned running Executions to
+`interrupted`. If an attempt already completed or failed, canonical terminal
+state still wins. A journal run block backed by an interrupted Execution stays
+visibly running; restart does not invent `run.settled` or `turn.settled` events.
+
+### Immutable execution profiles
+
+Migration `0013_durable_resumability.sql` adds `execution_profiles` and the
+`resume_generation` column. A profile contains the execution identity,
+workflow/version, stable graph fingerprint, command, ticker, creation time, and
+a deterministic semantic fingerprint. The profile is saved after canonical
+Execution creation and before `/judge` can call a provider or model. The
+generic envelope lives in `@harness/session-core`; the typed Judge payload and
+graph identity live in `@harness/command-judge`.
+
+Profiles are immutable. Repeating the same semantic save is idempotent; an
+identity or payload conflict fails closed. Legacy direct `ExecutionStore` runs
+remain non-resumable and do not receive a profile.
+
+### Immutable workflow node outputs
+
+`workflow_node_outputs` is deliberately separate from the mutable diagnostic
+`workflow_steps` trace. Each output stores a schema version, workflow identity,
+node identity, `completed`/`skipped` status, output kind, dependency fingerprint,
+data-only payload, output fingerprint, completion generation, and creation time.
+Writes are immutable and unique per Execution + node. The store accepts an
+identical semantic retry, rejects a conflicting value, requires a canonical
+Execution profile, and rejects stale resume generations. PR O provides this
+envelope and store; PR P will define the exact `/judge` node codecs and planner.
+
+### Generic runner restore contract
+
+`WorkflowRunner` remains a pure graph scheduler. Its restore seeds contain only
+`nodeId`, `completed` plus a data value, or `skipped`. The runner validates node
+identity, duplicate seeds, disabled-state consistency, and restored dependency
+closure before scheduling the remaining DAG frontier. Restored nodes emit
+`workflow.step.restored` and never emit fresh `started`/`completed` events.
+The CLI trace recorder ignores restore events so replay does not overwrite
+execution timing as if work happened again.
+
+PR O intentionally does not implement `/resume` or `/continue`, does not wire
+`resumeJudgeRun` into the lifecycle, does not add `/judge` output codecs, and
+does not generalize model providers or introduce a distributed scheduler.
 
 ## 2. Evidence-First Flow (/judge, termasuk Debate ronde Phase 1)
 
@@ -319,7 +402,10 @@ Run yang gagal tetap tercatat di `executions` dengan status `failed`.
 
 ## 9. Struktur Data (ringkas)
 
-- `executions`: state machine `running → completed|failed` (transisi ganda dilarang)
+- `executions`: state machine `running → interrupted|completed|failed|cancelled`,
+  with `interrupted → running` only through an acquire (transisi ganda dilarang)
+- `execution_profiles`: immutable semantic profile per canonical Execution
+- `workflow_node_outputs`: immutable typed checkpoint envelopes per Execution + node
 - `evidence`: `UNIQUE(content_hash)` — dedup lintas run; `data` = JSON TEXT
 - `agent_messages`: `UNIQUE(run_id, message_id)`, urut `sequence_order`
 - `claims`: `UNIQUE(run_id, claim_id)`
@@ -341,7 +427,8 @@ sebagai kolom transisi nullable tanpa constraint unik, lalu memindahkan ownershi
 ke `executions.session_id`, `executions.turn_id`, dan `executions.attempt`. Relasi
 lama di-backfill sebagai attempt 1. Execution lama tanpa research turn tetap
 valid dan tidak dipaksa memiliki relasi palsu. Status terminal execution canonical
-mencakup `completed`, `failed`, dan `cancelled`.
+mencakup `completed`, `failed`, dan `cancelled`; PR O menambahkan `interrupted`
+sebagai resumable non-terminal.
 
 ### Live lifecycle and journal linkage (PR B)
 
@@ -356,8 +443,8 @@ Command yang presentasinya ditangani lokal oleh workspace TTY (`/help`, menu,
 `/context`, dan `/new`) tetap melewati boundary lifecycle yang sama; UI tidak
 boleh membuat jalur input kedua. Saat restart, proyeksi journal yang masih
 `running` direkonsiliasi terhadap lifecycle canonical: status terminal canonical
-diproyeksikan apa adanya, sedangkan Execution yang sungguh terputus diselesaikan
-`cancelled` dan Turn induknya diselesaikan secara konsisten.
+diproyeksikan apa adanya, sedangkan Execution yang sungguh terputus dipindahkan
+ke `interrupted` dan Turn induknya tetap `running` sampai ada penyelesaian nyata.
 
 `ConversationJournal` hanya menyimpan audit/replay append-only. Event baru
 memakai payload version 1 dan membawa `turnId`, `executionId` bila ada,
