@@ -165,6 +165,9 @@ importers:
       '@harness/execution':
         specifier: workspace:*
         version: link:../execution
+      '@harness/financial-data':
+        specifier: workspace:*
+        version: link:../financial-data
       '@harness/schemas':
         specifier: workspace:*
         version: link:../schemas

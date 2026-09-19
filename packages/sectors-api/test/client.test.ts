@@ -37,6 +37,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
+function dataOf<T>(result: { data: T }): T {
+  return result.data;
+}
+
 /** Client dengan fetchStub yang mengembalikan nilai `body` untuk semua URL. */
 function stubClient(body: unknown, cacheDir: string): SectorsClient {
   return new SectorsClient({ cacheDir, fetchImpl: (async () => jsonResponse(body)) as typeof fetch });
@@ -70,7 +74,7 @@ describe('SectorsClient (v2)', () => {
       { symbol: 'BBCA.JK', date: '2024-06-30', revenue: 80, earnings: 4 },
       { symbol: 'BBCA.JK', date: '2024-03-31', revenue: 90, earnings: 4 },
     ];
-    const fin = await stubClient(quarters, cacheDir).getQuarterlyFinancials('BBCA');
+    const fin = dataOf(await stubClient(quarters, cacheDir).getQuarterlyFinancials('BBCA'));
     expect(fin.quarters[0].revenueGrowthYoy).toBeCloseTo(20);
     expect(fin.quarters[0].netIncomeGrowthYoy).toBe(-100);
     expect(fin.cumulativeYtd).toBeUndefined();
@@ -98,7 +102,7 @@ describe('SectorsClient (v2)', () => {
       }) as typeof fetch,
     });
 
-    const report = await client.getCompanyReport('BBCA');
+    const report = dataOf(await client.getCompanyReport('BBCA'));
     expect(calls).toEqual(['https://api.sectors.app/v2/company/report/BBCA/?sections=overview%2Cvaluation%2Cfinancials%2Cdividend']);
     expect(report).toMatchObject({
       ticker: 'BBCA',
@@ -135,7 +139,7 @@ describe('SectorsClient (v2)', () => {
     });
     const fullReport = await make(full).getCompanyReport('BBCA');
     const reducedReport = await make(reduced).getCompanyReport('BBCA');
-    expect(reducedReport).toEqual(fullReport);
+    expect(reducedReport.data).toEqual(fullReport.data);
   });
 
   it('derives Company Report dataAsOf from valuation.latest_close_date only', async () => {
@@ -144,7 +148,7 @@ describe('SectorsClient (v2)', () => {
       fetchImpl: (async () => jsonResponse(CAPTURED_COMPANY_REPORT)) as typeof fetch,
     });
 
-    const report = await client.getCompanyReport('BBCA');
+    const report = dataOf(await client.getCompanyReport('BBCA'));
     expect(report.asOf).toBe('2026-09-16');
     expect(CAPTURED_COMPANY_REPORT).not.toHaveProperty('asOf');
   });
@@ -174,25 +178,27 @@ describe('SectorsClient (v2)', () => {
       }) as typeof fetch,
     });
     await client.getCompanyReport('BBCA');
-    const normalized = await client.getQuarterlyFinancials('BBCA');
+    const quarterlyResult = await client.getQuarterlyFinancials('BBCA');
+    const normalized = quarterlyResult.data;
     expect(calls).toContain('https://api.sectors.app/v2/financials/quarterly/BBCA/?n_quarters=1&approx=true');
     expect(normalized.quarters[0]).toMatchObject({
       period: '2025-Q4', revenue: 110, netIncome: 54,
       revenueGrowthYoy: 10, netIncomeGrowthYoy: 8,
     });
+    expect(quarterlyResult.metadata).toMatchObject({ dataAsOf: null, period: '2025-Q4', derivedFrom: ['company_report'] });
     const fullClient = new SectorsClient({
       cacheDir: mkdtempSync(join(tmpdir(), 'finharness-quarter-parity-full-')),
       fetchImpl: (async (url: string) => jsonResponse(url.includes('/company/report') ? reportWithGrowth : fullRows)) as typeof fetch,
     });
     await fullClient.getCompanyReport('BBCA');
-    const fullNormalized = await fullClient.getQuarterlyFinancials('BBCA');
+    const fullNormalized = dataOf(await fullClient.getQuarterlyFinancials('BBCA'));
     expect(normalized.quarters[0]).toEqual(fullNormalized.quarters[0]);
   });
 
   it('normalizes the captured single-object n_quarters=1 response as one quarter', async () => {
     const calls: string[] = [];
     const client = capturedQuarterlyClient(CAPTURED_QUARTERLY_FINANCIALS, cacheDir, calls);
-    const normalized = await client.getQuarterlyFinancials('BBCA');
+    const normalized = dataOf(await client.getQuarterlyFinancials('BBCA'));
 
     expect(normalized).toMatchObject({
       ticker: 'BBCA',
@@ -221,12 +227,12 @@ describe('SectorsClient (v2)', () => {
       rmSync(arrayCacheDir, { recursive: true, force: true });
     }
 
-    expect(array).toEqual(single);
-    expect(array.quarters[0]).toMatchObject({
+    expect(array.data).toEqual(single.data);
+    expect(array.data.quarters[0]).toMatchObject({
       period: '2026-Q2',
       revenueGrowthYoy: 0.305775623420816,
     });
-    expect(array.quarters[0]?.netIncomeGrowthYoy).toBeCloseTo(-0.136772238340106, 12);
+    expect(array.data.quarters[0]?.netIncomeGrowthYoy).toBeCloseTo(-0.136772238340106, 12);
   });
 
   it('rejects a malformed quarterly row instead of normalizing arbitrary fields', async () => {
@@ -263,7 +269,7 @@ describe('SectorsClient (v2)', () => {
         return jsonResponse(url.includes('n_quarters=1') ? [rows[0]] : rows);
       }) as typeof fetch,
     });
-    const fin = await client.getQuarterlyFinancials('BBCA');
+    const fin = dataOf(await client.getQuarterlyFinancials('BBCA'));
     expect(fin.quarters[0]).toMatchObject({ revenueGrowthYoy: 10, netIncomeGrowthYoy: 8 });
     expect(calls.filter((url) => url.includes('/financials/quarterly')).length).toBe(2);
   });
@@ -284,9 +290,9 @@ describe('SectorsClient (v2)', () => {
         return jsonResponse([{ symbol: 'BBCA.JK', date: quarterlyFetches === 1 ? '2025-12-31' : '2026-03-31', revenue: 110, earnings: 54 }]);
       }) as typeof fetch,
     });
-    expect((await client.getQuarterlyFinancials('BBCA')).quarters[0].period).toBe('2025-Q4');
+    expect((await client.getQuarterlyFinancials('BBCA')).data.quarters[0].period).toBe('2025-Q4');
     now = new Date('2026-09-17T14:00:00Z');
-    expect((await client.getQuarterlyFinancials('BBCA')).quarters[0].period).toBe('2026-Q1');
+    expect((await client.getQuarterlyFinancials('BBCA')).data.quarters[0].period).toBe('2026-Q1');
     expect(quarterlyFetches).toBe(2);
   });
 
@@ -331,12 +337,12 @@ describe('SectorsClient (v2)', () => {
       { symbol: 'BBCA.JK', date: '2023-12-31', revenue: 10000, earnings: 3680 },
     ];
     const client = stubClient(v2Quarterly, cacheDir);
-    const fin = await client.getQuarterlyFinancials('BBCA');
+    const fin = dataOf(await client.getQuarterlyFinancials('BBCA'));
     expect(fin.quarters[0].period).toBe('2024-Q4');
     expect(fin.quarters[0].revenue).toBe(11000);
     // YoY kuartal 2024-Q4 vs 2023-Q4: (11000-10000)/10000=10%
     expect(fin.quarters[0].revenueGrowthYoy).toBeCloseTo(10);
-    expect((await client.getQuarterlyFinancials('BBCA')).quarters[0]).toEqual(fin.quarters[0]);
+    expect((await client.getQuarterlyFinancials('BBCA')).data.quarters[0]).toEqual(fin.quarters[0]);
   });
 
   it('fills YoY from company report when quarterly returns single row (fix #17)', async () => {
@@ -362,17 +368,17 @@ describe('SectorsClient (v2)', () => {
       }) as typeof fetch,
     });
     // Report first → cached, then quarterly enriches from cache (no extra report fetch on second quarterly call)
-    const report = await client.getCompanyReport('BBCA');
+    const report = dataOf(await client.getCompanyReport('BBCA'));
     expect(report.financials.yoyQuarterRevenueGrowth).toBeCloseTo(9.8);
     expect(report.financials.yoyQuarterEarningsGrowth).toBeCloseTo(8.7);
-    const fin = await client.getQuarterlyFinancials('BBCA');
+    const fin = dataOf(await client.getQuarterlyFinancials('BBCA'));
     expect(fin.quarters[0].revenueGrowthYoy).toBeCloseTo(9.8);
     expect(fin.quarters[0].netIncomeGrowthYoy).toBeCloseTo(8.7);
     expect(calls.filter((u) => u.includes('/company/report')).length).toBe(1);
     expect(calls.filter((u) => u.includes('/financials/quarterly')).length).toBe(1);
     // Second quarterly call → cache hit, no network
     calls.length = 0;
-    const fin2 = await client.getQuarterlyFinancials('BBCA');
+    const fin2 = dataOf(await client.getQuarterlyFinancials('BBCA'));
     expect(fin2.quarters[0].revenueGrowthYoy).toBeCloseTo(9.8);
     expect(calls.length).toBe(0);
   });
@@ -388,7 +394,9 @@ describe('SectorsClient (v2)', () => {
     });
     const first = await client.getCompanyReport('BBCA');
     const second = await client.getCompanyReport('BBCA');
-    expect(first).toEqual(second);
+    expect(first.data).toEqual(second.data);
+    expect(second.metadata.origin).toBe('CACHE');
+    expect(second.metadata.fetchedAt).toBe(first.metadata.fetchedAt);
     expect(hits).toBe(1);
   });
 
@@ -477,12 +485,12 @@ describe('Market & News Researcher (Phase 1, v2)', () => {
       }) as typeof fetch,
     });
 
-    const daily = await client.getDailyTransaction('BBCA');
+    const daily = dataOf(await client.getDailyTransaction('BBCA'));
     expect(daily.window).toBe('1d');
     expect(daily.upDaysPct).toBe(100); // close > open
     expect(daily.avgValueBillion).toBeCloseTo(98.5); // 9850 * 10M / 1e9
 
-    const foreign = await client.getForeignFlow('BBCA');
+    const foreign = dataOf(await client.getForeignFlow('BBCA'));
     expect(foreign.netFlow).toBe('buy'); // sum inflow > 0
     expect(foreign.netBuyDaysPct).toBe(50);
 
@@ -504,19 +512,25 @@ describe('Market & News Researcher (Phase 1, v2)', () => {
       }) as typeof fetch,
     });
 
-    const news = await client.getNews('BBCA');
+    const news = dataOf(await client.getNews('BBCA'));
     expect(news[0].headline).toBe('hi');
     expect(news[0].sentiment).toBe('positive'); // tag Bullish
 
-    const filings = await client.getFilings('BBCA');
+    const filings = dataOf(await client.getFilings('BBCA'));
     expect(filings[0].type).toBe('insider_buy');
 
-    const sentiment = await client.getSentiment('BBCA');
+    const foreign = dataOf(await client.getForeignFlow('BBCA'));
+    expect(foreign.netFlow).toBe('buy');
+    const callsBeforeDerivedSentiment = calls.length;
+    const sentimentResult = await client.getSentiment('BBCA');
+    const sentiment = sentimentResult.data;
     expect(typeof sentiment.aggregate).toBe('number');
     expect(sentiment.aggregate as number).toBeGreaterThan(0); // news bullish + foreign buy
+    expect(sentimentResult.metadata).toMatchObject({ origin: 'DERIVED', fetchedAt: null, derivedFrom: ['news', 'foreign_flow'] });
 
-    // sentiment tidak memanggil /sentiment; hanya /news + /foreign-flow
+    // sentiment tidak memanggil /sentiment dan tidak mengulang dependency cache.
     expect(calls.every((u) => !u.includes('/sentiment'))).toBe(true);
+    expect(calls.length).toBe(callsBeforeDerivedSentiment);
   });
 
   it('applies short news TTL while retaining completed daily history for the local date', async () => {
@@ -589,9 +603,9 @@ describe('MockSectorsApi', () => {
   const api = new MockSectorsApi();
 
   it('serves canonical fixtures for known tickers', async () => {
-    const report = await api.getCompanyReport('BBCA');
+    const report = (await api.getCompanyReport('BBCA')).data;
     expect(report.financials.roe).toBe(23.1);
-    const fin = await api.getQuarterlyFinancials('BBCA');
+    const fin = (await api.getQuarterlyFinancials('BBCA')).data;
     expect(fin.quarters[0].period).toBe('2024-Q4');
   });
 
@@ -608,11 +622,11 @@ describe('MockSectorsApi', () => {
   });
 
   it('serves deterministic market/news fixtures distinguishing liquidity & sentiment', async () => {
-    const daily = await api.getDailyTransaction('BBCA');
+    const daily = (await api.getDailyTransaction('BBCA')).data;
     expect(daily.liquidityBand).toBe('high');
-    expect((await api.getForeignFlow('BBCA')).netFlow).toBe('buy');
-    expect((await api.getSentiment('BBCA')).aggregate as number).toBeGreaterThan(0);
-    expect((await api.getDailyTransaction('BJTM')).liquidityBand).toBe('low');
-    expect((await api.getSentiment('BJTM')).aggregate as number).toBeLessThan(0);
+    expect((await api.getForeignFlow('BBCA')).data.netFlow).toBe('buy');
+    expect((await api.getSentiment('BBCA')).data.aggregate as number).toBeGreaterThan(0);
+    expect((await api.getDailyTransaction('BJTM')).data.liquidityBand).toBe('low');
+    expect((await api.getSentiment('BJTM')).data.aggregate as number).toBeLessThan(0);
   });
 });

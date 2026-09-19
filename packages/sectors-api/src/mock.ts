@@ -1,4 +1,5 @@
 import { computeMatchScore, SectorsApiError } from './client';
+import type { FinancialDataMetadata, FinancialDataResult, FinancialObservationKind } from '@harness/financial-data';
 import type {
   CompanyReport,
   DailyTransaction,
@@ -207,19 +208,22 @@ const MARKET_NEWS: Record<string, MarketNewsFixture> = {
  * sehingga jalur error workflow tetap teruji.
  */
 export class MockSectorsApi implements SectorsApi {
-  async getCompanyReport(ticker: string): Promise<CompanyReport> {
-    const fx = UNIVERSE[ticker.toUpperCase()];
-    if (!fx) {
-      throw new SectorsApiError(
-        'NOT_FOUND',
-        `Ticker "${ticker}" not found in Sectors API`,
-        'Try: /judge BBCA (or other valid ticker)',
-      );
-    }
-    return fx.report;
+  private result<K extends FinancialObservationKind, T>(kind: K, data: T, derivedFrom: FinancialObservationKind[] = []): FinancialDataResult<T> {
+    const record = data as { asOf?: string; quarters?: Array<{ period?: string }> };
+    const metadata: FinancialDataMetadata = {
+      providerId: 'sectors',
+      source: `sectors.${kind}`,
+      origin: 'MOCK',
+      fetchedAt: null,
+      dataAsOf: record.asOf ?? null,
+      requestedAsOf: null,
+      period: record.quarters?.[0]?.period ?? null,
+      derivedFrom,
+    };
+    return { data, metadata };
   }
 
-  async getQuarterlyFinancials(ticker: string): Promise<QuarterlyFinancials> {
+  async getCompanyReport(ticker: string): Promise<FinancialDataResult<CompanyReport>> {
     const fx = UNIVERSE[ticker.toUpperCase()];
     if (!fx) {
       throw new SectorsApiError(
@@ -228,7 +232,19 @@ export class MockSectorsApi implements SectorsApi {
         'Try: /judge BBCA (or other valid ticker)',
       );
     }
-    return fx.financials;
+    return this.result('company_report', fx.report);
+  }
+
+  async getQuarterlyFinancials(ticker: string): Promise<FinancialDataResult<QuarterlyFinancials>> {
+    const fx = UNIVERSE[ticker.toUpperCase()];
+    if (!fx) {
+      throw new SectorsApiError(
+        'NOT_FOUND',
+        `Ticker "${ticker}" not found in Sectors API`,
+        'Try: /judge BBCA (or other valid ticker)',
+      );
+    }
+    return this.result('quarterly_financials', fx.financials);
   }
 
   async screen(criteria: string[]): Promise<ScreenerResult[]> {
@@ -251,23 +267,23 @@ export class MockSectorsApi implements SectorsApi {
     return fx;
   }
 
-  async getDailyTransaction(ticker: string): Promise<DailyTransaction> {
-    return this.marketOrThrow(ticker).daily;
+  async getDailyTransaction(ticker: string): Promise<FinancialDataResult<DailyTransaction>> {
+    return this.result('daily_transaction', this.marketOrThrow(ticker).daily);
   }
 
-  async getForeignFlow(ticker: string): Promise<ForeignFlow> {
-    return this.marketOrThrow(ticker).foreign;
+  async getForeignFlow(ticker: string): Promise<FinancialDataResult<ForeignFlow>> {
+    return this.result('foreign_flow', this.marketOrThrow(ticker).foreign);
   }
 
-  async getNews(ticker: string): Promise<NewsArticle[]> {
-    return this.marketOrThrow(ticker).news;
+  async getNews(ticker: string): Promise<FinancialDataResult<NewsArticle[]>> {
+    return this.result('news', this.marketOrThrow(ticker).news);
   }
 
-  async getFilings(ticker: string): Promise<Filing[]> {
-    return this.marketOrThrow(ticker).filings;
+  async getFilings(ticker: string): Promise<FinancialDataResult<Filing[]>> {
+    return this.result('filings', this.marketOrThrow(ticker).filings);
   }
 
-  async getSentiment(ticker: string): Promise<Sentiment> {
-    return this.marketOrThrow(ticker).sentiment;
+  async getSentiment(ticker: string): Promise<FinancialDataResult<Sentiment>> {
+    return this.result('sentiment', this.marketOrThrow(ticker).sentiment);
   }
 }

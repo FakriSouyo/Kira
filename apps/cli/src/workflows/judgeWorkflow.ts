@@ -6,6 +6,7 @@ import {
 } from '@harness/command-judge';
 import { WorkflowRunner, WorkflowStepError, type WorkflowEvent } from '@harness/command-core';
 import { mapToUserFriendly, UserFriendlyError } from '@harness/shared';
+import { FinancialDataVerificationError } from '@harness/financial-data';
 import type { SkillReference } from '@harness/subagent-core';
 import type { AgentEvent, UiWorkflowStepStatus } from '../repl/events';
 import type { HarnessContext } from '../context';
@@ -50,6 +51,13 @@ function errorMessage(error: unknown): string {
 }
 
 function toUserFriendly(error: unknown, runId: string): UserFriendlyError {
+  if (error instanceof FinancialDataVerificationError) {
+    return new UserFriendlyError(
+      'FINANCIAL_DATA_VERIFICATION_FAILED',
+      error.message,
+      `Required financial input verification failed for run ${runId}.`,
+    );
+  }
   const mapped = mapToUserFriendly(error, `Run-scoped validation gagal pada run ${runId} — laporkan dengan run id ini.`);
   if (mapped.code === 'EVIDENCE_HALLUCINATION' || mapped.code === 'UNKNOWN_ERROR') {
     // Ganti suggestion fallback dengan runId spesifik bila generic
@@ -153,6 +161,7 @@ export async function judgeWorkflow(
     const conditional = Boolean(opts.conditional);
     const executors = createJudgeNodeExecutors({
       ctx, ticker, runId: run.id, events, progress, decision, reasoning, conditional,
+      executionStartedAt: run.createdAt,
       lifecycle: opts.lifecycle,
       trace: { recordSubagentResult: (nodeId, result) => recorder.recordSubagentResult(nodeId, result) },
     });
@@ -235,7 +244,7 @@ export async function judgeWorkflow(
     events({ type: 'session.complete', runId: run.id, ...lifecycleIds, status: 'completed' });
     return {
       run: completed,
-      evidence: [value<Evidence>(values, 'identify-company'), value<Evidence>(values, 'fetch-financials')],
+      evidence: collected.evidence.slice(0, 2),
       marketEvidence: collected.marketEvidence,
       newsEvidence: collected.newsEvidence,
       marketAvailable: collected.marketAvailable,

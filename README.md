@@ -32,7 +32,7 @@ User
 │   └─ evidence search
 │
 └─ /judge
-    └─ Research → Bull → Bear → Rebuttal → Judge → Verdict
+    └─ Research → Verify Snapshot → Evidence → Bull → Bear → Rebuttal → Judge → Verdict
 ```
 
 The Bull/Bear/Judge debate belongs to `/judge` only.
@@ -100,7 +100,9 @@ selectively fetch required financial data
 ↓
 reuse provider cache when still valid
 ↓
-persist Evidence
+verify + persist one execution-scoped financial snapshot
+↓
+materialize accepted Evidence
 ↓
 select supporting evidence
 ↓
@@ -132,6 +134,14 @@ The LLM produces structured reasoning, but important integrity rules remain code
 - specialist context is scoped to the current `/judge` execution
 - historical artifacts are never injected as authoritative evidence for a new judge run
 
+Before reasoning begins, `/judge` records the exact accepted financial state in
+an immutable `VerifiedFinancialSnapshot`. Required Company Report and Quarterly
+Financials must verify; optional Market/News categories are explicitly marked
+`NOT_REQUESTED` or `UNAVAILABLE` when absent. The snapshot is an audit input
+record, not a provider cache, artifact, context snapshot, or conversational
+memory. Provider cache reuse may occur, but every new Execution gets its own
+snapshot.
+
 ### Selective financial retrieval
 
 FinHarness avoids fetching every provider endpoint for every request.
@@ -150,6 +160,7 @@ Provider cache freshness and artifact reuse are separate concerns.
 
 ```text
 provider cache
+≠ VerifiedFinancialSnapshot
 ≠ Evidence
 ≠ Artifact
 ≠ Context
@@ -397,6 +408,7 @@ Important persisted concepts include:
 - typed artifacts
 - SessionWorkingContext versions
 - ContextSnapshots
+- VerifiedFinancialSnapshots
 - ModelCall linkage
 
 The journal is an append-only audit/replay source. It is not the owner of session context.
@@ -450,34 +462,37 @@ I  Production conversation-context integration
 J  Token budgeting + deterministic compaction
 K  Specialist context for Bull/Bear/Judge
 L  Artifact-aware retrieval + validity + prior-context reuse
+ M  Financial Data Provider Seam
+ N  Verified Financial Snapshot
 ```
 
-A-L is complete and merged into `master`.
+A-L and PR M are complete and merged into `master`; PR N is complete on this
+branch pending review and merge.
 
-PR M adds the Financial Data Provider Seam:
+PR M adds the Financial Data Provider Seam; PR N adds the verified input boundary:
 
 ```text
 A-L  Stateful lifecycle/context foundation  COMPLETE
- M   Financial Data Provider Seam           CURRENT / COMPLETE
- N   Verified Financial Snapshot             NEXT
+ M   Financial Data Provider Seam           COMPLETE
+ N   Verified Financial Snapshot             COMPLETE
 ```
 
 ## Next architecture work
 
-The next planned architecture phase starts from the PR M seam rather than replacing the A-L foundation.
+The next planned architecture phase starts from the PR N snapshot boundary
+rather than replacing the A-L foundation.
 
-Current direction after PR M:
+Current direction after PR N:
 
-1. Verified Financial Snapshot
-2. model/runtime generalization
-3. Capability Registry + typed capability/tool runtime
-4. checkpoint/resume
-5. Evidence Policy + Claim Graph
-6. reusable research subgraphs
-7. Risk Committee
-8. Research Graph
-9. Decision Journal, outcome tracking, and reflection
-10. UI integration and final polish
+1. model/runtime generalization
+2. Capability Registry + typed capability/tool runtime
+3. checkpoint/resume
+4. Evidence Policy + Claim Graph
+5. reusable research subgraphs
+6. Risk Committee
+7. Research Graph
+8. Decision Journal, outcome tracking, and reflection
+9. UI integration and final polish
 
 This order may evolve as implementation constraints become clearer, but the A-L lifecycle/context foundation remains the baseline.
 

@@ -1,5 +1,10 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import type {
+  FinancialDataMetadata,
+  FinancialDataResult,
+  FinancialObservationKind,
+} from '@harness/financial-data';
 import { FinancialDataError, type FinancialDataErrorCode } from '@harness/financial-data';
 import { FileCache, type CacheEntryMeta } from './cache';
 import {
@@ -539,7 +544,7 @@ export class SectorsClient implements SectorsApi {
     this.edate = formatLocalDate(end);
   }
 
-  async getCompanyReport(ticker: string): Promise<CompanyReport> {
+  async getCompanyReport(ticker: string): Promise<FinancialDataResult<CompanyReport>> {
     const symbol = normalizeTicker(ticker);
     const req = requirement('company_report', symbol, { sections: [...COMPANY_REPORT_SECTIONS] }, { kind: 'mixed_snapshot' });
     return this.cached(this.periodicCache, req,
@@ -551,22 +556,30 @@ export class SectorsClient implements SectorsApi {
     );
   }
 
-  async getQuarterlyFinancials(ticker: string): Promise<QuarterlyFinancials> {
+  async getQuarterlyFinancials(ticker: string): Promise<FinancialDataResult<QuarterlyFinancials>> {
     const symbol = normalizeTicker(ticker);
     const req = requirement('quarterly_financials', symbol, { approx: true, nQuarters: 1 }, { kind: 'latest_period' });
+    const derivedFrom: FinancialObservationKind[] = [];
     return this.cached(this.periodicCache, req, async () => {
       let fin = await this.fetchQuarterly(symbol, 1);
-      fin = await this.fillQuarterlyGrowth(symbol, fin);
+      fin = await this.fillQuarterlyGrowth(symbol, fin, () => { if (!derivedFrom.includes('company_report')) derivedFrom.push('company_report'); });
       // A one-row response is correct when the report supplies YoY. If that
       // dependency is absent, retain the old multi-row derivation as a safe
       // fallback instead of silently degrading analytical correctness.
       if (fin.quarters[0]
         && (fin.quarters[0].revenueGrowthYoy === undefined || fin.quarters[0].netIncomeGrowthYoy === undefined)) {
         fin = await this.fetchQuarterly(symbol, 5);
-        fin = await this.fillQuarterlyGrowth(symbol, fin);
+        fin = await this.fillQuarterlyGrowth(symbol, fin, () => { if (!derivedFrom.includes('company_report')) derivedFrom.push('company_report'); });
       }
       return fin;
-    }, (data: QuarterlyFinancials) => ({ dataAsOf: data.quarters[0]?.period, period: data.quarters[0]?.period, source: 'sectors-api' }));
+    }, (data: QuarterlyFinancials) => ({
+      // A quarter label is a period semantic, not an ISO acquisition/effective
+      // timestamp. Keep it in `period` and leave `dataAsOf` unknown.
+      dataAsOf: undefined,
+      period: data.quarters[0]?.period,
+      source: 'sectors-api',
+      ...(derivedFrom.length > 0 ? { derivedFrom } : {}),
+    }));
   }
 
   private async fetchQuarterly(ticker: string, nQuarters: number): Promise<QuarterlyFinancials> {
@@ -577,17 +590,18 @@ export class SectorsClient implements SectorsApi {
     return toQuarterlyFinancials(normalizeQuarterlyPayload(raw));
   }
 
-  private async fillQuarterlyGrowth(ticker: string, fin: QuarterlyFinancials): Promise<QuarterlyFinancials> {
+  private async fillQuarterlyGrowth(ticker: string, fin: QuarterlyFinancials, onDerived?: () => void): Promise<QuarterlyFinancials> {
     if (fin.quarters.length === 0) return fin;
     const q0 = fin.quarters[0];
     if (q0.revenueGrowthYoy !== undefined && q0.netIncomeGrowthYoy !== undefined) return fin;
     try {
       const report = await this.getCompanyReport(ticker);
-      if (q0.revenueGrowthYoy === undefined && report.financials.yoyQuarterRevenueGrowth !== undefined) {
-        q0.revenueGrowthYoy = report.financials.yoyQuarterRevenueGrowth;
+      onDerived?.();
+      if (q0.revenueGrowthYoy === undefined && report.data.financials.yoyQuarterRevenueGrowth !== undefined) {
+        q0.revenueGrowthYoy = report.data.financials.yoyQuarterRevenueGrowth;
       }
-      if (q0.netIncomeGrowthYoy === undefined && report.financials.yoyQuarterEarningsGrowth !== undefined) {
-        q0.netIncomeGrowthYoy = report.financials.yoyQuarterEarningsGrowth;
+      if (q0.netIncomeGrowthYoy === undefined && report.data.financials.yoyQuarterEarningsGrowth !== undefined) {
+        q0.netIncomeGrowthYoy = report.data.financials.yoyQuarterEarningsGrowth;
       }
     } catch {
       // Report unavailable → biarkan undefined, rubrik akan renorm.
@@ -610,7 +624,7 @@ export class SectorsClient implements SectorsApi {
             if (row.roe !== undefined) return row;
             try {
               const report = await this.getCompanyReport(row.ticker);
-              return { ...row, roe: report.financials.roe };
+              return { ...row, roe: report.data.financials.roe };
             } catch {
               return row; // biarkan roe undefined → profitable tetap 0 untuk ticker ini
             }
@@ -644,7 +658,7 @@ export class SectorsClient implements SectorsApi {
   }
 
   // —— Market Researcher (Phase 1, addendum §24-A.2) ——
-  async getDailyTransaction(ticker: string): Promise<DailyTransaction> {
+  async getDailyTransaction(ticker: string): Promise<FinancialDataResult<DailyTransaction>> {
     const symbol = normalizeTicker(ticker);
     const req = requirement('daily_transaction', symbol, { end: this.edate, start: this.sdate }, { kind: 'historical_range' });
     return this.cached(this.cache, req, () =>
@@ -652,10 +666,11 @@ export class SectorsClient implements SectorsApi {
         `/daily/${encodeURIComponent(symbol)}/?start=${this.sdate}&end=${this.edate}`,
         symbol,
       ).then(toDailyTransaction),
+      (data: DailyTransaction) => ({ dataAsOf: data.asOf, source: 'sectors-api' }),
     );
   }
 
-  async getForeignFlow(ticker: string): Promise<ForeignFlow> {
+  async getForeignFlow(ticker: string): Promise<FinancialDataResult<ForeignFlow>> {
     const symbol = normalizeTicker(ticker);
     const req = requirement('foreign_flow', symbol, { end: this.edate, start: this.sdate }, { kind: 'historical_range' });
     return this.cached(this.cache, req, () =>
@@ -663,11 +678,12 @@ export class SectorsClient implements SectorsApi {
         `/foreign-flow/${encodeURIComponent(symbol)}/?start=${this.sdate}&end=${this.edate}`,
         symbol,
       ).then(toForeignFlow),
+      (data: ForeignFlow) => ({ dataAsOf: data.asOf, source: 'sectors-api' }),
     );
   }
 
   // —— News Researcher (Phase 1, addendum §24-A.2) — newsCache TTL lebih pendek.
-  async getNews(ticker: string): Promise<NewsArticle[]> {
+  async getNews(ticker: string): Promise<FinancialDataResult<NewsArticle[]>> {
     const symbol = normalizeTicker(ticker);
     const req = requirement('news', symbol, { limit: 20, symbols: symbol }, { kind: 'recent_snapshot' });
     return this.cached(this.newsCache, req, () =>
@@ -677,7 +693,7 @@ export class SectorsClient implements SectorsApi {
     );
   }
 
-  async getFilings(ticker: string): Promise<Filing[]> {
+  async getFilings(ticker: string): Promise<FinancialDataResult<Filing[]>> {
     const symbol = normalizeTicker(ticker);
     const req = requirement('filings', symbol, { limit: 10, symbol }, { kind: 'event_revalidation' });
     return this.cached(this.newsCache, req, () =>
@@ -688,14 +704,32 @@ export class SectorsClient implements SectorsApi {
   }
 
   /** Sentimen diturunkan (bukan endpoint v2): dari news tags + sign foreign-flow. */
-  async getSentiment(ticker: string): Promise<Sentiment> {
+  async getSentiment(ticker: string): Promise<FinancialDataResult<Sentiment>> {
     // getNews/getFilings memakai cache → umumnya tidak menambah call berbayar.
     const [news, foreign] = await Promise.all([this.getNews(ticker), this.getForeignFlow(ticker)]);
-    return deriveSentiment(normalizeTicker(ticker), news, foreign);
+    const data = deriveSentiment(normalizeTicker(ticker), news.data, foreign.data);
+    return {
+      data,
+      metadata: {
+        providerId: 'sectors',
+        source: 'sectors.sentiment',
+        origin: 'DERIVED',
+        fetchedAt: null,
+        dataAsOf: data.asOf || null,
+        requestedAsOf: null,
+        period: null,
+        derivedFrom: ['news', 'foreign_flow'],
+      },
+    };
   }
 
   /** Read-through cache: hit → langsung return; miss → fetch lalu simpan + metadata data-date. */
-  private async cached<T>(cache: FileCache, req: SectorsCacheRequirement, fetcher: () => Promise<T>, metaFor?: (data: T) => CacheEntryMeta): Promise<T> {
+  private async cached<T>(
+    cache: FileCache,
+    req: SectorsCacheRequirement,
+    fetcher: () => Promise<T>,
+    metaFor?: (data: T) => CacheEntryMeta,
+  ): Promise<FinancialDataResult<T>> {
     const cacheKey = cacheKeyFor(req);
     const entry = cache.getEntry<T>(cacheKey);
     const decision = evaluateCacheEntry(req, entry, {
@@ -704,16 +738,33 @@ export class SectorsClient implements SectorsApi {
       newsTtlMs: this.newsCacheTtlMs,
     });
     this.onCacheDecision?.(decision);
-    if (decision.action === 'reuse') return entry!.data;
+    if (decision.action === 'reuse') return { data: entry!.data, metadata: this.resultMetadata(req, entry!, 'CACHE') };
     const data = await fetcher();
-    cache.set(cacheKey, data, {
+    const stored = cache.set(cacheKey, data, {
       ...metaFor?.(data),
       cacheIdentity: cacheKey,
       schemaVersion: req.schemaVersion,
       adapterVersion: req.adapterVersion,
       source: 'sectors-api',
     });
-    return data;
+    return { data, metadata: this.resultMetadata(req, stored, 'PROVIDER') };
+  }
+
+  private resultMetadata(
+    req: SectorsCacheRequirement,
+    entry: { fetchedAt: string; meta?: CacheEntryMeta },
+    origin: 'PROVIDER' | 'CACHE',
+  ): FinancialDataMetadata {
+    return {
+      providerId: 'sectors',
+      source: `sectors.${req.operation}`,
+      origin,
+      fetchedAt: entry.fetchedAt,
+      dataAsOf: entry.meta?.dataAsOf ?? null,
+      requestedAsOf: req.temporal.asOf ?? null,
+      period: entry.meta?.period ?? null,
+      derivedFrom: (entry.meta?.derivedFrom ?? []) as FinancialObservationKind[],
+    };
   }
 
   private async request<T>(path: string, ticker: string | null = null): Promise<T> {

@@ -114,6 +114,20 @@ export const artifacts = sqliteTable('artifacts', {
   createdAt: text('created_at').notNull(),
 }, (table) => [unique('artifacts_execution_kind_uniq').on(table.executionId, table.kind)]);
 
+/** PR N: immutable, execution-scoped verified financial inputs. */
+export const financialSnapshots = sqliteTable('financial_snapshots', {
+  snapshotId: text('snapshot_id').primaryKey(),
+  schemaVersion: integer('schema_version').notNull(),
+  sessionId: text('session_id').notNull().references(() => researchSessions.id, { onDelete: 'cascade' }),
+  turnId: text('turn_id').notNull().references(() => researchTurns.id, { onDelete: 'cascade' }),
+  executionId: text('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  ticker: text('ticker').notNull(),
+  payloadJson: text('payload_json').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  createdAt: text('created_at').notNull(),
+  finalizedAt: text('finalized_at').notNull(),
+}, (table) => [unique('financial_snapshots_execution_uniq').on(table.executionId)]);
+
 export const financialsNormalized = sqliteTable('financials_normalized', {
   id: text('id').primaryKey(),
   ticker: text('ticker').notNull(),

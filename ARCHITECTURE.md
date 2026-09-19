@@ -1,4 +1,4 @@
-# ARCHITECTURE - FinHarness Stateful Financial Agent Harness (A-L baseline + PR M seam)
+# ARCHITECTURE - FinHarness Stateful Financial Agent Harness (A-L baseline + PR M/N)
 
 Dokumen teknis untuk current runtime, keputusan desain, dan historical deviations.
 PR A-L adalah baseline stateful harness saat ini. PR M menambahkan seam provider
@@ -130,10 +130,66 @@ capability/tool runtime
 later financial intelligence layers
 ```
 
+## PR N — Verified Financial Snapshot
+
+PR N inserts an immutable, execution-scoped financial-input boundary between
+provider acquisition and reasoning:
+
+```text
+FinancialDataProvider
+        ↓
+normalized provider-neutral observations
+        ↓
+deterministic verification
+        ↓
+VerifiedFinancialSnapshot
+        ↓
+Evidence materialization
+        ↓
+Bull / Bear / Judge
+```
+
+`VerifiedFinancialSnapshot` is deterministic runtime verification, not a claim
+that the provider data is economically true, externally audited, or
+independently corroborated. It records the exact accepted observations for one
+Session → Turn → Execution and is immutable, restart-safe, and unique per
+Execution. A retry with the same canonical payload is idempotent; a different
+payload for the same Execution is a conflict. A new Execution always receives a
+new snapshot even when the provider reuses a fresh cache entry.
+
+V1 covers `company_report` and `quarterly_financials` as required observations,
+plus `daily_transaction`, `foreign_flow`, `news`, `filings`, and `sentiment` as
+optional observations. Optional absence is explicit: `NOT_REQUESTED` means the
+profile disabled the category, while `UNAVAILABLE` means a requested category
+failed or was rejected. Present observations carry provider-neutral provenance
+(`providerId`, `source`, `origin`, `fetchedAt`, `dataAsOf`, `requestedAsOf`,
+`period`, and derived lineage where known) and deterministic verification
+outcomes. Unknown timestamps remain `null`; financial quarter labels remain
+period semantics rather than fabricated dates.
+
+The Sectors cache remains PR E's freshness authority. Snapshot persistence does
+not cache provider responses, decide freshness, or reuse data across
+Executions. Sectors sentiment remains a local derived observation from news and
+foreign-flow inputs; no paid sentiment endpoint is introduced. Bull, Bear, and
+Judge remain provider/snapshot-blind and receive Evidence only. The snapshot is
+not an Artifact, ContextSnapshot, ContextPacket, memory record, or retrieval
+source, and no cross-provider reconciliation or Claim Graph is added.
+
+`collect-sources` is the sole `/judge` financial-input boundary: it verifies
+required and optional results, materializes Evidence only from accepted
+observations, persists the snapshot, and only then allows
+`select-supporting-evidence` and the first Bull call to run. Existing Evidence
+content-hash deduplication and `run_evidence` membership are unchanged; the
+snapshot stores the resulting Evidence IDs instead of changing Evidence rows.
+The durable store is `FinancialSnapshotStoreSqlite` on migration `0012`, with
+lookup by snapshot ID or Execution ID.
+
 ## 2. Evidence-First Flow (/judge, termasuk Debate ronde Phase 1)
 
 1. **Researcher** (bukan LLM): fetch `company_report` + `quarterly_financials`
-   → simpan ke Evidence Store dengan dedup content-hash (SHA-256 canonical JSON).
+   and optional enrichment → normalize and verify provider results → persist one
+   `VerifiedFinancialSnapshot` → materialize accepted observations into Evidence
+   Store with dedup content-hash (SHA-256 canonical JSON).
 2. **Bull** (`claim`): system prompt 2 zona → `generateObject` (Zod) → reasoning + klaim.
 3. **Validasi 3 lapis** (`ClaimValidator`):
    - Layer 1: struktur (Zod — `evidenceIds` non-kosong, uuid valid)
