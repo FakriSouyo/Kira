@@ -162,4 +162,3 @@ Implementation proceeds test-first in these slices:
 The implementation must stop and report if it requires a database migration,
 durable selection state, lifecycle/Judge/schema changes, Context redesign,
 command semantics, or any later milestone.
-

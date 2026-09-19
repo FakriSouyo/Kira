@@ -35,6 +35,52 @@ External seams are explicit: `packages/llm` owns model clients,
 `packages/financial-data` owns the provider-neutral financial contract, and
 `packages/sectors-api` is the current financial provider implementation.
 
+## Model runtime — Q1
+
+`packages/llm` is the canonical model-runtime boundary. It separates logical
+provider route, provider-owned model identity, adapter implementation, and wire
+protocol:
+
+```text
+ProviderDirectory snapshot
+  providerId + modelId + safe capabilities
+              │
+              ▼
+        ModelRuntime
+              │ prepareCall(route, controls)
+              ▼
+     PreparedModelCall
+       one immutable route snapshot
+              │
+              ▼
+        ModelAdapter
+       OpenAI-compatible / Anthropic / mock
+```
+
+The directory is an immutable, detached composition snapshot. Replacing it
+affects only later preparations; an existing prepared call retains its resolved
+provider, model, adapter, protocol, endpoint identity, effective capabilities,
+generation controls, and runtime fingerprint. A prepared call is one-shot and
+never switches route internally. Compatibility retry/fallback orchestration
+creates a separate prepared call for each attempt, so result metadata reports
+the route that actually succeeded.
+
+`ModelRuntimeDescriptor` is safe for audit or persistence: it contains no API
+keys, session affinity IDs, request IDs, timestamps, functions, paths, mutable
+SDK clients, or abort controllers. Its deterministic SHA-256 fingerprint is
+based on canonical semantic JSON and changes with route, model, adapter,
+protocol, endpoint identity, capabilities, and generation controls. API-key
+rotation and request/session-affinity changes do not affect it.
+
+The Q1 runtime exposes effective context, structured-output, and streaming
+capabilities without making `@harness/llm` depend on the Context Engine. Native
+provider structured-output support remains distinguishable from effective
+runtime support because custom Responses endpoints may use text JSON plus local
+Zod validation. Existing `LLMClientLike` value-only methods remain available;
+result-bearing object/text and metadata-capable stream paths are provided by the
+compatibility facade. Q2 will connect these descriptors to durable model
+selection, production Context capability resolution, and persistence.
+
 ## Core boundaries and invariants
 
 - `Session → Turn → Execution` is the canonical lifecycle. A conversational
@@ -167,8 +213,8 @@ generic runner and are supplied by the command composition layer.
 
 PR O is complete and merged. It provides the generic lifecycle, immutable
 profile/output, generation-fencing, startup reconciliation, and restored-node
-runner primitives. PR P is the current feature-branch implementation that
-connects those primitives to the production Judge graph.
+runner primitives. PR P connects those primitives to the production Judge graph
+and is complete on master.
 
 ```text
 ResearchExecution
@@ -322,9 +368,9 @@ credentials.
 The current and future milestone order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md). The next milestone is:
 
-**PR P — `/judge` Same-Execution Checkpoint / Resume**
+**Q1 — Model Runtime + Provider Directory**
 
-PR P is implemented on the current feature branch and pending review/merge. It
-restores the same Execution's validated snapshot, Evidence, and typed debate
-outputs, computes a safe DAG frontier, continues interrupted work, and repairs
-final publication. It is not a generic workflow rerun or artifact reuse.
+Q1 is the current model-runtime milestone. PR P is complete on master and
+continues to restore the same Execution's validated snapshot, Evidence, and
+typed debate outputs without changing its lifecycle or Judge graph. The full
+future order is maintained in [`docs/ROADMAP.md`](docs/ROADMAP.md).

@@ -26,39 +26,62 @@ reasoning inside explicit command boundaries.
 - **M — Financial Data Provider Seam:** workflow code depends on a provider-neutral financial contract.
 - **N — Verified Financial Snapshot:** provider results are verified and finalized into an immutable execution-scoped input boundary.
 - **O — Durable Resumability Foundation:** interrupted lifecycle state, immutable profiles and node outputs, generation fencing, startup reconciliation, and generic restored-node runner support are available.
+- **P — `/judge` Same-Execution Checkpoint / Resume:** typed Judge checkpoints, validated DAG restoration, same-Execution continuation, `/resume`, `/continue`, projection repair, and idempotent publication are complete.
 
-## Next
+## Current milestone
 
-### P — `/judge` Same-Execution Checkpoint / Resume
+### Q — Model Runtime
 
-**Implementation complete on the current feature branch; pending review/merge.**
-PR P:
+- **Q1 — Model Runtime + Provider Directory:** provider-neutral runtime
+  contracts, immutable provider/model directory snapshots, adapter boundaries,
+  safe runtime descriptors, one-shot prepared calls, actual invocation
+  metadata, and compatibility-facade integration.
+- **Q2 — Durable Model Selection + Production Integration:** planned; not part
+  of Q1.
 
-- validate an interrupted Execution;
-- reconstruct valid workflow state;
-- restore the FinancialSnapshot and accepted Evidence;
-- restore exact typed Bull, Bear, Rebuttal, and Judge outputs;
-- compute a DAG-safe resumable frontier;
-- continue the **same** Execution;
-- exposes `/resume <executionId>` and an unambiguous `/continue` path;
-- repair or complete idempotent final publication.
+## Future milestones
 
-PR O remains the generic foundation. PR P is the first milestone that provides
-true same-Execution Judge continuation; `/session <executionId>` remains the
-read-only session/execution viewer.
+### R — Capability Runtime
 
-## Later milestones
+- R1 — Typed Tool Runtime
+- R2 — Capability Registry + Policy + Integrations
 
-1. **Model Runtime Generalization**
-2. **Capability Registry + Typed Tool Runtime**
-3. **Document & File Workspace**
-4. **Evidence Policy + Claim Graph**
-5. **Reusable Research Subgraphs**
-6. **Risk Committee**
-7. **Research Graph**
-8. **Decision Journal**
-9. **Outcome Tracking + Reflection**
-10. **UI Integration / Final Polish**
+### S — Files & Documents
+
+- S1 — Durable File / Attachment Layer
+- S2 — Workspace + File Capability
+- S3 — Document Understanding / Retrieval
+
+### T — Evidence Intelligence
+
+- Evidence Policy + Claim Graph
+
+### U — Research Composition
+
+- Reusable Research Subgraphs
+
+### V — Decision Intelligence
+
+- Risk Committee
+
+### W — Long-Term Research State
+
+- Research Graph
+
+### X — Decision Memory
+
+- Decision Journal
+
+### Y — Learning Loop
+
+- Outcome Tracking + Reflection
+
+### Z — Product Platform
+
+- Z1 — Application Host / API Boundary
+- Z2 — Web Surface
+- Z3 — Desktop Host + Desktop Shell
+- Z4 — Cross-Surface Integration / Final Polish
 
 ### Semantic grouping
 

@@ -41,4 +41,3 @@ export interface ModelAdapter {
     readonly connection?: unknown;
   }): PreparedAdapterCall;
 }
-

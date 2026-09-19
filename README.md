@@ -493,11 +493,12 @@ L  Artifact-aware retrieval + validity + prior-context reuse
  M  Financial Data Provider Seam
  N  Verified Financial Snapshot
  O  Durable Resumability Foundation
- P  /judge Same-Execution Checkpoint / Resume (implementation candidate)
+ P  /judge Same-Execution Checkpoint / Resume
+ Q1 Model Runtime + Provider Directory (current)
 ```
 
-A-L, PR M, PR N, and PR O are complete and merged into `master`. PR P is
-implemented on the current feature branch and pending review/merge.
+A-P are complete and merged into `master`. Q1 is the current model-runtime
+milestone; durable model selection and production integration remain Q2 work.
 
 PR M adds the Financial Data Provider Seam; PR N adds the verified input boundary:
 
@@ -506,6 +507,7 @@ A-L  Stateful lifecycle/context foundation  COMPLETE
  M   Financial Data Provider Seam           COMPLETE
  N   Verified Financial Snapshot             COMPLETE
  O   Durable Resumability Foundation         COMPLETE
+ P   /judge Same-Execution Checkpoint / Resume COMPLETE
 ```
 
 ## Next architecture work
@@ -513,24 +515,22 @@ A-L  Stateful lifecycle/context foundation  COMPLETE
 The next planned architecture phase starts from the PR O resumability boundary
 rather than replacing the A-L foundation.
 
-Current direction after PR O:
+Current direction after PR P:
 
-1. O — Durable Resumability Foundation
-2. P — `/judge` Same-Execution Checkpoint / Resume
-3. Model Runtime Generalization
-4. Capability Registry + Typed Tool Runtime
-5. Document & File Workspace
-6. Evidence Policy + Claim Graph
-7. Reusable Research Subgraphs
-8. Risk Committee
-9. Research Graph
-10. Decision Journal
-11. Outcome Tracking + Reflection
-12. UI integration / polish
+1. Q — Model Runtime
+2. R — Capability Runtime
+3. S — Files & Documents
+4. T — Evidence Intelligence
+5. U — Research Composition
+6. V — Decision Intelligence
+7. W — Long-Term Research State
+8. X — Decision Memory
+9. Y — Learning Loop
+10. Z — Product Platform
 
-This order may evolve as implementation constraints become clearer, but the
-A-O lifecycle, provider, snapshot, and resumability foundation remains the
-baseline.
+This product overview points to the canonical roadmap for the detailed future
+sequence. Q1 does not include durable model selection, Tool Runtime, files,
+Web/Desktop work, or changes to PR P.
 
 ## Documentation
 
