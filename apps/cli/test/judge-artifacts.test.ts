@@ -2,6 +2,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WorkflowRunner } from '@harness/command-core';
+import { checkpointKindForNode, createJudgeWorkflow, JUDGE_NODE_IDS } from '@harness/command-judge';
 import { openDb, type FinharnessDatabase } from '@harness/database';
 import { loadConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
@@ -54,6 +56,24 @@ describe('PR F /judge typed artifacts', () => {
     await session.close();
   });
 
+  it('writes one validated PR P checkpoint for every Judge node, including skipped branches', async () => {
+    const session = await createHarnessSession(db, config(), { write: () => {} });
+    await session.commands.get('judge')!(['BBCA']);
+    const execution = (await db.sessions.getSessionArtifacts(session.conversation.id)).executions[0]!;
+    const outputs = await db.workflowNodeOutputs.listNodeOutputsForExecution(execution.id);
+    const definition = createJudgeWorkflow();
+
+    expect(outputs.map(output => output.nodeId)).toEqual([...JUDGE_NODE_IDS]);
+    expect(outputs.map(output => output.outputKind)).toEqual(JUDGE_NODE_IDS.map(checkpointKindForNode));
+    expect(outputs.every(output => output.workflowId === 'judge' && output.workflowVersion === 2)).toBe(true);
+    expect(outputs.every(output => output.outputFingerprint.length === 64 && output.dependencyFingerprint.length === 64)).toBe(true);
+    expect(outputs.filter(output => output.status === 'skipped').map(output => output.nodeId)).toEqual([
+      'conditional-bear-rechallenge', 'conditional-bull-rebuttal', 'resolve-conflicts',
+    ]);
+    expect(outputs.length).toBe(definition.nodes.length);
+    await session.close();
+  });
+
   it('creates new execution artifacts while reusing only the run-scoped Evidence rows', async () => {
     const session = await createHarnessSession(db, config(), { write: () => {} });
     await session.commands.get('judge')!(['BBCA']);
@@ -71,6 +91,24 @@ describe('PR F /judge typed artifacts', () => {
     expect((second[2]!.payload as { evidenceIds: string[] }).evidenceIds).toEqual(
       expect.arrayContaining((await db.evidence.getByRun(executions[1]!.id)).map(evidence => evidence.id)),
     );
+    await session.close();
+  });
+
+  it('repairs missing completed-run artifacts on restart without rerunning the workflow', async () => {
+    let session = await createHarnessSession(db, config(), { write: () => {} });
+    await session.commands.get('judge')!(['BBCA']);
+    const sessionId = session.conversation.id;
+    const execution = (await db.sessions.getSessionArtifacts(sessionId)).executions[0]!;
+    await session.close();
+    db.raw.prepare('DELETE FROM artifacts WHERE execution_id = ?').run(execution.id);
+    db.raw.close();
+    db = openDb({ homeDir: dir });
+
+    const run = vi.spyOn(WorkflowRunner.prototype, 'run');
+    session = await createHarnessSession(db, config(), { write: () => {} });
+    expect(run).not.toHaveBeenCalled();
+    expect(await db.artifacts.getByExecution(execution.id)).toHaveLength(3);
+    expect((await db.sessions.getSessionArtifacts(sessionId)).executions).toHaveLength(1);
     await session.close();
   });
 

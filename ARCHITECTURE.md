@@ -88,9 +88,10 @@ The implemented command surface includes `/judge`, `/screen`, `/search`,
 commands, and local session controls. `/challenge`, `/compare`,
 `/investigate`, and `/research` remain planned stubs.
 
-`/resume` currently displays session state. It is not true same-Execution
-Judge resume. `resumeJudgeRun` remains an explicit full re-run helper and is not
-connected to the durable restore contracts. `/continue` is not implemented.
+`/resume <executionId>` validates and continues an interrupted canonical Judge
+Execution in its original Turn. `/continue` selects exactly one interrupted
+Judge Execution from the current Session; it never searches globally. `/session`
+remains the read-only session/execution viewer.
 
 ## Financial evidence flow
 
@@ -162,10 +163,12 @@ The production `/judge` definition has 15 stable nodes. Financial retrieval,
 Evidence policy, model calls, and persistence adapters remain outside the
 generic runner and are supplied by the command composition layer.
 
-## Durable resumability foundation — PR O
+## Durable resumability and Judge resume — PR O / PR P
 
-PR O is complete and merged. It provides generic primitives; it does not
-implement the user-facing PR P resume flow.
+PR O is complete and merged. It provides the generic lifecycle, immutable
+profile/output, generation-fencing, startup reconciliation, and restored-node
+runner primitives. PR P is the current feature-branch implementation that
+connects those primitives to the production Judge graph.
 
 ```text
 ResearchExecution
@@ -175,20 +178,27 @@ ResearchExecution
   ├─ WorkflowStep diagnostic trace
   └─ immutable WorkflowNodeOutput
             ↓
-future PR P Resume Planner
+  PR P Resume Planner
             ↓
-validated restored values
+profile/version and typed checkpoint validation
             ↓
-generic WorkflowRunner
+domain rehydration + idempotent projection repair
+            ↓
+atomic same-Execution acquire
+            ↓
+WorkflowRunner(restored)
+            ↓
+same Execution completion and artifact publication
 ```
 
 ### Restart reconciliation
 
 On local CLI startup, abandoned `running` canonical Executions are reconciled
 to `interrupted`. The parent Turn remains `running` while it has only an
-interrupted attempt. Reconciliation does not acquire, rerun, create a new
-Execution, publish working context, or publish final artifacts. It repairs the
-durable lifecycle/projection boundary only.
+interrupted attempt. Reconciliation does not acquire, rerun, or create a new
+Execution. Completed Judge v2 executions with missing final artifacts are
+repaired from validated final checkpoints without provider/model work;
+interrupted executions remain available for explicit `/resume` or `/continue`.
 
 The local CLI assumes the previous runtime is gone when it starts. There is no
 heartbeat, distributed lease, worker registry, or multi-process liveness claim.
@@ -249,9 +259,32 @@ runner rejects unknown/duplicate nodes, invalid statuses, disabled-state
 contradictions, and missing restored dependencies. Restored nodes emit
 `workflow.step.restored`, not synthetic `started` or `completed` events.
 
-The diagnostic `workflow_steps` trace is not automatically a checkpoint. A
-future planner must require a valid immutable node output before reusing a
-completed step.
+The diagnostic `workflow_steps` trace is not automatically a checkpoint. PR P
+requires a valid immutable node output before reusing a completed step and may
+repair a stale workflow-step projection without fabricating historical timing.
+
+### Production Judge resume
+
+The Judge-specific planner validates the current Session-owned interrupted
+Execution, immutable `ExecutionProfile`, workflow version/graph identity,
+provider/model compatibility, output envelopes, dependency fingerprints,
+FinancialSnapshot ownership, ContextSnapshot ownership, and referenced
+Evidence. It derives a DAG-safe restore frontier; missing outputs leave nodes
+pending, while invalid or conflicting outputs reject resume before acquisition.
+
+Restoration is not a rerun, provider-cache lookup, artifact reuse, or journal
+replay. Accepted provider and model results become typed data-only
+`WorkflowNodeOutput` checkpoints. The collect-sources checkpoint is a compact
+manifest over the authoritative FinancialSnapshot and Evidence rows. Optional
+Market/News failure checkpoints preserve the continuation value `undefined`
+while their historical workflow step remains `failed`; skipped nodes remain
+durably skipped.
+
+The profile's provider/model and researcher/reasoning/conditional flags remain
+authoritative on resume. Changing current UI settings cannot silently change an
+existing Execution. A model node without a committed semantic checkpoint is
+rerun as a new attempt with a new ContextSnapshot; partial token streams are
+never resumed.
 
 ## Storage authority matrix
 
@@ -264,7 +297,7 @@ completed step.
 | ContextSnapshot | exact model invocation context |
 | ArtifactStore | semantic Bull/Bear/Verdict research products |
 | WorkflowStep | diagnostic execution trace |
-| WorkflowNodeOutput | immutable future continuation data |
+| WorkflowNodeOutput | immutable same-Execution continuation data |
 | ExecutionProfile | immutable run configuration |
 
 These stores are intentionally not interchangeable. Checkpoint/resume is not
@@ -275,9 +308,10 @@ provider-cache reuse, artifact reuse, context replay, or journal replay.
 Required workflow failures settle the canonical Execution as `failed`; user
 cancellation settles it as `cancelled`. Process loss is represented as
 `interrupted` and remains visible for future acquisition. Final artifact
-publication and working-context updates occur only after the surrounding Turn
-and Execution semantics permit them. The remaining completion/publication crash
-window is a future hardening concern, not an implicit resume guarantee.
+publication is deterministic and idempotent: a completed Judge Execution with
+valid final checkpoints can repair missing Bull, Bear, and Verdict artifacts on
+startup. Working-context updates occur only after the original Turn settles
+completed.
 
 Errors cross the CLI boundary as structured user-facing errors. Internal
 conflicts remain diagnosable without persisting secrets or exposing raw
@@ -290,7 +324,7 @@ The current and future milestone order is maintained in
 
 **PR P — `/judge` Same-Execution Checkpoint / Resume**
 
-PR P must restore the same Execution's validated snapshot, Evidence, and typed
-debate outputs, compute a safe DAG frontier, continue the interrupted work, and
-repair final publication. It must not be described as a generic workflow rerun
-or artifact reuse.
+PR P is implemented on the current feature branch and pending review/merge. It
+restores the same Execution's validated snapshot, Evidence, and typed debate
+outputs, computes a safe DAG frontier, continues interrupted work, and repairs
+final publication. It is not a generic workflow rerun or artifact reuse.

@@ -11,6 +11,7 @@ import type {
 } from '@harness/session-core';
 import { transitionTurn } from '@harness/session-core';
 import { ContextSnapshotIdSchema } from '@harness/context';
+import { canonicalJson } from '@harness/shared';
 import type { Orm } from './client';
 import { contextSnapshots, executions, modelCalls, researchSessions, researchTurns, workflowSteps } from './schema';
 
@@ -263,6 +264,18 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
     } as WorkflowStepRecord;
   }
 
+  async getStep(runId: string, nodeId: string): Promise<WorkflowStepRecord | null> {
+    const rows = await this.db.select().from(workflowSteps)
+      .where(and(eq(workflowSteps.runId, runId), eq(workflowSteps.nodeId, nodeId))).limit(1);
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      ...row,
+      parentNodeIds: JSON.parse(row.parentNodeIds) as string[],
+      skills: JSON.parse(row.skills) as WorkflowStepRecord['skills'],
+    } as WorkflowStepRecord;
+  }
+
   async recordModelCall(params: Parameters<ResearchSessionStore['recordModelCall']>[0]): Promise<ModelCallRecord> {
     const hasRun = params.runId !== undefined;
     const hasTurn = params.turnId !== undefined;
@@ -309,8 +322,42 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
       currency: params.currency,
       createdAt: new Date().toISOString(),
     };
+
+    const semantic = (value: ModelCallRecord): string => canonicalJson({
+      id: value.id,
+      runId: value.runId,
+      turnId: value.turnId,
+      stepId: value.stepId,
+      subagent: value.subagent,
+      provider: value.provider,
+      model: value.model,
+      attempt: value.attempt,
+      inputTokens: value.inputTokens,
+      outputTokens: value.outputTokens,
+      cachedInputTokens: value.cachedInputTokens,
+      totalTokens: value.totalTokens,
+      latencyMs: value.latencyMs,
+      finishReason: value.finishReason,
+      contextSnapshotId: value.contextSnapshotId,
+      cost: value.cost,
+      currency: value.currency,
+    });
+    const existing = await this.db.select().from(modelCalls).where(eq(modelCalls.id, call.id)).limit(1);
+    if (existing[0]) {
+      const stored = existing[0] as ModelCallRecord;
+      if (semantic(stored) === semantic(call)) return stored;
+      throw new Error(`Model call ${call.id} immutable identity conflict`);
+    }
     await this.db.insert(modelCalls).values(call);
     return call;
+  }
+
+  /** Returns audit calls for one workflow node so resume repair can be idempotent. */
+  async listModelCallsForStep(runId: string, stepId: string): Promise<ModelCallRecord[]> {
+    const rows = await this.db.select().from(modelCalls)
+      .where(and(eq(modelCalls.runId, runId), eq(modelCalls.stepId, stepId)))
+      .orderBy(asc(modelCalls.attempt), asc(modelCalls.createdAt));
+    return rows as ModelCallRecord[];
   }
 
   async getSessionArtifacts(sessionId: string): Promise<ResearchSessionArtifacts> {

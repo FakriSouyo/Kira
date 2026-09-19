@@ -53,6 +53,20 @@ export class ConversationController {
     this.activeTurn = { id: turnId };
     this.append({ type: 'turn.started', id: turnId });
   }
+  /** Attach control-command input to an already-running canonical Turn. */
+  attachTurn(turnId: string, executionId: string): void {
+    if (this.activeTurn) throw new Error(`Turn ${this.activeTurn.id} is already active in this conversation`);
+    const lastEvent = this.db.journal.read(this.state.id)
+      .filter(entry => entry.payload.turnId === turnId)
+      .at(-1);
+    this.activeTurn = { id: turnId, executionId, lastEventId: lastEvent?.id };
+    this.currentRun = executionId;
+  }
+  /** Release an attached control Turn after pre-acquisition validation fails. */
+  releaseAttachedTurn(): void {
+    this.activeTurn = undefined;
+    this.currentRun = undefined;
+  }
   settleTurn(turnId: string, state: Exclude<import('@harness/session-core').RunState, 'running'>): void {
     if (this.activeTurn?.id !== turnId) throw new Error(`Turn ${turnId} is not the active conversation turn`);
     this.append({ type: 'turn.settled', id: turnId, state });

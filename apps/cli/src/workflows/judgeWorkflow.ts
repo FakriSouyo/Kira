@@ -1,8 +1,9 @@
 import type { ExecutionRun } from '@harness/execution';
-import type { ArtifactEnvelope, DurableArtifactRef, Evidence, Judgment } from '@harness/schemas';
+import type { DurableArtifactRef, Evidence, Judgment } from '@harness/schemas';
 import {
   createJudgeCommandContext, createJudgeWorkflow,
   createJudgeExecutionProfile,
+  judgeWorkflowGraphFingerprint,
   type JudgeRoundDecision,
 } from '@harness/command-judge';
 import { WorkflowRunner, WorkflowStepError, type WorkflowEvent } from '@harness/command-core';
@@ -17,6 +18,7 @@ import {
   type BearChallengeResponse, type BullAnalysisResponse, type ChallengeTurn, type CollectedSources,
   type JudgeProgress, type JudgeTurn, type SynthesisTurn, type ThesisTurn,
 } from './judgeNodes';
+import { ensureJudgeArtifacts, JudgeCheckpointWriter, planJudgeResume, repairJudgeProjections, type JudgeResumePlan } from './judgeCheckpoint';
 
 /**
  * Hasil lengkap /judge — dipakai renderer output conversational.
@@ -122,36 +124,62 @@ export async function judgeWorkflow(
   ticker: string,
   progress: JudgeProgress = () => {},
   events: (event: AgentEvent) => void = () => {},
-  opts: { conditional?: boolean; reasoning?: boolean; signal?: AbortSignal; lifecycle?: { sessionId: string; turnId: string } } = {},
+  opts: { conditional?: boolean; reasoning?: boolean; signal?: AbortSignal; lifecycle?: { sessionId: string; turnId: string }; resumeExecutionId?: string } = {},
 ): Promise<JudgeArtifacts> {
   const startedAt = Date.now();
-  const run = opts.lifecycle
-    ? await ctx.db.sessions.createExecution({ ...opts.lifecycle, ticker, command: 'judge' })
-    : await ctx.db.execution.createRun({ ticker, command: 'judge' });
+  const definition = createJudgeWorkflow();
+  let resumePlan: JudgeResumePlan | undefined;
+  let profile: Awaited<ReturnType<typeof createJudgeExecutionProfile>> | undefined;
+  const run = opts.lifecycle && opts.resumeExecutionId
+    ? await (async () => {
+      const artifacts = await ctx.db.sessions.getSessionArtifacts(opts.lifecycle!.sessionId);
+      const existing = artifacts.executions.find(candidate => candidate.id === opts.resumeExecutionId);
+      if (!existing || existing.turnId !== opts.lifecycle!.turnId || existing.command !== 'judge' || existing.ticker !== ticker) {
+        throw new UserFriendlyError('RESUME_NOT_FOUND', `Execution ${opts.resumeExecutionId} is not a Judge execution in this Session.`, 'Use /history to inspect this Session.');
+      }
+      if (existing.status !== 'interrupted') throw new UserFriendlyError('RESUME_NOT_INTERRUPTED', `Execution ${existing.id} is ${existing.status}, not interrupted.`, 'Only interrupted Judge executions can be resumed.');
+      profile = await ctx.db.executionProfiles.getByExecutionId(existing.id) as typeof profile;
+      if (!profile) throw new UserFriendlyError('INCOMPATIBLE_CHECKPOINT', 'This execution has no immutable Judge execution profile.', 'Historical interrupted executions cannot be resumed by PR P.');
+      if (!ctx.config) throw new UserFriendlyError('INCOMPATIBLE_CHECKPOINT', 'The active runtime configuration is unavailable for resume validation.', 'Start a new /judge after checking configuration.');
+      resumePlan = await planJudgeResume({
+        db: ctx.db,
+        execution: existing,
+        profile,
+        definition,
+        currentGraphFingerprint: judgeWorkflowGraphFingerprint(definition),
+        provider: ctx.config.llm.agent.provider,
+        model: ctx.config.llm.agent.model,
+      });
+      return await ctx.db.sessions.acquireInterruptedExecution(existing.id);
+    })()
+    : opts.lifecycle
+      ? await ctx.db.sessions.createExecution({ ...opts.lifecycle, ticker, command: 'judge' })
+      : await ctx.db.execution.createRun({ ticker, command: 'judge' });
   const lifecycleIds = opts.lifecycle
     ? { ...opts.lifecycle, executionId: run.id }
     : {};
   let executionSettled = false;
 
   try {
-    events({ type: 'session.start', runId: run.id, ...lifecycleIds, ticker });
-    const definition = createJudgeWorkflow();
-    const reasoning = Boolean(opts.reasoning);
-    const conditional = Boolean(opts.conditional);
+    if (!opts.resumeExecutionId) events({ type: 'session.start', runId: run.id, ...lifecycleIds, ticker });
+    const reasoning = resumePlan?.reasoning ?? Boolean(opts.reasoning);
+    const conditional = resumePlan?.conditional ?? Boolean(opts.conditional);
+    const researchers = resumePlan?.researchers ?? ctx.researchers;
     // Capture the immutable semantic envelope before any provider/model work.
     // Legacy direct runs intentionally remain outside the resumable contract.
-    if (opts.lifecycle) {
+    if (opts.lifecycle && !opts.resumeExecutionId) {
       if (!ctx.config) throw new Error('Canonical judge execution requires runtime configuration for its execution profile');
-      await ctx.db.executionProfiles.save(createJudgeExecutionProfile({
+      profile = createJudgeExecutionProfile({
         executionId: run.id,
         ticker,
         reasoningMode: reasoning ? 'reasoning' : 'usual',
         conditional,
-        researchers: ctx.researchers,
+        researchers,
         provider: ctx.config.llm.agent.provider,
         model: ctx.config.llm.agent.model,
         createdAt: run.createdAt,
-      }));
+      });
+      await ctx.db.executionProfiles.save(profile);
     }
     events({
       type: 'workflow.plan',
@@ -168,7 +196,26 @@ export async function judgeWorkflow(
     // trace recorder are subscribers, never separate sources of execution truth.
     const nodes = new Map<string, ProjectedNode>(definition.nodes.map(node => [node.id, node] as const));
     const recorder = new WorkflowTraceRecorder({ runId: run.id, definition, store: ctx.db.sessions });
+    const checkpointWriter = opts.lifecycle && profile
+      ? new JudgeCheckpointWriter({
+        db: ctx.db,
+        execution: run as unknown as import('@harness/session-core').ResearchExecution,
+        profile,
+        definition,
+        initialOutputs: resumePlan?.outputs,
+      })
+      : undefined;
+    if (resumePlan && opts.lifecycle) {
+      await repairJudgeProjections({
+        db: ctx.db,
+        execution: run as unknown as import('@harness/session-core').ResearchExecution,
+        outputs: resumePlan.outputs,
+      });
+    }
     const runner = new WorkflowRunner({
+      onNodeCompleted: checkpointWriter ? (node, value, inputs) => checkpointWriter.completed(node, value, inputs) : undefined,
+      onNodeSkipped: checkpointWriter ? node => checkpointWriter.skipped(node) : undefined,
+      onNodeFailed: checkpointWriter ? (node, error) => checkpointWriter.optionalFailure(node, error) : undefined,
       onEvent: async (event) => {
         events(projectWorkflowStep(event, nodes));
         await recorder.handle(event);
@@ -176,21 +223,36 @@ export async function judgeWorkflow(
     });
 
     const decision: JudgeRoundDecision = {};
+    const restoredValue = <T>(nodeId: string): T | undefined => {
+      const seed = resumePlan?.restored.find(candidate => candidate.nodeId === nodeId);
+      return seed?.status === 'completed' ? seed.value as T : undefined;
+    };
+    const restoredEvaluation = restoredValue<JudgeTurn>('evaluate-arguments');
+    if (restoredEvaluation) decision.extraRound = restoredEvaluation.needsExtra;
+    const restoredRound1Bear = restoredValue<ChallengeTurn>('round-1-bear-challenge');
+    const restoredConditionalBear = restoredValue<ChallengeTurn>('conditional-bear-rechallenge');
     const executors = createJudgeNodeExecutors({
-      ctx, ticker, runId: run.id, events, progress, decision, reasoning, conditional,
+      ctx, ticker, runId: run.id, events, progress, decision, reasoning, conditional, researchers,
       executionStartedAt: run.createdAt,
       lifecycle: opts.lifecycle,
+      checkpoint: checkpointWriter
+        ? (nodeId, value) => checkpointWriter.completedValue(nodeId, value)
+        : undefined,
+      restored: {
+        round1BearCounterpoints: restoredRound1Bear?.response.counterpoints,
+        conditionalBearCounterpoints: restoredConditionalBear?.response.counterpoints,
+      },
       trace: { recordSubagentResult: (nodeId, result) => recorder.recordSubagentResult(nodeId, result) },
     });
     const context = createJudgeCommandContext({
       reasoningMode: reasoning ? 'reasoning' : 'usual',
       conditional,
-      researchers: ctx.researchers,
+      researchers,
       executors,
       decision,
     });
 
-    const values = await runner.run(definition, context, { signal: opts.signal });
+    const values = await runner.run(definition, context, { signal: opts.signal, restored: resumePlan?.restored });
     assertNotAborted(opts.signal);
 
     const collected = value<CollectedSources>(values, 'collect-sources');
@@ -210,46 +272,11 @@ export async function judgeWorkflow(
     executionSettled = true;
     let artifactRefs: DurableArtifactRef[] = [];
     if (opts.lifecycle) {
-      const storedClaims = await ctx.db.claims.getByRun(run.id);
-      const envelopes: ArtifactEnvelope[] = [
-        {
-          artifactId: `artifact_bull_case_${run.id}`,
-          kind: 'BULL_CASE',
-          schemaVersion: 1,
-          sessionId: opts.lifecycle.sessionId,
-          turnId: opts.lifecycle.turnId,
-          executionId: run.id,
-          ticker,
-          payload: {
-            thesis: { ...thesis.response, claims: thesis.claims },
-            rebuttal: { ...rebuttal.response, claims: rebuttal.claims },
-          },
-          createdAt: new Date().toISOString(),
-        },
-        {
-          artifactId: `artifact_bear_case_${run.id}`,
-          kind: 'BEAR_CASE',
-          schemaVersion: 1,
-          sessionId: opts.lifecycle.sessionId,
-          turnId: opts.lifecycle.turnId,
-          executionId: run.id,
-          ticker,
-          payload: challenge.response,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          artifactId: `artifact_verdict_${run.id}`,
-          kind: 'VERDICT',
-          schemaVersion: 1,
-          sessionId: opts.lifecycle.sessionId,
-          turnId: opts.lifecycle.turnId,
-          executionId: run.id,
-          ticker,
-          payload: { judgment, evidenceIds: collected.evidenceIds, claimIds: storedClaims.map(claim => claim.claimId), rounds: synthesis.rounds },
-          createdAt: new Date().toISOString(),
-        },
-      ];
-      const saved = await ctx.db.artifacts.saveMany(envelopes);
+      const saved = await ensureJudgeArtifacts({
+        db: ctx.db,
+        execution: completed as unknown as import('@harness/session-core').ResearchExecution,
+        profile: profile!,
+      });
       artifactRefs = saved.map(artifact => ({ kind: artifact.kind, artifactId: artifact.artifactId }));
     }
     events({
@@ -299,21 +326,16 @@ export async function judgeWorkflow(
   }
 }
 
-/**
- * Resume failed run — P1.3. Evidence sudah di-cache 24h, jadi /judge ulang
- * untuk ticker yang sama akan hit cache dan tidak buang kuota Sectors API.
- * Fungsi ini adalah alias untuk re-run normal dengan ticker yang sama.
- */
+/** Continue an interrupted canonical Judge Execution from its validated checkpoints. */
 export async function resumeJudgeRun(
   ctx: HarnessContext,
   runId: string,
   progress: JudgeProgress = () => undefined,
   events: (e: AgentEvent) => void = () => undefined,
+  opts: { signal?: AbortSignal; lifecycle: { sessionId: string; turnId: string }; resumeExecutionId: string },
 ): Promise<JudgeArtifacts> {
   const oldRun = await ctx.db.execution.getRun(runId);
   if (!oldRun) throw new UserFriendlyError('NOT_FOUND', `Run ${runId} tidak ditemukan`, 'Cek /history untuk runId yang valid');
   const ticker = oldRun.ticker;
-  // Re-run normal workflow — Sectors cache (24h) akan serve evidence tanpa hit API
-  const { judgeWorkflow: runJudge } = await import('./judgeWorkflow.js');
-  return runJudge(ctx, ticker, progress, events);
+  return judgeWorkflow(ctx, ticker, progress, events, { ...opts, resumeExecutionId: runId });
 }

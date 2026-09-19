@@ -31,7 +31,8 @@ reasoning inside explicit command boundaries.
 
 ### P — `/judge` Same-Execution Checkpoint / Resume
 
-**Not implemented yet.** PR P will:
+**Implementation complete on the current feature branch; pending review/merge.**
+PR P:
 
 - validate an interrupted Execution;
 - reconstruct valid workflow state;
@@ -39,11 +40,12 @@ reasoning inside explicit command boundaries.
 - restore exact typed Bull, Bear, Rebuttal, and Judge outputs;
 - compute a DAG-safe resumable frontier;
 - continue the **same** Execution;
-- expose `/resume <executionId>` and an unambiguous `/continue` path;
+- exposes `/resume <executionId>` and an unambiguous `/continue` path;
 - repair or complete idempotent final publication.
 
-PR O does not provide user-facing Judge resume. The current `/resume` command
-remains a display-oriented session view until PR P is implemented.
+PR O remains the generic foundation. PR P is the first milestone that provides
+true same-Execution Judge continuation; `/session <executionId>` remains the
+read-only session/execution viewer.
 
 ## Later milestones
 

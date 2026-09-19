@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { WorkflowEvent } from '@harness/command-core';
 import { calculateModelCost, type ModelPricing, type WorkflowStepStatus } from '@harness/session-core';
 import type { SubagentResult } from '@harness/subagent-core';
@@ -30,6 +29,7 @@ interface TraceStore {
     latencyMs: number; finishReason: string | null; cost: number | null; currency: string | null;
     contextSnapshotId?: string | null;
   }): Promise<unknown>;
+  listModelCallsForStep?(runId: string, stepId: string): Promise<Array<{ attempt: number }>>;
 }
 
 export interface WorkflowTraceRecorderOptions {
@@ -94,9 +94,14 @@ export class WorkflowTraceRecorder {
     };
     const pricing = this.options.pricingFor?.(modelCall.provider, modelCall.model) ?? null;
     const billed = calculateModelCost(modelCall, pricing);
+    const stepId = this.stepId(nodeId);
+    const existing = this.options.store.listModelCallsForStep
+      ? await this.options.store.listModelCallsForStep(this.options.runId, stepId)
+      : [];
+    const attempt = Math.max(0, ...existing.map(call => call.attempt)) + 1;
     await this.options.store.recordModelCall({
-      callId: `call_${randomUUID()}`, runId: this.options.runId, stepId: this.stepId(nodeId), subagent: result.subagent,
-      provider: modelCall.provider, model: modelCall.model, attempt: 1,
+      callId: `call_${this.options.runId}_${nodeId}_${attempt}`, runId: this.options.runId, stepId, subagent: result.subagent,
+      provider: modelCall.provider, model: modelCall.model, attempt,
       inputTokens: modelCall.inputTokens, outputTokens: modelCall.outputTokens,
       cachedInputTokens: modelCall.cachedInputTokens, totalTokens: modelCall.totalTokens,
       latencyMs: modelCall.latencyMs, finishReason: modelCall.finishReason,

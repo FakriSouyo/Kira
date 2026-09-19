@@ -5,11 +5,11 @@ Last updated: 2026-09-19
 ## Current state
 
 The stateful architecture milestones **A–L**, **M**, **N**, and **O** are
-complete on master. The current master baseline for this documentation cleanup
-is `9842c72803aecb1ea86f9a54b464c8286f3e0f99`.
+complete on master. PR P is complete on the current feature branch and pending
+review/merge.
 
-PR O is the durable resumability foundation. It does not implement true
-user-facing `/judge` resume.
+PR O is the durable resumability foundation. PR P connects it to the production
+Judge graph for true same-Execution `/judge` resume.
 
 ## Recently completed
 
@@ -31,8 +31,9 @@ WorkflowRunner restore seeds
 startup reconciliation
 ```
 
-True user-facing resume is **not implemented** by PR O. `/resume` remains a
-display-oriented session view, and `/continue` does not exist.
+PR P adds typed Judge checkpoints, a pre-acquisition compatibility gate,
+same-Turn control-command handling, DAG-safe restore, projection repair,
+idempotent final publication, `/resume <executionId>`, and `/continue`.
 
 ### PR N — Verified Financial Snapshot
 
@@ -62,7 +63,7 @@ separate from evidence and snapshots.
 
 ### PR P — `/judge` Same-Execution Checkpoint / Resume
 
-Status: **not started**
+Status: **implemented on feature branch; pending review/merge**
 
 Target behavior:
 
@@ -91,7 +92,7 @@ The invariant is the same Execution. No Execution #53 is created by resume.
 ## Current command status
 
 Implemented commands include `/judge`, `/screen`, `/search`, `/history`,
-`/session`, `/resume` (display view), `/web`, `/export`, `/version`,
+`/session`, `/resume <executionId>`, `/continue`, `/web`, `/export`, `/version`,
 `/auth-set`, `/setup`, `/status`, `/providers`, `/new`, `/help`, and `/exit`.
 
 The command surface also contains planned stubs for `/challenge`, `/compare`,

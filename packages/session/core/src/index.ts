@@ -147,6 +147,7 @@ export interface ResearchSessionStore {
   /** Claims an interrupted execution for one new runtime generation. */
   acquireInterruptedExecution(executionId: string): Promise<ResearchExecution>;
   saveStep(params: { stepId?: string; runId: string; nodeId: string; parentNodeIds: string[]; subagent?: string; skills: SkillAuditReference[]; status: WorkflowStepStatus; durationMs?: number; summary?: string; error?: string }): Promise<WorkflowStepRecord>;
+  getStep(runId: string, nodeId: string): Promise<WorkflowStepRecord | null>;
   recordModelCall(params: { callId?: string; runId?: string; turnId?: string; stepId?: string; subagent: string; provider: string; model: string; attempt: number; inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; totalTokens: number | null; latencyMs: number; finishReason: string | null; cost: number | null; currency: string | null; contextSnapshotId?: string | null }): Promise<ModelCallRecord>;
   getSessionArtifacts(sessionId: string): Promise<ResearchSessionArtifacts>;
 }

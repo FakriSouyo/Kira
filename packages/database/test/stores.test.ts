@@ -220,7 +220,7 @@ describe('ConversationStoreSqlite (Task 4)', () => {
     expect(bullOnly[0].agent).toBe('bull');
   });
 
-  it('UNIQUE(run_id, message_id) menolak duplikat', async () => {
+  it('makes same message retries idempotent and rejects conflicting payloads', async () => {
     const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
     const add = () =>
       db.conversation.addMessage({
@@ -231,9 +231,18 @@ describe('ConversationStoreSqlite (Task 4)', () => {
         content: 'Same message id.',
         evidenceIds: [],
         sequenceOrder: 0,
-      });
+    });
     await add();
-    await expect(add()).rejects.toThrow();
+    await expect(add()).resolves.toBeUndefined();
+    await expect(db.conversation.addMessage({
+      runId: run.id,
+      messageId: 'bull_1',
+      agent: 'bull',
+      messageType: 'claim',
+      content: 'Conflicting message payload.',
+      evidenceIds: [],
+      sequenceOrder: 0,
+    })).rejects.toThrow(/immutable identity conflict/);
   });
 
   it('CHECK constraint menolak agent di luar enum', async () => {

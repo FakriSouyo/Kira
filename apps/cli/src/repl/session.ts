@@ -7,6 +7,7 @@ import type { AgentEvent } from './events';
 import type { CommandHandler } from './loop';
 import { ConversationController } from '../ui/conversationController';
 import { createWorkingContextPublisher } from './workingContext';
+import { repairCompletedJudgeArtifacts } from '../workflows/judgeCheckpoint';
 
 /** Owns active clients and preview resources for either terminal renderer. */
 export async function createHarnessSession(db: FinharnessDatabase, initialConfig: FinharnessConfig, options: {
@@ -51,15 +52,78 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
     db,
     append: (payload) => controller.append(payload),
   });
+  await repairCompletedJudgeArtifacts({ db, sessionId: controller.snapshot.id });
+  const startupArtifacts = await db.sessions.getSessionArtifacts(controller.snapshot.id);
+  for (const turn of startupArtifacts.turns) {
+    if (turn.status !== 'completed') continue;
+    await publisher.publishAfterSettledTurn({
+      sessionId: controller.snapshot.id,
+      turnId: turn.id,
+      artifacts: startupArtifacts,
+    });
+  }
   /** Reconciles context audit events from durable versions after a failed append. */
   const publishAfterSettledTurn = async (turnId: string) => {
     const artifacts = await db.sessions.getSessionArtifacts(controller.snapshot.id);
     return await publisher.publishAfterSettledTurn({ sessionId: controller.snapshot.id, turnId, artifacts });
   };
   await publisher.reconcileJournal(controller.snapshot.id);
+  const resolveControlExecution = async (name: string, args: string[]) => {
+    if (name === 'resume' && args.length === 0) {
+      throw new UserFriendlyError('MISSING_ARG', 'No executionId provided', 'Usage: /resume <executionId>');
+    }
+    if (name === 'continue' && args.length > 0) {
+      throw new UserFriendlyError('INVALID_ARG', '/continue does not take an executionId', 'Use /resume <executionId> for an explicit target.');
+    }
+    const artifacts = await db.sessions.getSessionArtifacts(controller.snapshot.id);
+    const candidates = artifacts.executions.filter(execution => execution.command === 'judge' && execution.status === 'interrupted');
+    const execution = name === 'continue'
+      ? candidates.length === 1
+        ? candidates[0]
+        : candidates.length === 0
+          ? undefined
+          : (() => { throw new UserFriendlyError('AMBIGUOUS_RESUME', 'More than one interrupted Judge execution is available.', `Use /resume <executionId>: ${candidates.map(candidate => candidate.id).join(', ')}`); })()
+      : candidates.find(candidate => candidate.id === args[0]);
+    if (!execution) {
+      throw new UserFriendlyError('RESUME_NOT_FOUND', `Interrupted Judge execution ${args[0] ?? ''} was not found in this Session.`, 'Use /history to inspect this Session, or start a new /judge.');
+    }
+    const turn = artifacts.turns.find(candidate => candidate.id === execution.turnId);
+    if (!turn || turn.status !== 'running') {
+      throw new UserFriendlyError('RESUME_TURN_UNAVAILABLE', `Execution ${execution.id} no longer has a running parent Turn.`, 'Start a new /judge.');
+    }
+    return execution;
+  };
   for (const [name, handler] of handlers) {
     commands.set(name, async (args, execution) => {
       const input = controller.safeInput(execution?.input ?? `/${name}${args.length ? ` ${args.join(' ')}` : ''}`);
+      if (name === 'resume' || name === 'continue') {
+        const target = await resolveControlExecution(name, args);
+        const lifecycle = { sessionId: target.sessionId, turnId: target.turnId };
+        controller.attachTurn(target.turnId, target.id);
+        let turnSettled = false;
+        try {
+          controller.user(input);
+          const result = await handler(args, { ...execution, input, lifecycle, resume: { executionId: target.id, turnId: target.turnId } });
+          const after = (await db.sessions.getSessionArtifacts(target.sessionId)).executions.find(candidate => candidate.id === target.id);
+          if (after && after.status !== 'interrupted') {
+            const status = after.status === 'completed' ? 'completed' : after.status === 'cancelled' ? 'stopped' : 'failed';
+            await db.sessions.settleTurn(target.turnId, status);
+            turnSettled = true;
+            await publishAfterSettledTurn(target.turnId);
+            controller.settleTurn(target.turnId, status === 'completed' ? 'completed' : status === 'stopped' ? 'cancelled' : 'failed');
+          } else controller.releaseAttachedTurn();
+          return result;
+        } catch (error) {
+          const after = (await db.sessions.getSessionArtifacts(target.sessionId)).executions.find(candidate => candidate.id === target.id);
+          if (!turnSettled && after && after.status !== 'interrupted' && after.status !== 'running') {
+            const status = after.status === 'completed' ? 'completed' : after.status === 'cancelled' ? 'stopped' : 'failed';
+            await db.sessions.settleTurn(target.turnId, status);
+            turnSettled = true;
+            controller.settleTurn(target.turnId, status === 'completed' ? 'completed' : status === 'stopped' ? 'cancelled' : 'failed');
+          } else controller.releaseAttachedTurn();
+          throw error;
+        }
+      }
       const turn = await db.sessions.createTurn({ sessionId: controller.snapshot.id, input, command: name });
       let turnSettled = false;
       try {
