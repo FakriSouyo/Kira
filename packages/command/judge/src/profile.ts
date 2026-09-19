@@ -9,7 +9,7 @@ import {
 } from '@harness/session-core';
 import { createJudgeWorkflow, type JudgeCommandContext } from './definition.js';
 
-export const JUDGE_WORKFLOW_VERSION = 1 as const;
+export const JUDGE_WORKFLOW_VERSION = 2 as const;
 
 export type JudgeExecutionProfilePayload = {
   reasoningMode: 'usual' | 'reasoning';

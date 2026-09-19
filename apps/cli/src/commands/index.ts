@@ -14,7 +14,7 @@ import {
 import { judgeWorkflow } from '../workflows/judgeWorkflow';
 import { screenWorkflow } from '../workflows/screenWorkflow';
 import { makeExportCommand } from './export';
-import { makeHistoryCommand, makeResumeCommand, makeSessionCommand } from './history';
+import { makeContinueCommand, makeHistoryCommand, makeResumeCommand, makeSessionCommand } from './history';
 import { makeSearchCommand } from './search';
 import { createWebServer } from '../repl/web';
 import { makeVersionCommand } from './version';
@@ -243,7 +243,8 @@ export function buildCommands(ctx: HarnessContext, options: {
     ['export', makeExportCommand(ctx)],
     ['history', makeHistoryCommand(ctx)],
     ['session', makeSessionCommand(ctx)],
-    ['resume', makeResumeCommand(ctx)],
+    ['resume', makeResumeCommand(ctx, options)],
+    ['continue', makeContinueCommand(ctx, options)],
     ['search', makeSearchCommand(ctx)],
     ['web', makeWebCommand(ctx)],
     ['version', makeVersionCommand()],

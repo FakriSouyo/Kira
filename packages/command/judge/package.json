@@ -3,6 +3,6 @@
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
     "@harness/command-core": "workspace:*", "@harness/session-core": "workspace:*", "@harness/subagent-bear": "workspace:*", "@harness/subagent-bull": "workspace:*",
-    "@harness/subagent-judge": "workspace:*", "@harness/subagent-researcher": "workspace:*"
+    "@harness/subagent-judge": "workspace:*", "@harness/subagent-researcher": "workspace:*", "@harness/financial-data": "workspace:*", "@harness/schemas": "workspace:*"
   }
 }

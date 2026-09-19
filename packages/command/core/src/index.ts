@@ -34,6 +34,12 @@ export type WorkflowEvent =
 
 export interface WorkflowRunnerOptions {
   onEvent?: (event: WorkflowEvent) => unknown | Promise<unknown>;
+  /** Composition-layer hook for durable typed output persistence. */
+  onNodeCompleted?: (node: WorkflowNode<unknown>, value: unknown, inputs: Readonly<Record<string, unknown>>) => unknown | Promise<unknown>;
+  /** Composition-layer hook for durable disabled-node checkpoints. */
+  onNodeSkipped?: (node: WorkflowNode<unknown>) => unknown | Promise<unknown>;
+  /** Composition-layer hook for preserving optional-failure continuation semantics. */
+  onNodeFailed?: (node: WorkflowNode<unknown>, error: unknown) => unknown | Promise<unknown>;
   now?: () => number;
 }
 
@@ -86,10 +92,16 @@ type NodeSettlement =
 /** Runs a command's dependency graph while keeping financial policy in command packages. */
 export class WorkflowRunner {
   private readonly onEvent: (event: WorkflowEvent) => unknown | Promise<unknown>;
+  private readonly onNodeCompleted: NonNullable<WorkflowRunnerOptions['onNodeCompleted']>;
+  private readonly onNodeSkipped: NonNullable<WorkflowRunnerOptions['onNodeSkipped']>;
+  private readonly onNodeFailed: NonNullable<WorkflowRunnerOptions['onNodeFailed']>;
   private readonly now: () => number;
 
   constructor(options: WorkflowRunnerOptions = {}) {
     this.onEvent = options.onEvent ?? (() => {});
+    this.onNodeCompleted = options.onNodeCompleted ?? (() => {});
+    this.onNodeSkipped = options.onNodeSkipped ?? (() => {});
+    this.onNodeFailed = options.onNodeFailed ?? (() => {});
     this.now = options.now ?? (() => performance.now());
   }
 
@@ -157,6 +169,7 @@ export class WorkflowRunner {
       const settlements = await Promise.all(ready.map(async (node): Promise<NodeSettlement> => {
         options.signal?.throwIfAborted();
         if (node.enabled?.(context) === false) {
+          await this.onNodeSkipped?.(node as WorkflowNode<unknown>);
           await this.onEvent({
             type: 'workflow.step.skipped',
             workflowId: definition.id,
@@ -171,6 +184,7 @@ export class WorkflowRunner {
         const inputs = Object.fromEntries((node.dependsOn ?? []).map((id) => [id, values[id]]));
         try {
           const value = await node.run(context, inputs, options.signal);
+          await this.onNodeCompleted?.(node as WorkflowNode<unknown>, value, inputs);
           await this.onEvent({ type: 'workflow.step.completed', workflowId: definition.id, nodeId: node.id, label: node.label, durationMs: this.now() - started });
           return { node: node as WorkflowNode<unknown>, status: 'completed', value };
         } catch (error) {
@@ -188,6 +202,7 @@ export class WorkflowRunner {
               error: options.signal.reason ?? error,
             };
           }
+          await this.onNodeFailed(node as WorkflowNode<unknown>, error);
           await this.onEvent({
             type: 'workflow.step.failed',
             workflowId: definition.id,

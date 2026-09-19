@@ -51,10 +51,15 @@ describe('ClaimStoreSqlite (Task 14)', () => {
     expect(stored[0].confidence).toBe('strong');
   });
 
-  it('menegakkan UNIQUE(run_id, claim_id)', async () => {
+  it('makes same claim retries idempotent and rejects a conflicting claim', async () => {
     const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
     await db.claims.save({ runId: run.id, messageId: 'bull_1', claim: CLAIM });
-    await expect(db.claims.save({ runId: run.id, messageId: 'bull_1', claim: CLAIM })).rejects.toThrow();
+    await expect(db.claims.save({ runId: run.id, messageId: 'bull_1', claim: CLAIM })).resolves.toMatchObject({ claimId: CLAIM.claimId });
+    await expect(db.claims.save({
+      runId: run.id,
+      messageId: 'bull_1',
+      claim: { ...CLAIM, statement: 'Conflicting semantic claim.' },
+    })).rejects.toThrow(/immutable identity conflict/);
   });
 });
 

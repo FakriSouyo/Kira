@@ -3,6 +3,8 @@ import type { CommandHandler } from '../repl/loop';
 import { color } from '../repl/renderer';
 import { formatDuration } from '@harness/shared';
 import { UserFriendlyError } from '@harness/shared';
+import { resumeJudgeRun } from '../workflows/judgeWorkflow';
+import type { AgentEvent } from '../repl/events';
 
 export function makeHistoryCommand(ctx: HarnessContext): CommandHandler {
   return async (args: string[]) => {
@@ -41,14 +43,20 @@ export function makeSessionCommand(ctx: HarnessContext): CommandHandler {
   };
 }
 
-export function makeResumeCommand(ctx: HarnessContext): CommandHandler {
-  return async (args: string[]) => {
-    const runId = args[0];
+export function makeResumeCommand(ctx: HarnessContext, options: { events?: (event: AgentEvent) => void; write?: (text: string) => void } = {}): CommandHandler {
+  return async (args: string[], execution) => {
+    const runId = args[0] ?? execution?.resume?.executionId;
     if (!runId) throw new UserFriendlyError('MISSING_ARG', 'No runId provided', 'Usage: /resume <runId>');
-    // Phase 4: alias to session view — full re-run deferred (hemat token, no side effect)
-    const art = await ctx.db.execution.getExecutionWithArtifacts(runId);
-    const { renderExportMarkdown } = await import('../repl/renderer.js');
-    const md = renderExportMarkdown(art);
-    process.stdout.write(`${color.yellow('Resume (Phase 4): displaying session ' + runId + ' — full re-run deferred')}\n\n` + md + '\n\n');
+    if (!execution?.lifecycle || !execution.resume) throw new UserFriendlyError('INVALID_RESUME_CONTEXT', 'Resume commands must run inside an active conversation Session.', 'Use /resume <executionId> from the FinHarness prompt.');
+    const artifacts = await resumeJudgeRun(ctx, runId, () => undefined, options.events ?? (() => undefined), {
+      signal: execution.signal,
+      lifecycle: execution.lifecycle,
+      resumeExecutionId: execution.resume.executionId,
+    });
+    (options.write ?? ((text: string) => process.stdout.write(text)))(`${color.green(`✓ Resumed ${artifacts.run.id} to completion.`)}\n\n`);
   };
+}
+
+export function makeContinueCommand(ctx: HarnessContext, options: { events?: (event: AgentEvent) => void; write?: (text: string) => void } = {}): CommandHandler {
+  return async (args: string[], execution) => await makeResumeCommand(ctx, options)(args, execution);
 }

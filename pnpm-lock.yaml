@@ -121,6 +121,12 @@ importers:
       '@harness/command-core':
         specifier: workspace:*
         version: link:../core
+      '@harness/financial-data':
+        specifier: workspace:*
+        version: link:../../financial-data
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../../schemas
       '@harness/session-core':
         specifier: workspace:*
         version: link:../../session/core

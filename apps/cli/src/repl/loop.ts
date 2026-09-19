@@ -13,6 +13,8 @@ export interface CommandExecution {
   signal?: AbortSignal;
   input?: string;
   lifecycle?: { sessionId: string; turnId: string };
+  /** Existing lifecycle ownership for /resume and /continue control commands. */
+  resume?: { executionId: string; turnId: string };
 }
 export type CommandHandler = (args: string[], execution?: CommandExecution) => Promise<CommandResult | void>;
 export interface ReplOptions {

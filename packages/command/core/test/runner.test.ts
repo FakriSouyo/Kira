@@ -6,6 +6,44 @@ import {
 } from '../src/index.js';
 
 describe('WorkflowRunner', () => {
+  it('persists completed and skipped node values before dependent work starts', async () => {
+    const hooks: string[] = [];
+    const definition: WorkflowDefinition<{ enabled: boolean }> = {
+      id: 'checkpoint-hooks',
+      nodes: [
+        { id: 'research', label: 'Research', run: async () => 'evidence' },
+        { id: 'optional', label: 'Optional', enabled: context => context.enabled, run: async () => 'optional' },
+        { id: 'summary', label: 'Summary', dependsOn: ['research', 'optional'], run: async () => 'summary' },
+      ],
+    };
+
+    await new WorkflowRunner({
+      onNodeCompleted: async (node, value) => { hooks.push(`${node.id}:completed:${String(value)}`); },
+      onNodeSkipped: async node => { hooks.push(`${node.id}:skipped`); },
+    }).run(definition, { enabled: false });
+
+    expect(hooks).toEqual(expect.arrayContaining(['research:completed:evidence', 'optional:skipped', 'summary:completed:summary']));
+    expect(hooks.at(-1)).toBe('summary:completed:summary');
+  });
+
+  it('exposes optional failures to the composition layer before degradation continues', async () => {
+    const failures: string[] = [];
+    const definition: WorkflowDefinition<{}> = {
+      id: 'optional-failure-hook',
+      nodes: [
+        { id: 'research', label: 'Research', run: async () => 'evidence' },
+        { id: 'news', label: 'News', required: false, dependsOn: ['research'], run: async () => { throw new Error('provider down'); } },
+        { id: 'summary', label: 'Summary', dependsOn: ['research', 'news'], run: async (_context, inputs) => inputs.news ?? 'summary' },
+      ],
+    };
+
+    await new WorkflowRunner({
+      onNodeFailed: async (node, error) => { failures.push(`${node.id}:${String(error)}`); },
+    }).run(definition, {});
+
+    expect(failures).toEqual(['news:Error: provider down']);
+  });
+
   it('awaits durable completion event handling before starting dependent work', async () => {
     const calls: string[] = [];
     let releasePersistence!: () => void;

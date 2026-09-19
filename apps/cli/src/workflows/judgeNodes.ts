@@ -48,8 +48,17 @@ export interface JudgeRunDeps {
   /** Reasoning mode always runs the arbitration round; `--conditional` opens it for a neutral verdict. */
   reasoning: boolean;
   conditional: boolean;
+  /** Immutable profile flags for resumed executions; fresh runs use ctx.researchers. */
+  researchers?: { market: boolean; news: boolean };
   executionStartedAt?: string;
   trace?: JudgeNodeTrace;
+  /** Semantic checkpoint commit before model-node projections are written. */
+  checkpoint?: (nodeId: JudgeNodeId, value: unknown) => Promise<void>;
+  /** Rehydrated closure state needed by later nodes when earlier model nodes are restored. */
+  restored?: {
+    round1BearCounterpoints?: BearCounterpoint[];
+    conditionalBearCounterpoints?: BearCounterpoint[];
+  };
   lifecycle?: { sessionId: string; turnId: string };
 }
 
@@ -159,6 +168,7 @@ function challengeContent(response: BearChallengeResponse): string {
  */
 export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors {
   const { ctx, ticker, runId, events, progress, decision } = deps;
+  const researchers = deps.researchers ?? ctx.researchers;
 
   const tool = async <T>(name: AgentToolName, signal: AbortSignal | undefined, fetcher: () => Promise<T>): Promise<T> => {
     assertNotAborted(signal);
@@ -202,8 +212,11 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
   const record = async (nodeId: JudgeNodeId, result: SubagentResult<unknown>): Promise<void> => {
     if (deps.trace) await deps.trace.recordSubagentResult(nodeId, result);
   };
-  let round1BearCounterpoints: BearCounterpoint[] = [];
-  let conditionalBearCounterpoints: BearCounterpoint[] = [];
+  const checkpoint = async (nodeId: JudgeNodeId, value: unknown): Promise<void> => {
+    await deps.checkpoint?.(nodeId, value);
+  };
+  let round1BearCounterpoints: BearCounterpoint[] = deps.restored?.round1BearCounterpoints ?? [];
+  let conditionalBearCounterpoints: BearCounterpoint[] = deps.restored?.conditionalBearCounterpoints ?? [];
   let marketFailureCode: string | undefined;
   let newsFailureCode: string | undefined;
 
@@ -346,7 +359,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       observations[0] = report.observation;
       observations[1] = financials.observation;
 
-      if (!ctx.researchers.market) {
+      if (!researchers.market) {
         observations.push(createNotRequestedObservation('daily_transaction'), createNotRequestedObservation('foreign_flow'));
       } else if (!market) {
         observations.push(
@@ -376,7 +389,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
         }
       }
 
-      if (!ctx.researchers.news) {
+      if (!researchers.news) {
         observations.push(
           createNotRequestedObservation('news'),
           createNotRequestedObservation('filings'),
@@ -473,6 +486,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       const claims = await ctx.validator.validate(response.claims, selection.evidenceIds);
       // Invariant §24-B.1: a claim may only cite evidence the agent actually saw.
       ctx.validator.assertSeenEvidence(claims.flatMap((claim) => claim.evidenceIds), selection.evidenceIds);
+      const turn = { response, claims, result } satisfies ThesisTurn;
+      await checkpoint('round-1-bull-thesis', turn);
       await ctx.db.conversation.addMessage({
         runId, messageId: response.messageId, agent: 'bull', messageType: 'claim', content: response.reasoning,
         evidenceIds: response.evidenceIds, sequenceOrder: 1,
@@ -482,7 +497,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'agent.complete', agent: 'bull' });
       progress('bull', `✓ ${claims.length} claim(s) validated and stored`);
       await record('round-1-bull-thesis', result);
-      return { response, claims, result } satisfies ThesisTurn;
+      return turn;
     },
 
     /** Bear challenge against the Bull claims; counterpoints must target existing claim IDs. */
@@ -503,6 +518,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
         claimIds: thesis.claims.map((claim) => claim.claimId), evidenceIds: selection.evidenceIds,
       });
       round1BearCounterpoints = response.counterpoints;
+      const turn = { response, result } satisfies ChallengeTurn;
+      await checkpoint('round-1-bear-challenge', turn);
       await ctx.db.conversation.addMessage({
         runId, messageId: response.messageId, agent: 'bear', messageType: 'challenge',
         content: challengeContent(response), evidenceIds: response.evidenceIds, sequenceOrder: 2,
@@ -511,7 +528,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'agent.complete', agent: 'bear' });
       progress('bear', `✓ ${response.counterpoints.length} challenge(s) validated`);
       await record('round-1-bear-challenge', result);
-      return { response, result } satisfies ChallengeTurn;
+      return turn;
     },
 
     /** Mandatory Bull rebuttal answering the round-1 challenge. */
@@ -539,6 +556,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       ctx.validator.assertSeenEvidence(validated.flatMap((claim) => claim.evidenceIds), selection.evidenceIds);
       // Normalisasi claimId rebuttal — UNIQUE(run_id, claim_id); prefix menandai asal claim.
       const claims: Claim[] = validated.map((claim, index) => ({ ...claim, claimId: `rebuttal_${index + 1}` }));
+      const turn = { response, claims, result } satisfies ThesisTurn;
+      await checkpoint('round-2-bull-rebuttal', turn);
       await ctx.db.conversation.addMessage({
         runId, messageId: response.messageId, agent: 'bull', messageType: 'response', content: response.reasoning,
         evidenceIds: response.evidenceIds, sequenceOrder: 3,
@@ -548,7 +567,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'agent.complete', agent: 'bull' });
       progress('bull', `✓ ${claims.length} rebuttal claim(s) stored`);
       await record('round-2-bull-rebuttal', result);
-      return { response, claims, result } satisfies ThesisTurn;
+      return turn;
     },
 
     /**
@@ -572,6 +591,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       const judgment = result.value;
       events({ type: 'agent.text', agent: 'judge', text: judgment.summary });
       assertNotAborted(signal);
+      const turn = { judgment, allClaims, needsExtra: judgment.stance === 'neutral', result } satisfies JudgeTurn;
+      await checkpoint('evaluate-arguments', turn);
       await ctx.db.judgments.save({ runId, judgment });
       await ctx.db.conversation.addMessage({
         runId, messageId: `judge_${runId}`, agent: 'judge', messageType: 'decision', content: judgment.summary,
@@ -582,7 +603,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       // A neutral round-1 verdict reopens the debate; Reasoning mode always does (gate predicate).
       decision.extraRound = judgment.stance === 'neutral';
       await record('evaluate-arguments', result);
-      return { judgment, allClaims, needsExtra: decision.extraRound, result } satisfies JudgeTurn;
+      return { ...turn, needsExtra: decision.extraRound };
     },
 
     /** Conditional Bear re-challenge against the full claim set (round 1 + rebuttal). */
@@ -605,6 +626,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
         claimIds: allClaims.map((claim) => claim.claimId), evidenceIds: selection.evidenceIds,
       });
       conditionalBearCounterpoints = response.counterpoints;
+      const turn = { response, result } satisfies ChallengeTurn;
+      await checkpoint('conditional-bear-rechallenge', turn);
       await ctx.db.conversation.addMessage({
         runId, messageId: `${response.messageId}_conditional`, agent: 'bear', messageType: 'challenge',
         content: challengeContent(response), evidenceIds: response.evidenceIds, sequenceOrder: 5,
@@ -612,7 +635,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       });
       events({ type: 'agent.complete', agent: 'bear' });
       await record('conditional-bear-rechallenge', result);
-      return { response, result } satisfies ChallengeTurn;
+      return turn;
     },
 
     /**
@@ -642,6 +665,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       ctx.validator.assertSeenEvidence(validated.flatMap((claim) => claim.evidenceIds), selection.evidenceIds);
       const claims: Claim[] = validated.map((claim, index) => ({ ...claim, claimId: `rebuttal_conditional_${index + 1}` }));
       const messageId = `${response.messageId}_conditional`;
+      const turn = { response, claims, result } satisfies ThesisTurn;
+      await checkpoint('conditional-bull-rebuttal', turn);
       await ctx.db.conversation.addMessage({
         runId, messageId, agent: 'bull', messageType: 'response', content: response.reasoning,
         evidenceIds: response.evidenceIds, sequenceOrder: 6,
@@ -650,7 +675,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       for (const claim of claims) await ctx.db.claims.save({ runId, messageId, claim });
       events({ type: 'agent.complete', agent: 'bull' });
       await record('conditional-bull-rebuttal', result);
-      return { response, claims, result } satisfies ThesisTurn;
+      return turn;
     },
 
     /** Conditional verdict: re-weighs every claim and overwrites the round-1 judgment. */
@@ -673,6 +698,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       const judgment = result.value;
       events({ type: 'agent.text', agent: 'judge', text: judgment.summary });
       assertNotAborted(signal);
+      const turn = { judgment, allClaims, needsExtra: true, result } satisfies JudgeTurn;
+      await checkpoint('resolve-conflicts', turn);
       await ctx.db.judgments.save({ runId, judgment });
       await ctx.db.conversation.addMessage({
         runId, messageId: `judge_${runId}_conditional`, agent: 'judge', messageType: 'decision',
@@ -681,7 +708,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       });
       events({ type: 'agent.complete', agent: 'judge' });
       await record('resolve-conflicts', result);
-      return { judgment, allClaims, needsExtra: true, result } satisfies JudgeTurn;
+      return turn;
     },
 
     /**

@@ -146,10 +146,9 @@ record, not a provider cache, artifact, context snapshot, or conversational
 memory. Provider cache reuse may occur, but every new Execution gets its own
 snapshot.
 
-### Durable resumability foundation
+### Durable resumability and Judge resume
 
-PR O adds the storage and runtime contracts needed for future checkpoint
-resume without changing the current `/judge` workflow behavior:
+PR O provides the durable lifecycle and generic checkpoint foundation:
 
 - canonical Executions may be `running`, `interrupted`, `completed`, `failed`,
   or `cancelled`; restart reconciliation marks abandoned work `interrupted`
@@ -162,10 +161,11 @@ resume without changing the current `/judge` workflow behavior:
 - the generic `WorkflowRunner` can restore completed/skipped nodes and emits a
   distinct restore event, while remaining unaware of SQLite and `/judge`.
 
-The current `/resume` command remains display-only, and the legacy
-`resumeJudgeRun` helper remains an explicit full re-run. PR P is reserved for
-the `/judge`-specific output codecs and resume planner that may consume these
-contracts.
+PR P connects those contracts to the production `/judge` graph. `/resume
+<executionId>` and the unambiguous `/continue` path validate the immutable
+profile and typed checkpoints, restore the same interrupted Execution's valid
+DAG prefix, and continue pending nodes without refetching accepted financial
+input. `/session <executionId>` remains the read-only session/execution viewer.
 
 ### Selective financial retrieval
 
@@ -318,7 +318,8 @@ Local OpenAI-compatible endpoints such as Ollama or LM Studio can be configured 
 | `/screen [CRITERIA]` | Screen stocks using supported criteria |
 | `/history [--limit N]` | List recent runs |
 | `/session <runId>` | Show persisted run artifacts |
-| `/resume <runId>` | Display-only session view (resume planner deferred) |
+| `/resume <executionId>` | Resume an interrupted Judge Execution in the same Turn and Execution |
+| `/continue` | Resume the only unambiguous interrupted Judge Execution in the current Session |
 | `/search <query>` | Search persisted evidence using keyword + vector prototype |
 | `/export <runId> [--format json\|md\|html]` | Export a run and its audit trail |
 | `/web [--port N]` | Start the lightweight local web preview |
@@ -492,9 +493,11 @@ L  Artifact-aware retrieval + validity + prior-context reuse
  M  Financial Data Provider Seam
  N  Verified Financial Snapshot
  O  Durable Resumability Foundation
+ P  /judge Same-Execution Checkpoint / Resume (implementation candidate)
 ```
 
-A-L, PR M, PR N, and PR O are complete and merged into `master`.
+A-L, PR M, PR N, and PR O are complete and merged into `master`. PR P is
+implemented on the current feature branch and pending review/merge.
 
 PR M adds the Financial Data Provider Seam; PR N adds the verified input boundary:
 
@@ -512,17 +515,18 @@ rather than replacing the A-L foundation.
 
 Current direction after PR O:
 
-1. PR P: `/judge` same-Execution checkpoint / resume
-2. Model Runtime Generalization
-3. Capability Registry + Typed Tool Runtime
-4. Document & File Workspace
-5. Evidence Policy + Claim Graph
-6. Reusable Research Subgraphs
-7. Risk Committee
-8. Research Graph
-9. Decision Journal
-10. Outcome Tracking + Reflection
-11. UI integration / polish
+1. O — Durable Resumability Foundation
+2. P — `/judge` Same-Execution Checkpoint / Resume
+3. Model Runtime Generalization
+4. Capability Registry + Typed Tool Runtime
+5. Document & File Workspace
+6. Evidence Policy + Claim Graph
+7. Reusable Research Subgraphs
+8. Risk Committee
+9. Research Graph
+10. Decision Journal
+11. Outcome Tracking + Reflection
+12. UI integration / polish
 
 This order may evolve as implementation constraints become clearer, but the
 A-O lifecycle, provider, snapshot, and resumability foundation remains the
