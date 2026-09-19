@@ -111,7 +111,7 @@ describe('LLMClient', () => {
     const result = await client.generateObjectResult({ schema: OBJECT_SCHEMA, prompt: 'p' });
 
     expect(result.value).toEqual({ answer: 'hello', score: 72 });
-    expect(result.metadata).toEqual({
+    expect(result.metadata).toEqual(expect.objectContaining({
       provider: config.provider,
       model: 'usage-model',
       inputTokens: 10,
@@ -120,7 +120,53 @@ describe('LLMClient', () => {
       totalTokens: 15,
       finishReason: 'stop',
       latencyMs: expect.any(Number),
+      providerId: 'openai',
+      modelId: 'usage-model',
+      adapterId: 'openai-compatible',
+      protocol: 'openai-chat',
+      runtimeFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+    }));
+  });
+
+  it('generateTextResult reports the prepared runtime identity and actual usage', async () => {
+    const config = { ...DEFAULT_AGENT_CONFIG, model: 'text-runtime-model' };
+    const client = new LLMClient({ config, modelFactory: () => textModel('plain text') });
+    const result = await client.generateTextResult({ prompt: 'p' });
+    expect(result.value).toBe('plain text');
+    expect(result.metadata).toEqual(expect.objectContaining({
+      provider: 'openai',
+      model: 'text-runtime-model',
+      providerId: 'openai',
+      modelId: 'text-runtime-model',
+      adapterId: 'openai-compatible',
+      protocol: 'openai-chat',
+      runtimeFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+      inputTokens: 10,
+      outputTokens: 5,
+    }));
+  });
+
+  it('reports the fallback prepared route that actually succeeds', async () => {
+    const primary = new MockLanguageModelV2({ doGenerate: async () => { throw retryableError('RATE_LIMIT', 'primary unavailable'); } });
+    const fallback = jsonModel({ answer: 'fallback', score: 9 });
+    const models = [primary, fallback];
+    const client = new LLMClient({
+      config: { ...DEFAULT_AGENT_CONFIG, model: 'primary-model' },
+      fallbackConfigs: [{ ...DEFAULT_AGENT_CONFIG, provider: 'anthropic', model: 'fallback-model' }],
+      maxRetries: 1,
+      modelFactory: () => models.shift()!,
+      retryBaseDelayMs: 1,
     });
+    const result = await client.generateObjectResult({ schema: OBJECT_SCHEMA, prompt: 'p' });
+    expect(result.value).toEqual({ answer: 'fallback', score: 9 });
+    expect(result.metadata).toEqual(expect.objectContaining({
+      provider: 'anthropic',
+      model: 'fallback-model',
+      providerId: 'anthropic#fallback-1',
+      modelId: 'fallback-model',
+      adapterId: 'anthropic',
+      protocol: 'anthropic-messages',
+    }));
   });
 
   it('generateText returns the model text', async () => {

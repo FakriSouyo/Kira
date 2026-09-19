@@ -46,6 +46,7 @@ export interface GenerateObjectParams<T> {
   schema: z.ZodType<T>;
   prompt: string;
   system?: SystemZones;
+  abortSignal?: AbortSignal;
 }
 
 /** Structured generation with optional public partial-object updates. */
@@ -64,6 +65,12 @@ export interface GenerateTextParams {
 export interface LLMCallMetadata {
   provider: LLMModelConfig['provider'] | 'mock';
   model: string;
+  /** Q1 runtime identity; legacy provider/model remain for compatibility. */
+  providerId?: string;
+  modelId?: string;
+  adapterId?: string;
+  protocol?: string;
+  runtimeFingerprint?: string;
   inputTokens: number | null;
   outputTokens: number | null;
   cachedInputTokens: number | null;
@@ -77,10 +84,16 @@ export interface LLMResult<T> {
   metadata: LLMCallMetadata;
 }
 
+export interface LLMTextStreamResult {
+  chunks: AsyncIterable<string>;
+  metadata: Promise<LLMCallMetadata>;
+}
+
 /** Parameter streaming jalur text (Phase 2 Task 2) — klaim/judgment tetap generateObject. */
 export interface StreamTextParams {
   prompt: string;
   system?: SystemZones;
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -91,6 +104,8 @@ export interface LLMClientLike {
   generateObject<T>(params: GenerateObjectParams<T>): Promise<T>;
   /** Transitional usage-aware API; command subagents migrate before legacy value-only methods are removed. */
   generateObjectResult?<T>(params: GenerateObjectParams<T>): Promise<LLMResult<T>>;
+  /** Q1 result-bearing text compatibility path. */
+  generateTextResult?(params: GenerateTextParams): Promise<LLMResult<string>>;
   streamObject<T>(params: StreamObjectParams<T>): Promise<T>;
   generateText(params: GenerateTextParams): Promise<string>;
   /**
@@ -100,4 +115,6 @@ export interface LLMClientLike {
    * di-retry tengah jalan).
    */
   streamText(params: StreamTextParams): AsyncIterable<string>;
+  /** Q1 metadata-capable stream compatibility path. */
+  streamTextResult?(params: StreamTextParams): LLMTextStreamResult;
 }

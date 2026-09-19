@@ -1,6 +1,47 @@
 import type { Claim, Intent } from '@harness/schemas';
 import { normalizeJudgmentScore, stanceForScore } from '@harness/shared';
-import type { GenerateObjectParams, GenerateTextParams, LLMClientLike, StreamObjectParams, StreamTextParams } from './types';
+import { createHash } from 'node:crypto';
+import type { GenerateObjectParams, GenerateTextParams, LLMCallMetadata, LLMClientLike, LLMResult, LLMTextStreamResult, StreamObjectParams, StreamTextParams } from './types';
+import type { ModelAdapter, ModelInvocationMetadata, PreparedAdapterCall } from './adapter';
+import type { ModelRuntimeDescriptor } from './descriptor';
+import { ModelRuntime } from './model-runtime';
+import { ProviderDirectory } from './provider-directory';
+
+const MOCK_RUNTIME_FINGERPRINT = createHash('sha256').update('finharness:deterministic-financial-mock', 'utf8').digest('hex');
+
+function mockMetadata(): LLMCallMetadata {
+  return {
+    provider: 'mock',
+    model: 'deterministic-financial-mock',
+    providerId: 'mock',
+    modelId: 'deterministic-financial-mock',
+    adapterId: 'mock',
+    protocol: 'mock',
+    runtimeFingerprint: MOCK_RUNTIME_FINGERPRINT,
+    inputTokens: null,
+    outputTokens: null,
+    cachedInputTokens: null,
+    totalTokens: null,
+    finishReason: 'stop',
+    latencyMs: 0,
+  };
+}
+
+function mockRuntimeMetadata(descriptor: ModelRuntimeDescriptor): ModelInvocationMetadata {
+  return {
+    providerId: descriptor.providerId,
+    modelId: descriptor.modelId,
+    adapterId: descriptor.adapterId,
+    protocol: descriptor.protocol,
+    runtimeFingerprint: descriptor.runtimeFingerprint,
+    inputTokens: null,
+    outputTokens: null,
+    cachedInputTokens: null,
+    totalTokens: null,
+    finishReason: 'stop',
+    latencyMs: 0,
+  };
+}
 
 /**
  * Mock LLM deterministik untuk development offline & E2E test
@@ -498,6 +539,10 @@ export class MockLLMClient implements LLMClientLike {
     return params.schema.parse(JSON.parse(JSON.stringify(output))) as T;
   }
 
+  async generateObjectResult<T>(params: GenerateObjectParams<T>): Promise<LLMResult<T>> {
+    return { value: await this.generateObject(params), metadata: mockMetadata() };
+  }
+
   async streamObject<T>(params: StreamObjectParams<T>): Promise<T> {
     const output = await this.generateObject(params);
     const record = output as Record<string, unknown>;
@@ -517,6 +562,13 @@ export class MockLLMClient implements LLMClientLike {
     return `[mock-llm] ${params.prompt.slice(0, 120)}`;
   }
 
+  async generateTextResult(params: GenerateTextParams): Promise<LLMResult<string>> {
+    if (params.abortSignal?.aborted) {
+      params.abortSignal.throwIfAborted();
+    }
+    return { value: await this.generateText(params), metadata: mockMetadata() };
+  }
+
   /** Streaming deterministik (tanpa delay) — konsumen menerima beberapa yield. */
   async *streamText(params: StreamTextParams): AsyncIterable<string> {
     const system = Array.isArray(params.system) ? params.system.join('\n') : params.system ?? '';
@@ -530,6 +582,11 @@ export class MockLLMClient implements LLMClientLike {
     yield '[mock-llm] ';
     yield params.prompt.slice(0, 40);
     yield params.prompt.slice(40, 80);
+  }
+
+  streamTextResult(params: StreamTextParams): LLMTextStreamResult {
+    const chunks = this.streamText(params);
+    return { chunks, metadata: (async () => mockMetadata())() };
   }
 
   /** Jawaban kanonik Main FinHarness Agent untuk prompt conversation (konsisten response & stream). */
@@ -553,4 +610,54 @@ export class MockLLMClient implements LLMClientLike {
       'MockLLMClient: no recognized system-prompt marker (router or financial specialist)',
     );
   }
+}
+
+class MockModelAdapter implements ModelAdapter {
+  readonly id = 'mock';
+
+  constructor(private readonly client: MockLLMClient) {}
+
+  prepareCall(params: { model: never; descriptor: ModelRuntimeDescriptor; connection?: unknown }): PreparedAdapterCall {
+    const client = this.client;
+    const metadata = () => mockRuntimeMetadata(params.descriptor);
+    return {
+      async generateObject<T>(request: GenerateObjectParams<T>) {
+        return { value: await client.generateObject(request), metadata: metadata() };
+      },
+      async generateText(request: GenerateTextParams) {
+        return { value: await client.generateText(request), metadata: metadata() };
+      },
+      streamText: (request: StreamTextParams) => ({
+        chunks: client.streamText(request),
+        metadata: Promise.resolve(metadata()),
+      }),
+      async streamObject<T>(request: StreamObjectParams<T>) {
+        return { value: await client.streamObject(request), metadata: metadata() };
+      },
+    };
+  }
+}
+
+/** First-class deterministic mock implementation of the prepared-call runtime contract. */
+export function createMockModelRuntime(): ModelRuntime {
+  const client = new MockLLMClient();
+  return new ModelRuntime({
+    directory: new ProviderDirectory([{
+      descriptor: { id: 'mock', displayName: 'Deterministic financial mock', adapterId: 'mock', protocol: 'mock', endpointFingerprint: 'mock' },
+      models: [{
+        id: 'deterministic-financial-mock',
+        displayName: 'Deterministic financial mock',
+        capabilities: {
+          contextWindowTokens: 16_384,
+          maxOutputTokens: 2_000,
+          supportsTextInput: true,
+          supportsStructuredOutput: true,
+          supportsTextStreaming: true,
+          supportsStructuredStreaming: true,
+          nativeStructuredOutput: true,
+        },
+      }],
+    }]),
+    adapters: [new MockModelAdapter(client)],
+  });
 }
