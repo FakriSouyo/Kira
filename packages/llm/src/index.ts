@@ -2,6 +2,11 @@ export * from './types';
 export * from './config';
 export * from './client';
 export * from './mock';
+export * from './errors';
+export * from './provider-directory';
+export * from './descriptor';
+export * from './adapter';
+export * from './model-runtime';
 
 import { DEFAULT_AGENT_CONFIG, DEFAULT_ROUTER_CONFIG } from './config';
 import { LLMClient, type LLMClientOptions } from './client';

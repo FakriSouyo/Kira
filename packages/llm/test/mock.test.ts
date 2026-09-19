@@ -1,7 +1,7 @@
 import { renderEvidenceBlock } from '@harness/shared';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { MockLLMClient } from '../src/index';
+import { MockLLMClient, createMockModelRuntime } from '../src/index';
 
 const BULL_OUTPUT_SCHEMA = z.object({
   reasoning: z.string().min(10),
@@ -102,6 +102,20 @@ Respond with your rebuttal. The evidence is in the system context.`;
 describe('MockLLMClient — Intent Router', () => {
   const mock = new MockLLMClient();
 
+  it('provides the same result-bearing runtime contract with explicit mock identity', async () => {
+    const result = await mock.generateObjectResult({
+      schema: INTENT_SCHEMA,
+      prompt: 'Apakah BBCA layak dibeli?',
+      system: ROUTER_SYSTEM,
+    });
+    expect(result.value.type).toBe('judge');
+    expect(result.metadata).toEqual(expect.objectContaining({
+      provider: 'mock', model: 'deterministic-financial-mock',
+      providerId: 'mock', modelId: 'deterministic-financial-mock', adapterId: 'mock', protocol: 'mock',
+      inputTokens: null, outputTokens: null, totalTokens: null,
+    }));
+  });
+
   it('routes "Apakah BBCA layak dibeli?" to judge with ticker', async () => {
     const intent = await mock.generateObject({ schema: INTENT_SCHEMA, prompt: 'Apakah BBCA layak dibeli?', system: ROUTER_SYSTEM });
     expect(intent.type).toBe('judge');
@@ -129,6 +143,19 @@ describe('MockLLMClient — Intent Router', () => {
     const intent = await mock.generateObject({ schema: INTENT_SCHEMA, prompt: 'hmm interesting', system: ROUTER_SYSTEM });
     expect(intent.type).toBe('clarification');
     expect(intent.question).toBeTruthy();
+  });
+});
+
+describe('MockModelRuntime', () => {
+  it('uses the same one-shot prepared-call contract with explicit mock metadata', async () => {
+    const runtime = createMockModelRuntime();
+    const call = runtime.prepareCall({ providerId: 'mock', modelId: 'deterministic-financial-mock' }, { temperature: 0, maxOutputTokens: 100 });
+    const result = await call.generateTextResult({ prompt: 'offline' });
+    expect(result.metadata).toEqual(expect.objectContaining({
+      providerId: 'mock', modelId: 'deterministic-financial-mock', adapterId: 'mock', protocol: 'mock',
+      inputTokens: null, outputTokens: null, totalTokens: null,
+    }));
+    await expect(call.generateTextResult({ prompt: 'again' })).rejects.toMatchObject({ code: 'PREPARED_CALL_ALREADY_USED' });
   });
 });
 

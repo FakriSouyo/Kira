@@ -1,15 +1,17 @@
 # FinHarness Progress
 
-Last updated: 2026-09-19
+Last updated: 2026-09-20
 
 ## Current state
 
-The stateful architecture milestones **A–L**, **M**, **N**, and **O** are
-complete on master. PR P is complete on the current feature branch and pending
-review/merge.
+The stateful architecture milestones **A–P** are complete on master.
+
+The current milestone is **Q1 — Model Runtime + Provider Directory**.
 
 PR O is the durable resumability foundation. PR P connects it to the production
-Judge graph for true same-Execution `/judge` resume.
+Judge graph for true same-Execution `/judge` resume. Q1 establishes the
+provider-neutral model runtime seam without adding durable model selection or
+changing production Judge persistence.
 
 ## Recently completed
 
@@ -59,11 +61,22 @@ Financial workflows use a provider-neutral contract, with Sectors remaining the
 current provider implementation. Retrieval policy and provider metadata remain
 separate from evidence and snapshots.
 
-## Next milestone
+## Current milestone
+
+### Q1 — Model Runtime + Provider Directory
+
+Status: **current milestone**
+
+Q1 evolves `@harness/llm` into the canonical provider-neutral runtime seam.
+It provides immutable provider/model directory snapshots, explicit logical
+provider routes, adapter/protocol separation, safe runtime descriptors and
+fingerprints, one-shot prepared calls, actual invocation metadata, and mock
+parity. Q1 does not add durable Session model selection, model-switch events,
+database changes, Tool Runtime, or changes to PR P semantics.
 
 ### PR P — `/judge` Same-Execution Checkpoint / Resume
 
-Status: **implemented on feature branch; pending review/merge**
+Status: **complete on master**
 
 Target behavior:
 

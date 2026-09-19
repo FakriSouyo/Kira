@@ -90,6 +90,29 @@ describe('LLMClient.streamText (Phase 2 Task 2)', () => {
       await fake.close();
     }
   });
+
+  it('exposes final metadata from the same prepared stream route', async () => {
+    const fake = await startFakeOpenAIStream(['one', 'two']);
+    try {
+      const client = new LLMClient({
+        config: {
+          provider: 'openai', model: 'stream-metadata-model', temperature: 0, maxTokens: 100,
+          baseURL: fake.url, apiKey: 'test-key',
+        },
+      });
+      const stream = client.streamTextResult({ prompt: 'hi' });
+      const chunks: string[] = [];
+      for await (const chunk of stream.chunks) chunks.push(chunk);
+      const metadata = await stream.metadata;
+      expect(chunks.join('')).toBe('onetwo');
+      expect(metadata).toEqual(expect.objectContaining({
+        providerId: 'openai', modelId: 'stream-metadata-model', adapterId: 'openai-compatible',
+        protocol: 'openai-chat', runtimeFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+      }));
+    } finally {
+      await fake.close();
+    }
+  });
 });
 
 describe('MockLLMClient.streamText (Phase 2 Task 2)', () => {
