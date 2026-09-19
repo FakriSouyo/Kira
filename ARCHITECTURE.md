@@ -142,9 +142,9 @@ normalized provider-neutral observations
         ↓
 deterministic verification
         ↓
-VerifiedFinancialSnapshot
+accepted Evidence
         ↓
-Evidence materialization
+finalized VerifiedFinancialSnapshot manifest
         ↓
 Bull / Bear / Judge
 ```
@@ -177,7 +177,8 @@ source, and no cross-provider reconciliation or Claim Graph is added.
 
 `collect-sources` is the sole `/judge` financial-input boundary: it verifies
 required and optional results, materializes Evidence only from accepted
-observations, persists the snapshot, and only then allows
+observations, persists the final snapshot manifest with those Evidence IDs, and
+only then allows
 `select-supporting-evidence` and the first Bull call to run. Existing Evidence
 content-hash deduplication and `run_evidence` membership are unchanged; the
 snapshot stores the resulting Evidence IDs instead of changing Evidence rows.
@@ -187,9 +188,10 @@ lookup by snapshot ID or Execution ID.
 ## 2. Evidence-First Flow (/judge, termasuk Debate ronde Phase 1)
 
 1. **Researcher** (bukan LLM): fetch `company_report` + `quarterly_financials`
-   and optional enrichment → normalize and verify provider results → persist one
-   `VerifiedFinancialSnapshot` → materialize accepted observations into Evidence
-   Store with dedup content-hash (SHA-256 canonical JSON).
+   and optional enrichment → normalize and verify provider results → materialize
+   accepted observations into Evidence Store with dedup content-hash (SHA-256
+   canonical JSON) → persist one `VerifiedFinancialSnapshot` manifest containing
+   those Evidence IDs.
 2. **Bull** (`claim`): system prompt 2 zona → `generateObject` (Zod) → reasoning + klaim.
 3. **Validasi 3 lapis** (`ClaimValidator`):
    - Layer 1: struktur (Zod — `evidenceIds` non-kosong, uuid valid)

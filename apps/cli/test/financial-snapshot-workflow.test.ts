@@ -99,6 +99,47 @@ describe('/judge VerifiedFinancialSnapshot boundary', () => {
     expect(snapshot?.observations.filter(observation => observation.status === 'UNAVAILABLE')).toHaveLength(0);
   });
 
+  it('preserves the original provider acquisition time when a later Execution reuses cached results', async () => {
+    const ctx = context();
+    const methods = [
+      'getCompanyReport', 'getQuarterlyFinancials', 'getDailyTransaction',
+      'getForeignFlow', 'getNews', 'getFilings', 'getSentiment',
+    ] as const;
+    let executionNumber = 0;
+    for (const method of methods) {
+      const original = ctx.financialData[method].bind(ctx.financialData);
+      vi.spyOn(ctx.financialData, method).mockImplementation(async (ticker: string) => {
+        const result = await original(ticker);
+        return {
+          ...result,
+          metadata: {
+            ...result.metadata,
+            origin: executionNumber === 0 ? 'PROVIDER' : 'CACHE',
+            fetchedAt: '2026-09-18T00:00:00.000Z',
+          },
+        };
+      });
+    }
+
+    const firstIds = await lifecycle('BBCA');
+    const first = await judgeWorkflow(ctx, firstIds.ticker, () => {}, () => {}, {
+      lifecycle: { sessionId: firstIds.session.id, turnId: firstIds.turn.id },
+    });
+    executionNumber = 1;
+    const secondIds = await lifecycle('BBCA');
+    const second = await judgeWorkflow(ctx, secondIds.ticker, () => {}, () => {}, {
+      lifecycle: { sessionId: secondIds.session.id, turnId: secondIds.turn.id },
+    });
+
+    const firstSnapshot = await db.financialSnapshots.getByExecutionId(first.run.id);
+    const secondSnapshot = await db.financialSnapshots.getByExecutionId(second.run.id);
+    expect(secondSnapshot?.snapshotId).not.toBe(firstSnapshot?.snapshotId);
+    expect(secondSnapshot?.observations.filter(observation => observation.status === 'PRESENT')
+      .every(observation => observation.metadata.fetchedAt === '2026-09-18T00:00:00.000Z')).toBe(true);
+    expect(secondSnapshot?.executionStartedAt).not.toBe('2026-09-18T00:00:00.000Z');
+    expect(new Date(secondSnapshot!.finalizedAt).getTime()).toBeGreaterThan(new Date('2026-09-18T00:00:00.000Z').getTime());
+  });
+
   it('fails closed on a required ticker mismatch before Evidence or snapshot persistence', async () => {
     const ctx = context();
     const ids = await lifecycle();

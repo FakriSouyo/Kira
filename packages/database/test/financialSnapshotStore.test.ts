@@ -44,7 +44,12 @@ async function lifecycle(db: FinharnessDatabase, ids = { sessionId: 'session-fs'
   return execution;
 }
 
-function snapshot(execution: { sessionId: string; turnId: string; id: string; ticker: string }, companyValue = 1, finalizedAt = '2026-09-19T00:01:00.000Z') {
+function snapshot(
+  execution: { sessionId: string; turnId: string; id: string; ticker: string },
+  companyValue = 1,
+  finalizedAt = '2026-09-19T00:01:00.000Z',
+  materializedEvidenceIds: string[] = [],
+) {
   return createVerifiedFinancialSnapshot({
     sessionId: execution.sessionId,
     turnId: execution.turnId,
@@ -53,7 +58,7 @@ function snapshot(execution: { sessionId: string; turnId: string; id: string; ti
     executionStartedAt: '2026-09-19T00:00:00.000Z',
     finalizedAt,
     observations: observations(companyValue),
-    materializedEvidenceIds: ['evidence-1'],
+    materializedEvidenceIds,
   });
 }
 
@@ -116,6 +121,22 @@ describe('FinancialSnapshotStoreSqlite', () => {
     await db.sessions.settleExecution(execution.id, 'failed', { error: 'retry' });
     const second = await db.sessions.createExecution({ sessionId: execution.sessionId, turnId: execution.turnId, executionId: 'run-fs-2', ticker: 'BBCA', command: 'judge' });
     await expect(db.financialSnapshots.save(snapshot({ ...second, ticker: 'BBRI' }))).rejects.toThrow(/ticker/i);
+  });
+
+  it('rejects Evidence references that are missing or belong to another Execution', async () => {
+    const execution = await lifecycle(db);
+    await expect(db.financialSnapshots.save(snapshot(execution, 1, undefined, ['missing-evidence'])))
+      .rejects.toThrow(/Evidence.*execution/i);
+
+    const other = await lifecycle(db, { sessionId: 'session-other-evidence', turnId: 'turn-other-evidence', executionId: 'run-other-evidence' });
+    const evidenceRow = await db.evidence.save({
+      runId: other.id,
+      ticker: other.ticker,
+      source: 'test.evidence',
+      data: { run: other.id },
+    });
+    await expect(db.financialSnapshots.save(snapshot(execution, 1, undefined, [evidenceRow.id])))
+      .rejects.toThrow(/Evidence.*execution/i);
   });
 
   it('creates a distinct identity for an identical payload in a new Execution', async () => {

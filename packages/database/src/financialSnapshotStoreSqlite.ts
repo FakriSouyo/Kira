@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import {
   createVerifiedFinancialSnapshot,
   FinancialSnapshotConflictError,
@@ -8,7 +8,7 @@ import {
   type VerifiedFinancialSnapshot,
 } from '@harness/financial-data';
 import type { Orm } from './client';
-import { executions, financialSnapshots, researchSessions, researchTurns } from './schema';
+import { executions, evidence, financialSnapshots, researchSessions, researchTurns, runEvidence } from './schema';
 
 type FinancialSnapshotRow = typeof financialSnapshots.$inferSelect;
 
@@ -81,6 +81,28 @@ export class FinancialSnapshotStoreSqlite implements FinancialSnapshotStore {
       if (execution.sessionId !== input.sessionId) throw new Error(`Financial snapshot ${input.snapshotId} session does not match execution ${execution.id}`);
       if (execution.turnId !== input.turnId) throw new Error(`Financial snapshot ${input.snapshotId} turn does not match execution ${execution.id}`);
       if (execution.ticker.toUpperCase() !== input.subject.ticker.toUpperCase()) throw new Error(`Financial snapshot ${input.snapshotId} ticker does not match execution ${execution.id}`);
+
+      const evidenceIds = [...input.materializedEvidenceIds];
+      if (new Set(evidenceIds).size !== evidenceIds.length) {
+        throw new Error(`Financial snapshot ${input.snapshotId} contains duplicate Evidence references`);
+      }
+      if (evidenceIds.length > 0) {
+        const linkedEvidence = tx.select({ evidenceId: runEvidence.evidenceId, ticker: evidence.ticker })
+          .from(runEvidence)
+          .innerJoin(evidence, eq(runEvidence.evidenceId, evidence.id))
+          .where(and(
+            eq(runEvidence.runId, input.executionId),
+            inArray(runEvidence.evidenceId, evidenceIds),
+          )).all();
+        const linkedIds = new Set(
+          linkedEvidence
+            .filter(row => row.ticker.toUpperCase() === input.subject.ticker.toUpperCase())
+            .map(row => row.evidenceId),
+        );
+        if (linkedIds.size !== evidenceIds.length) {
+          throw new Error(`Financial snapshot ${input.snapshotId} references Evidence outside execution ${input.executionId}`);
+        }
+      }
 
       const session = tx.select({ id: researchSessions.id }).from(researchSessions)
         .where(eq(researchSessions.id, input.sessionId)).limit(1).get();

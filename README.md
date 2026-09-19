@@ -32,7 +32,7 @@ User
 │   └─ evidence search
 │
 └─ /judge
-    └─ Research → Verify Snapshot → Evidence → Bull → Bear → Rebuttal → Judge → Verdict
+    └─ Research → Verify → Accepted Evidence → Finalize Snapshot → Bull → Bear → Rebuttal → Judge → Verdict
 ```
 
 The Bull/Bear/Judge debate belongs to `/judge` only.
@@ -100,9 +100,11 @@ selectively fetch required financial data
 ↓
 reuse provider cache when still valid
 ↓
-verify + persist one execution-scoped financial snapshot
+verify accepted observations
 ↓
 materialize accepted Evidence
+↓
+persist one execution-scoped financial snapshot manifest
 ↓
 select supporting evidence
 ↓
