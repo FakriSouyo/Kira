@@ -43,7 +43,9 @@ Normal conversation does **not** silently auto-run `/judge`, `/research`, `/comp
 
 ### Stateful harness runtime
 
-The A-L stateful-context roadmap is complete:
+The A-L stateful-context foundation is complete. M, N, and O extend it with a
+provider seam, verified financial input boundary, and durable resumability
+foundation:
 
 ```text
 Session
@@ -492,8 +494,7 @@ L  Artifact-aware retrieval + validity + prior-context reuse
  O  Durable Resumability Foundation
 ```
 
-A-L and PR M are complete and merged into `master`; PR N and PR O are complete
-on this branch pending review and merge.
+A-L, PR M, PR N, and PR O are complete and merged into `master`.
 
 PR M adds the Financial Data Provider Seam; PR N adds the verified input boundary:
 
@@ -523,13 +524,17 @@ Current direction after PR O:
 10. Outcome Tracking + Reflection
 11. UI integration / polish
 
-This order may evolve as implementation constraints become clearer, but the A-L lifecycle/context foundation remains the baseline.
+This order may evolve as implementation constraints become clearer, but the
+A-O lifecycle, provider, snapshot, and resumability foundation remains the
+baseline.
 
 ## Documentation
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — current architecture plus historical deviations
+- [ARCHITECTURE.md](ARCHITECTURE.md) — current technical architecture and invariants
+- [docs/ROADMAP.md](docs/ROADMAP.md) — canonical architecture roadmap
+- [docs/PROGRESS.md](docs/PROGRESS.md) — current project status
 - [CHANGELOG.md](CHANGELOG.md) — release history
-- [planning/addendum_v3.0.md](planning/addendum_v3.0.md) — earlier detailed design specification
+- [docs/archive/legacy-roadmap.md](docs/archive/legacy-roadmap.md) — retired Phase/addendum era summary
 - [AGENTS.md](AGENTS.md) — repository contribution/agent conventions
 
 ## Scope

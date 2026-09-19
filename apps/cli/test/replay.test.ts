@@ -8,9 +8,9 @@ import { loadConfig } from '../src/config';
 import { judgeWorkflow } from '../src/workflows/judgeWorkflow';
 import { loadFixture, compareSnapshot, type ReplaySnapshot } from '../src/repl/replay';
 
-const FIXTURE_PATH = join(process.cwd(), 'progress/phase-2/fixtures/bbca.jsonl');
+const FIXTURE_PATH = join(process.cwd(), 'apps/cli/test/fixtures/bbca-replay.jsonl');
 
-describe('Replay fixture keyless (Phase 2 Task 5)', () => {
+describe('Replay fixture keyless', () => {
   it('load fixture bbca.jsonl berhasil dan berisi ticker BBCA', () => {
     const snap = loadFixture(FIXTURE_PATH);
     expect(snap.ticker).toBe('BBCA');
