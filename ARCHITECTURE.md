@@ -35,7 +35,7 @@ External seams are explicit: `packages/llm` owns model clients,
 `packages/financial-data` owns the provider-neutral financial contract, and
 `packages/sectors-api` is the current financial provider implementation.
 
-## Model runtime — Q1
+## Model runtime — Q1 / Q2
 
 `packages/llm` is the canonical model-runtime boundary. It separates logical
 provider route, provider-owned model identity, adapter implementation, and wire
@@ -78,8 +78,48 @@ provider structured-output support remains distinguishable from effective
 runtime support because custom Responses endpoints may use text JSON plus local
 Zod validation. Existing `LLMClientLike` value-only methods remain available;
 result-bearing object/text and metadata-capable stream paths are provided by the
-compatibility facade. Q2 will connect these descriptors to durable model
+compatibility facade. Q2 connects these descriptors to durable Session model
 selection, production Context capability resolution, and persistence.
+
+### Durable model selection and execution plans — Q2
+
+Model choice has four distinct authorities:
+
+```text
+default configuration
+        ↓ initial composition
+SessionModelSelection  ── durable user intent, per Session
+        ↓ resolve
+ExecutionRuntimePlan   ── primary/fallback semantic runtime snapshot
+        ↓ invoke
+ModelCall              ── actual successful route and usage audit
+```
+
+`SessionModelSelection` is append-only and versioned. It survives database
+recreation, is isolated by Session, and session-local setters do not write
+`config.json`. Legacy `research_sessions.provider/model` fields remain readable
+and existing Sessions are backfilled as `source: legacy` selections.
+
+The runtime plan is a pure, side-effect-free description of the selected route,
+ordered fallback routes, effective capabilities, generation controls, and the
+secret-free semantic runtime fingerprint. Logical provider identity remains
+distinct from transport family, adapter, protocol, and model identity. A
+selected OpenRouter route therefore retains logical provider `openrouter` while
+using the `openai-compatible` adapter. API keys and private request/session
+affinity are excluded from the fingerprint.
+
+The production Context budget uses the capabilities of the exact runtime plan
+for real providers. MainFinHarnessAgent and SubagentRuntime use result-bearing
+runtime calls; durable ModelCall rows record the actual provider/model,
+adapter, protocol, runtime fingerprint, and usage. Fallback still creates a
+new one-shot PreparedModelCall per attempt, and successful metadata identifies
+the route that actually succeeded.
+
+New Judge execution profiles pin the semantic runtime-plan fingerprint while
+remaining compatible with PR P profiles that contain only provider/model.
+Resume validation still occurs before acquisition and allows credential
+rotation when semantic runtime identity is unchanged. Q2 does not change the
+15-node Judge graph or introduce a new checkpoint/resume lifecycle.
 
 ## Core boundaries and invariants
 
@@ -368,9 +408,9 @@ credentials.
 The current and future milestone order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md). The next milestone is:
 
-**Q1 — Model Runtime + Provider Directory**
+**Q2 — Durable Model Selection + Production Integration**
 
-Q1 is the current model-runtime milestone. PR P is complete on master and
+Q1 is complete. Q2 is the current implementation milestone on this branch. PR P
 continues to restore the same Execution's validated snapshot, Evidence, and
 typed debate outputs without changing its lifecycle or Judge graph. The full
 future order is maintained in [`docs/ROADMAP.md`](docs/ROADMAP.md).

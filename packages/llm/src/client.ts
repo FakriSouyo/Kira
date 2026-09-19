@@ -20,6 +20,7 @@ import type {
   StreamObjectParams,
   StreamTextParams,
 } from './types';
+import type { ModelRuntimePlan } from './plan';
 
 export { parseJsonResponse, toSystemPrompt } from './sdk-helpers';
 
@@ -127,10 +128,13 @@ export class LLMClient implements LLMClientLike {
     const primary = { ...options.config, sessionId: options.config.sessionId ?? randomUUID() };
     const configs = [primary, ...(options.fallbackConfigs ?? []).map((config) => ({ ...config, sessionId: config.sessionId ?? randomUUID() }))];
     this.configs = configs;
-    this.routes = configs.map((config, index) => ({
-      providerId: index === 0 ? config.provider : `${config.provider}#fallback-${index}`,
-      modelId: config.model,
-    }));
+    this.routes = configs.map((config, index) => {
+      const logicalProviderId = config.providerId ?? config.provider;
+      // Keep fallback route identity distinct while retaining the logical
+      // provider prefix used by the compatibility metadata.
+      const providerId = index === 0 ? logicalProviderId : `${logicalProviderId}#fallback-${index}`;
+      return { providerId, modelId: config.model };
+    });
     const factory = options.modelFactory ?? resolveModel;
     const registrations: ProviderRegistration[] = configs.map((config, index) => {
       const adapterId = adapterFor(config);
@@ -167,6 +171,11 @@ export class LLMClient implements LLMClientLike {
 
   private prepare(index: number): PreparedModelCall {
     return this.runtime.prepareCall(this.routes[index], this.controlsFor(index));
+  }
+
+  /** Pure semantic snapshot used by execution profiles and context budgeting. */
+  describeRuntimePlan(): ModelRuntimePlan {
+    return this.runtime.describePlan(this.routes.map((route, index) => ({ route, generationControls: this.controlsFor(index) })));
   }
 
   /** Each retry and fallback route receives a new one-shot PreparedModelCall. */

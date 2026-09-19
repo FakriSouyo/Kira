@@ -17,6 +17,16 @@ export const researchSessions = sqliteTable('research_sessions', {
   updatedAt: text('updated_at').notNull(),
 });
 
+/** Q2: append-only, per-session durable model intent. */
+export const sessionModelSelections = sqliteTable('session_model_selections', {
+  sessionId: text('session_id').notNull().references(() => researchSessions.id, { onDelete: 'cascade' }),
+  version: integer('version').notNull(),
+  providerId: text('provider_id').notNull(),
+  modelId: text('model_id').notNull(),
+  source: text('source').notNull(),
+  selectedAt: text('selected_at').notNull(),
+}, table => [primaryKey({ columns: [table.sessionId, table.version] })]);
+
 export const researchTurns = sqliteTable('research_turns', {
   id: text('id').primaryKey(),
   sessionId: text('session_id').notNull().references(() => researchSessions.id, { onDelete: 'cascade' }),
@@ -218,6 +228,11 @@ export const modelCalls = sqliteTable('model_calls', {
   subagent: text('subagent').notNull(),
   provider: text('provider').notNull(),
   model: text('model').notNull(),
+  providerId: text('provider_id'),
+  modelId: text('model_id'),
+  adapterId: text('adapter_id'),
+  protocol: text('protocol'),
+  runtimeFingerprint: text('runtime_fingerprint'),
   attempt: integer('attempt').notNull(),
   inputTokens: integer('input_tokens'),
   outputTokens: integer('output_tokens'),

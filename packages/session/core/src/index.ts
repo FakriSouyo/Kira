@@ -15,6 +15,17 @@ export interface ResearchSession {
   updatedAt: string;
 }
 
+export type SessionModelSelectionSource = 'initial' | 'user' | 'legacy';
+
+export interface SessionModelSelection {
+  sessionId: string;
+  version: number;
+  providerId: string;
+  modelId: string;
+  source: SessionModelSelectionSource;
+  selectedAt: string;
+}
+
 export interface ResearchTurn {
   id: string;
   sessionId: string;
@@ -114,6 +125,12 @@ export interface ModelCallRecord extends ModelUsage {
   subagent: string;
   provider: string;
   model: string;
+  /** Q2 actual logical runtime identity; null for historical rows. */
+  providerId: string | null;
+  modelId: string | null;
+  adapterId: string | null;
+  protocol: string | null;
+  runtimeFingerprint: string | null;
   attempt: number;
   latencyMs: number;
   finishReason: string | null;
@@ -131,7 +148,10 @@ export interface ResearchSessionArtifacts {
 }
 
 export interface ResearchSessionStore {
-  createSession(params: { sessionId?: string; title: string; provider: string; model: string; reasoningMode: ResearchSession['reasoningMode'] }): Promise<ResearchSession>;
+  createSession(params: { sessionId?: string; title: string; provider: string; model: string; providerId?: string; modelId?: string; reasoningMode: ResearchSession['reasoningMode'] }): Promise<ResearchSession>;
+  getCurrentModelSelection(sessionId: string): Promise<SessionModelSelection | null>;
+  listModelSelections(sessionId: string): Promise<SessionModelSelection[]>;
+  selectModel(params: { sessionId: string; providerId: string; modelId: string; source?: Exclude<SessionModelSelectionSource, 'legacy'>; selectedAt?: string }): Promise<SessionModelSelection>;
   createTurn(params: { turnId?: string; sessionId: string; runId?: string; input: string; command: string }): Promise<ResearchTurn>;
   settleTurn(turnId: string, status: Exclude<TurnStatus, 'running'>, completedAt?: string): Promise<ResearchTurn>;
   /** Starts the next attempt for a running turn; at most one attempt may run at once. */
@@ -148,7 +168,7 @@ export interface ResearchSessionStore {
   acquireInterruptedExecution(executionId: string): Promise<ResearchExecution>;
   saveStep(params: { stepId?: string; runId: string; nodeId: string; parentNodeIds: string[]; subagent?: string; skills: SkillAuditReference[]; status: WorkflowStepStatus; durationMs?: number; summary?: string; error?: string }): Promise<WorkflowStepRecord>;
   getStep(runId: string, nodeId: string): Promise<WorkflowStepRecord | null>;
-  recordModelCall(params: { callId?: string; runId?: string; turnId?: string; stepId?: string; subagent: string; provider: string; model: string; attempt: number; inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; totalTokens: number | null; latencyMs: number; finishReason: string | null; cost: number | null; currency: string | null; contextSnapshotId?: string | null }): Promise<ModelCallRecord>;
+  recordModelCall(params: { callId?: string; runId?: string; turnId?: string; stepId?: string; subagent: string; provider: string; model: string; providerId?: string | null; modelId?: string | null; adapterId?: string | null; protocol?: string | null; runtimeFingerprint?: string | null; attempt: number; inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; totalTokens: number | null; latencyMs: number; finishReason: string | null; cost: number | null; currency: string | null; contextSnapshotId?: string | null }): Promise<ModelCallRecord>;
   getSessionArtifacts(sessionId: string): Promise<ResearchSessionArtifacts>;
 }
 

@@ -9,6 +9,7 @@ import { DEFAULT_AGENT_CONFIG, DEFAULT_ROUTER_CONFIG } from '@harness/llm';
 /** Bentuk model LLM di file konfigurasi (snake_case, konsisten dengan sectors_api). */
 interface LLMModelFile {
   api?: LLMModelConfig['api'];
+  provider_id?: string;
   provider?: LLMModelConfig['provider'];
   model?: string;
   temperature?: number;
@@ -98,6 +99,8 @@ export interface SavedProvider {
 
 export interface ConfigOverrides {
   providerId?: string;
+  /** Internal read-only composition path; never repairs or writes config.json. */
+  skipRepair?: boolean;
   homeDir?: string;
   mockSectors?: boolean;
   mockLlm?: boolean;
@@ -201,7 +204,7 @@ function providerOr(value: string | undefined): Provider {
 export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
   const homeDir =
     overrides.homeDir ?? process.env[ENV.home] ?? join(homedir(), DATA_DIR_NAME);
-  const file = repairActiveProviderModels(homeDir, readConfigFile(homeDir));
+  const file = overrides.skipRepair ? readConfigFile(homeDir) : repairActiveProviderModels(homeDir, readConfigFile(homeDir));
   const cred = readCredentialsFile(homeDir);
 
   const activeId = overrides.providerId ?? file?.provider_setup?.id;
@@ -217,6 +220,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
   const envApiKey = process.env[ENV.llmApiKey];
 
   const agent: LLMModelConfig = {
+    providerId: envAgentProvider !== undefined ? envAgentProvider : (fileAgent?.provider_id ?? selected?.setup.id),
     provider: envAgentProvider !== undefined ? providerOr(envAgentProvider) : (fileAgent?.provider ?? DEFAULT_AGENT_CONFIG.provider),
     model: envAgentModel ?? fileAgent?.model ?? DEFAULT_AGENT_CONFIG.model,
     temperature: fileAgent?.temperature ?? DEFAULT_AGENT_CONFIG.temperature,
@@ -227,6 +231,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
     api: fileAgent?.api,
   };
   const router: LLMModelConfig = {
+    providerId: envRouterProvider ?? envAgentProvider ?? fileRouter?.provider_id ?? fileAgent?.provider_id ?? selected?.setup.id,
     provider:
       envRouterProvider !== undefined
         ? providerOr(envRouterProvider)

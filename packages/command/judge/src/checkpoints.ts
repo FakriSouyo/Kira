@@ -37,6 +37,11 @@ export function checkpointKindForNode(nodeId: JudgeNodeId): string {
 export interface JudgeModelCallAudit {
   provider: string;
   model: string;
+  providerId?: string;
+  modelId?: string;
+  adapterId?: string;
+  protocol?: string;
+  runtimeFingerprint?: string;
   inputTokens: number | null;
   outputTokens: number | null;
   cachedInputTokens: number | null;

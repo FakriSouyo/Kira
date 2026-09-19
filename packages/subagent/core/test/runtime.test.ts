@@ -118,7 +118,7 @@ describe('SubagentRuntime', () => {
     expect(result.modelCall).toEqual(expect.objectContaining({ model: 'usage-model', totalTokens: 33 }));
   });
 
-  it('budgets and snapshots specialist context before a mock model call with truthful null usage', async () => {
+  it('does not fabricate model identity when a legacy value-only caller supplies no metadata', async () => {
     const evidence: Evidence[] = [{
       id: '11111111-1111-4111-8111-111111111111', runId: 'execution-1', ticker: 'BBCA', source: 'sectors.company_report',
       sourceType: 'api', contentHash: 'hash-a', retrievedAt: '2026-09-18T00:00:00.000Z', data: { financials: { roe: 18.4 } },
@@ -159,8 +159,6 @@ describe('SubagentRuntime', () => {
       expect.stringContaining(rendered.roleZone),
     ]);
     expect(result.contextSnapshotId).toBe(snapshots[0]!.snapshotId);
-    expect(result.modelCall).toEqual(expect.objectContaining({
-      provider: 'mock', model: 'mock-specialist', inputTokens: null, outputTokens: null, totalTokens: null,
-    }));
+    expect(result.modelCall).toBeUndefined();
   });
 });

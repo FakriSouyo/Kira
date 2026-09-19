@@ -28,6 +28,22 @@ const packet = (sessionId: string, turnId: string): ContextPacket => ({
 });
 
 describe('turn-owned conversational ModelCalls', () => {
+  it('persists actual Q1 runtime identity across database restart', async () => {
+    const session = await db.sessions.createSession({ sessionId: 'session-runtime-audit', title: 'Runtime audit', provider: 'openrouter', model: 'qwen/qwen3', reasoningMode: 'usual' });
+    const turn = await db.sessions.createTurn({ turnId: 'turn-runtime-audit', sessionId: session.id, input: 'hello', command: 'conversation' });
+    await db.sessions.recordModelCall({
+      callId: 'call-runtime-audit', turnId: turn.id, subagent: 'conversation', provider: 'openai', model: 'qwen/qwen3',
+      providerId: 'openrouter', modelId: 'qwen/qwen3', adapterId: 'openai-compatible', protocol: 'openai-chat', runtimeFingerprint: 'f'.repeat(64),
+      attempt: 1, inputTokens: 10, outputTokens: 4, cachedInputTokens: null, totalTokens: 14, latencyMs: 15, finishReason: 'stop', cost: null, currency: null,
+    });
+    db.raw.close();
+    db = openDb({ homeDir: dir });
+
+    expect((await db.sessions.getSessionArtifacts(session.id)).modelCalls[0]).toEqual(expect.objectContaining({
+      providerId: 'openrouter', modelId: 'qwen/qwen3', adapterId: 'openai-compatible', protocol: 'openai-chat', runtimeFingerprint: 'f'.repeat(64),
+    }));
+  });
+
   let db: FinharnessDatabase;
   let dir: string;
 

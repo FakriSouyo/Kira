@@ -19,7 +19,7 @@ export class ConversationController {
     const session = recent ?? await db.sessions.createSession({
       sessionId: `conversation_${randomUUID().slice(0, 8)}`,
       title: 'New conversation',
-      provider: config.llm.agent.provider,
+      provider: config.llm.agent.providerId ?? config.llm.agent.provider,
       model: config.llm.agent.model,
       reasoningMode: 'usual',
     });
@@ -160,7 +160,7 @@ export class ConversationController {
     const session = await this.db.sessions.createSession({
       sessionId: `conversation_${randomUUID().slice(0, 8)}`,
       title: 'New conversation',
-      provider: this.config.llm.agent.provider,
+      provider: this.config.llm.agent.providerId ?? this.config.llm.agent.provider,
       model: this.config.llm.agent.model,
       reasoningMode: 'usual',
     });

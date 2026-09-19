@@ -27,56 +27,57 @@ reasoning inside explicit command boundaries.
 - **N — Verified Financial Snapshot:** provider results are verified and finalized into an immutable execution-scoped input boundary.
 - **O — Durable Resumability Foundation:** interrupted lifecycle state, immutable profiles and node outputs, generation fencing, startup reconciliation, and generic restored-node runner support are available.
 - **P — `/judge` Same-Execution Checkpoint / Resume:** typed Judge checkpoints, validated DAG restoration, same-Execution continuation, `/resume`, `/continue`, projection repair, and idempotent publication are complete.
+- **Q1 — Model Runtime + Provider Directory:** provider-neutral runtime contracts, immutable directory snapshots, adapter boundaries, safe fingerprints, one-shot prepared calls, invocation metadata, and compatibility integration are complete.
 
 ## Current milestone
 
-### Q — Model Runtime
+### Q — Model Runtime and durable selection
 
-- **Q1 — Model Runtime + Provider Directory:** provider-neutral runtime
-  contracts, immutable provider/model directory snapshots, adapter boundaries,
-  safe runtime descriptors, one-shot prepared calls, actual invocation
-  metadata, and compatibility-facade integration.
-- **Q2 — Durable Model Selection + Production Integration:** planned; not part
-  of Q1.
+- **Q2 — Durable Model Selection + Production Integration:** durable per-Session
+  model intent, logical provider composition, side-effect-free execution plans,
+  plan-aware context budgeting, result-bearing production integration, actual
+  ModelCall provenance, and Judge runtime-plan compatibility are complete on
+  this implementation branch. Q2 does not add a new `/resume` architecture;
+  it preserves PR P same-Execution resume semantics.
 
 ## Future milestones
 
-### R — Capability Runtime
+### Future order
 
-- R1 — Typed Tool Runtime
-- R2 — Capability Registry + Policy + Integrations
+- Model Runtime Generalization
+- Capability Registry + Typed Tool Runtime
 
-### S — Files & Documents
+### Files & Documents
 
 - S1 — Durable File / Attachment Layer
 - S2 — Workspace + File Capability
 - S3 — Document Understanding / Retrieval
 
-### T — Evidence Intelligence
+### Evidence Intelligence
 
 - Evidence Policy + Claim Graph
 
-### U — Research Composition
+### Research Composition
 
 - Reusable Research Subgraphs
 
-### V — Decision Intelligence
+### Decision Intelligence
 
 - Risk Committee
 
-### W — Long-Term Research State
+### Long-Term Research State
 
 - Research Graph
 
-### X — Decision Memory
+### Decision Memory
 
 - Decision Journal
 
-### Y — Learning Loop
+### Learning Loop
 
 - Outcome Tracking + Reflection
 
-### Z — Product Platform
+### Product Platform
 
 - Z1 — Application Host / API Boundary
 - Z2 — Web Surface

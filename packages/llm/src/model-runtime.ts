@@ -3,6 +3,7 @@ import { RuntimeError } from './errors';
 import type { ModelAdapter, ModelInvocationResult, PreparedAdapterCall, PreparedTextStream } from './adapter';
 import { createModelRuntimeDescriptor, type ModelGenerationControls, type ModelRuntimeDescriptor } from './descriptor';
 import { ProviderDirectory, type ModelDescriptor, type ModelRoute } from './provider-directory';
+import { createModelRuntimePlan, type ModelRuntimePlan, type ModelRuntimePlanRequest } from './plan';
 
 export interface ModelRuntimeOptions {
   readonly directory: ProviderDirectory;
@@ -72,11 +73,23 @@ export class ModelRuntime {
     this.adapters = ModelRuntime.adapterMap(adapters);
   }
 
+  /** Resolves only detached semantic runtime data; it does not prepare an adapter call. */
+  describeCall(route: ModelRoute, generationControls: ModelGenerationControls): ModelRuntimeDescriptor {
+    return createModelRuntimeDescriptor({ model: this.directory.resolveModel(route), generationControls });
+  }
+
+  describePlan(requests: readonly ModelRuntimePlanRequest[]): ModelRuntimePlan {
+    return createModelRuntimePlan(requests.map(request => ({
+      route: { ...request.route },
+      descriptor: this.describeCall(request.route, request.generationControls),
+    })));
+  }
+
   prepareCall(route: ModelRoute, generationControls: ModelGenerationControls): PreparedModelCall {
     const model = this.directory.resolveModel(route);
     const adapter = this.adapters.get(model.provider.adapterId);
     if (!adapter) throw new RuntimeError('UNKNOWN_ADAPTER', `Unknown model adapter: ${model.provider.adapterId}`);
-    const descriptor = createModelRuntimeDescriptor({ model, generationControls });
+    const descriptor = this.describeCall(route, generationControls);
     const prepared = adapter.prepareCall({ model, descriptor, connection: this.directory.connectionFor(route) });
     return new PreparedModelCall(model, descriptor, prepared);
   }

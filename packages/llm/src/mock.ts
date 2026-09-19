@@ -533,6 +533,12 @@ function routeIntent(text: string): Intent {
 }
 
 export class MockLLMClient implements LLMClientLike {
+  describeRuntimePlan() {
+    return createMockModelRuntime().describePlan([{
+      route: { providerId: 'mock', modelId: 'deterministic-financial-mock' },
+      generationControls: { temperature: 0, maxOutputTokens: 2_000 },
+    }]);
+  }
   async generateObject<T>(params: GenerateObjectParams<T>): Promise<T> {
     const output = this.generate(params.system, params.prompt);
     // Validasi terhadap schema pemanggil — mock yang menyimpang akan gagal di sini.

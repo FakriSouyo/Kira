@@ -6,6 +6,8 @@ import type { z } from 'zod';
  * Tier 2 — router ringan (Intent Router): model kecil + maxTokens 256
  */
 export interface LLMModelConfig {
+  /** Stable logical provider identity; distinct from the transport family. */
+  providerId?: string;
   /** Opaque runtime session affinity for Responses gateways; never part of prompts. */
   sessionId?: string;
   provider: 'openai' | 'anthropic';
@@ -101,6 +103,8 @@ export interface StreamTextParams {
  * dan MockLLMClient (offline, deterministik). Agent hanya bergantung ke sini.
  */
 export interface LLMClientLike {
+  /** Pure semantic runtime snapshot when supplied by the production client. */
+  describeRuntimePlan?(): import('./plan').ModelRuntimePlan;
   generateObject<T>(params: GenerateObjectParams<T>): Promise<T>;
   /** Transitional usage-aware API; command subagents migrate before legacy value-only methods are removed. */
   generateObjectResult?<T>(params: GenerateObjectParams<T>): Promise<LLMResult<T>>;

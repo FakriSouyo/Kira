@@ -220,6 +220,20 @@ describe('ModelRuntimeDescriptor', () => {
     expect(createModelRuntimeDescriptor({ model: requestA, generationControls: { temperature: 0.2, maxOutputTokens: 100 } }).runtimeFingerprint)
       .toBe(createModelRuntimeDescriptor({ model: requestB, generationControls: { temperature: 0.2, maxOutputTokens: 100 } }).runtimeFingerprint);
   });
+
+  it('does not include display labels, documentation, or private implementation source in graph identity', () => {
+    const left = new ProviderDirectory([{
+      descriptor: { ...provider('semantic-route').descriptor, displayName: 'Provider A' },
+      models: [{ id: 'model-a', displayName: 'Model A', capabilities, connection: { docs: 'docs-a', functionSource: 'source-a', buildPath: 'build-a' } }],
+    }]).resolveModel({ providerId: 'semantic-route', modelId: 'model-a' });
+    const right = new ProviderDirectory([{
+      descriptor: { ...provider('semantic-route').descriptor, displayName: 'Provider B' },
+      models: [{ id: 'model-a', displayName: 'Model B', capabilities, connection: { docs: 'docs-b', functionSource: 'source-b', buildPath: 'build-b' } }],
+    }]).resolveModel({ providerId: 'semantic-route', modelId: 'model-a' });
+
+    expect(createModelRuntimeDescriptor({ model: left, generationControls: { temperature: 0.2, maxOutputTokens: 100 } }).runtimeFingerprint)
+      .toBe(createModelRuntimeDescriptor({ model: right, generationControls: { temperature: 0.2, maxOutputTokens: 100 } }).runtimeFingerprint);
+  });
 });
 
 describe('ModelRuntime prepared calls', () => {

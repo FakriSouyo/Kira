@@ -108,24 +108,10 @@ export class SubagentRuntime {
       prompt: request.prompt,
       system: [evidenceZone, roleZone ? `${roleZone}\n\n${specialistZone}` : specialistZone],
     };
-    const startedAt = Date.now();
     const generated = this.llm.generateObjectResult
       ? await this.llm.generateObjectResult(params)
       : { value: await this.llm.generateObject(params) };
-    const modelCall = 'metadata' in generated
-      ? generated.metadata
-      : request.specialistContext && this.options.modelIdentity
-        ? {
-          provider: this.options.modelIdentity.provider,
-          model: this.options.modelIdentity.model,
-          inputTokens: null,
-          outputTokens: null,
-          cachedInputTokens: null,
-          totalTokens: null,
-          finishReason: null,
-          latencyMs: Date.now() - startedAt,
-        } satisfies LLMCallMetadata
-        : undefined;
+    const modelCall = 'metadata' in generated ? generated.metadata : undefined;
     return {
       value: request.schema.parse(generated.value),
       subagent: request.manifest.id,

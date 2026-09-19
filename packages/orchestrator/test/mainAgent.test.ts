@@ -21,7 +21,12 @@ it('grounds general financial chat in a bounded main-agent prompt', async () => 
 
 it('passes stable structured context to the model and records the call after success', async () => {
   const onModelCall = vi.fn().mockResolvedValue(undefined);
-  const llm = { generateText: vi.fn().mockResolvedValue('jawaban') };
+  const metadata = {
+    provider: 'openai' as const, model: 'gpt-test', providerId: 'openai', modelId: 'gpt-test',
+    adapterId: 'openai-compatible', protocol: 'openai-chat', runtimeFingerprint: 'f'.repeat(64),
+    inputTokens: 10, outputTokens: 4, cachedInputTokens: 0, totalTokens: 14, finishReason: 'stop', latencyMs: 12,
+  };
+  const llm = { generateText: vi.fn().mockResolvedValue('jawaban'), generateTextResult: vi.fn().mockResolvedValue({ value: 'jawaban', metadata }) };
   const agent = new MainFinHarnessAgent(llm as never);
   const rendered = '<FINHARNESS_CONTEXT>\nVERIFIED RESEARCH ARTIFACTS\n</FINHARNESS_CONTEXT>';
 
@@ -30,8 +35,31 @@ it('passes stable structured context to the model and records the call after suc
     onModelCall,
   });
 
-  expect(llm.generateText).toHaveBeenCalledWith(expect.objectContaining({
+  expect(llm.generateTextResult).toHaveBeenCalledWith(expect.objectContaining({
     system: expect.arrayContaining([expect.stringContaining('Main FinHarness Agent'), rendered]),
   }));
-  expect(onModelCall).toHaveBeenCalledTimes(1);
+  expect(onModelCall).toHaveBeenCalledWith(metadata);
+});
+
+it('keeps final metadata on the result-bearing text stream and invokes the callback after chunks', async () => {
+  const order: string[] = [];
+  const metadata = {
+    provider: 'mock' as const, model: 'stream-model', providerId: 'mock', modelId: 'stream-model',
+    adapterId: 'mock', protocol: 'mock', runtimeFingerprint: 'e'.repeat(64),
+    inputTokens: null, outputTokens: null, cachedInputTokens: null, totalTokens: null, finishReason: 'stop', latencyMs: 0,
+  };
+  const onModelCall = vi.fn(async () => { order.push('metadata'); });
+  const llm = {
+    streamText: vi.fn(),
+    streamTextResult: vi.fn(() => ({
+      chunks: (async function* () { order.push('chunk'); yield 'partial'; })(),
+      metadata: Promise.resolve(metadata),
+    })),
+  };
+  const agent = new MainFinHarnessAgent(llm as never);
+  const chunks: string[] = [];
+  for await (const chunk of agent.stream('apa kabar?', { onModelCall })) chunks.push(chunk);
+  expect(chunks).toEqual(['partial']);
+  expect(order).toEqual(['chunk', 'metadata']);
+  expect(onModelCall).toHaveBeenCalledWith(metadata);
 });
