@@ -388,7 +388,10 @@ async function restoreEvidence(db: FinharnessDatabase, ids: string[], execution:
   if (evidence.some(item => item.ticker.toUpperCase() !== ticker.toUpperCase() || !executionEvidence.has(item.id))) {
     throw new Error('Judge checkpoint references Evidence outside the canonical Execution');
   }
-  return evidence;
+  // Evidence rows may be content-deduplicated and retain their original row
+  // owner. The runEvidence membership above is the authority for this
+  // execution; restore the current execution view before specialist validation.
+  return evidence.map(item => ({ ...item, runId: execution.id }));
 }
 
 export async function decodeJudgeCheckpoint(
@@ -558,7 +561,7 @@ function checkpointMessage(nodeId: JudgeNodeId, runId: string, ticker: string, p
       messageId: conditional ? `judge_${runId}_conditional` : `judge_${runId}`,
       agent: 'judge', messageType: 'decision', content: judgment.summary, evidenceIds: [],
       sequenceOrder: conditional ? 7 : 4,
-      metadata: { score: judgment.score, stance: judgment.stance, conditional, seenEvidenceIds },
+      metadata: { score: judgment.score, stance: judgment.stance, seenEvidenceIds, ...(conditional ? { conditional: true } : {}) },
     };
   }
   return undefined;
