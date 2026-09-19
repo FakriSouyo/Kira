@@ -511,15 +511,17 @@ rather than replacing the A-L foundation.
 
 Current direction after PR O:
 
-1. PR P: `/judge`-specific checkpoint codecs and resume planner
-2. model/runtime generalization
-3. Capability Registry + typed capability/tool runtime
-4. Evidence Policy + Claim Graph
-5. reusable research subgraphs
-6. Risk Committee
-7. Research Graph
-8. Decision Journal, outcome tracking, and reflection
-9. UI integration and final polish
+1. PR P: `/judge` same-Execution checkpoint / resume
+2. Model Runtime Generalization
+3. Capability Registry + Typed Tool Runtime
+4. Document & File Workspace
+5. Evidence Policy + Claim Graph
+6. Reusable Research Subgraphs
+7. Risk Committee
+8. Research Graph
+9. Decision Journal
+10. Outcome Tracking + Reflection
+11. UI integration / polish
 
 This order may evolve as implementation constraints become clearer, but the A-L lifecycle/context foundation remains the baseline.
 

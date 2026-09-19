@@ -20,10 +20,14 @@ No `/resume` true resume, `/continue`, Judge checkpoint codecs, Judge resume pla
 - `origin/master`: `37b7517d6f45b1589d1f1c31ad49debc2b6bc9bc`
 - Merge-base with `origin/master`: `37b7517d6f45b1589d1f1c31ad49debc2b6bc9bc`
 - Corrected implementation HEAD: `dfbb8ebf14f7b99adae5e54d82233bf509ecf5e7`
+- Final hardening commit: `test: harden PR O persistence and graph identity`
 - Commits after `origin/master`:
   - `1f22c87` — `feat: add durable resumability foundation`
   - `dfbb8eb` — `fix: preserve resumability envelope idempotency`
-- Implementation diff: 25 files, 1,152 insertions, 36 deletions.
+- `559f61b` — `docs: record PR O final architecture review`
+  - final hardening commit — `test: harden PR O persistence and graph identity`
+- Implementation diff through `dfbb8eb`: 25 files, 1,152 insertions, 36 deletions.
+- Post-correction delta contains only the review report, README roadmap, and focused tests; no runtime source changes.
 - The implementation worktree was clean before this report artifact was added.
 - No remote state was changed.
 
@@ -147,7 +151,7 @@ The generic graph fingerprint hashes canonical data containing workflow ID, work
 
 Conditional predicates are not serialized. The immutable profile payload captures the runtime configuration (`reasoningMode`, `conditional`, and researcher flags), while the graph fingerprint captures the stable topology and conditional-node shape. This is sufficient for PR P to distinguish profile configuration from graph compatibility without hashing executable code.
 
-The Judge definition remains exactly 15 nodes with the existing IDs and topology. The topology and conditional gating tests remain green. Direct tests for each deliberate graph-drift mutation are not present; that is a future test-hardening opportunity.
+The Judge definition remains exactly 15 nodes with the existing IDs and topology. The topology and conditional gating tests remain green. The hardening pass adds focused deterministic tests for identical graphs, dependency changes, node addition/removal, required-vs-optional changes, and non-semantic labels/function source.
 
 ## 10. WorkflowNodeOutput
 
@@ -291,11 +295,11 @@ The only allowed provider/model additions are the truthful identity fields in th
 | parent Turn remains running | direct store rejection plus restart test | covered |
 | startup reconciliation | new controller instance over persisted rows | covered; direct close/reopen is not used in this CLI test |
 | immutable profile | direct database test | covered |
-| profile restart | same-open-store read only | missing direct close/reopen test |
+| profile restart | close/reopen database and read by Execution ID | covered |
 | profile drift conflict | payload drift direct test | covered; model/researcher drift variants indirect |
-| graph fingerprint | profile capture and topology tests | indirect; mutation-specific tests absent |
+| graph fingerprint | focused deterministic identity/drift test | covered |
 | immutable node output | direct database test | covered |
-| output restart | same-open-store read only | missing direct close/reopen test |
+| output restart | close/reopen database and read by Execution ID/node ID | covered |
 | output conflict | payload conflict direct test | covered |
 | generation/output interaction | reacquired-generation retry plus stale writer | covered after `dfbb8eb` |
 | restored completed node | runner test | covered |
@@ -307,7 +311,7 @@ The only allowed provider/model additions are the truthful identity fields in th
 | provider-call parity | parity and financial snapshot tests | covered |
 | PR N regression | snapshot/artifact/context suites | covered |
 
-The two missing restart assertions are the main test-quality gap. The store itself is opened through the same SQLite migration path used by the application, and the broader suite already has restart coverage for financial snapshots and lifecycle migrations, but PR O should eventually add explicit close/reopen tests for both new stores.
+The requested restart and graph-identity acceptance gaps are now directly covered. The store tests close the first SQLite connection and reopen the same database directory through a new `openDb` instance; they do not rely on an already-open in-memory store.
 
 ## 19. Full verification
 
@@ -319,21 +323,19 @@ The corrected candidate passed:
 - `pnpm lint`
 - `git diff --check origin/master...HEAD`
 
-Final full-suite result after `dfbb8eb`: **76 test files, 510 tests passed**. This matches the reported baseline. The correction added only the regression assertions and idempotency fixes; no live provider or model call was made.
+The pre-hardening baseline after `dfbb8eb` was 76 test files and 510 tests. Final hardening result: **77 test files, 516 tests passed**, including the two restart tests and four graph-fingerprint tests. No live provider or model call was made.
 
 ## 20. Documentation truthfulness
 
 README and ARCHITECTURE describe PR O as a durable foundation, state that `/resume` remains display-only, identify `resumeJudgeRun` as a full re-run, and reserve `/judge` checkpoint codecs/planner for PR P. They do not claim that FinHarness can already resume interrupted Judge runs.
 
-The implementation roadmap correctly retains A-L, M, N, and O completion and places PR P before later runtime/capability/evidence/research milestones. One non-blocking docs gap remains: the requested named `Document & File Workspace` milestone is not listed in the current README roadmap between Typed Tool Runtime and Evidence Policy. This does not alter PR O behavior, but the roadmap should be corrected before a broader architecture sign-off.
+The implementation roadmap retains A-L, M, N, and O completion and now lists the intended order: PR P same-Execution checkpoint/resume, Model Runtime Generalization, Capability Registry + Typed Tool Runtime, Document & File Workspace, Evidence Policy + Claim Graph, Reusable Research Subgraphs, Risk Committee, Research Graph, Decision Journal, Outcome Tracking + Reflection, and UI integration/polish. PR O remains explicitly foundation-only and `/resume` remains display-only.
 
 The public generic contracts are documented in `ARCHITECTURE.md`, the root README, and package-level source comments. No package README churn is required for correctness, though the restore API could receive a short package README example in future documentation cleanup.
 
 ## 21. Remaining non-blocking observations
 
-- Add true close/reopen tests for `execution_profiles` and `workflow_node_outputs`.
 - Add a deterministic two-caller acquisition test using separate SQLite connections if a non-flaky harness is available.
-- Add direct graph-fingerprint drift tests for dependency, node, and required-flag changes.
 - Consider validating the complete graph for cycles even when every node is supplied as a restore seed; the current cycle guard is exercised when a pending frontier is scheduled, while a fully restored malformed graph has no remaining frontier.
 - Keep the narrow crash window between canonical execution creation and profile insertion visible to PR P; a process dying in that interval can leave an interrupted execution without a profile, which must be treated as non-resumable rather than guessed.
 - Keep generic payload guidance explicit: future codecs should persist minimal typed results or references, never raw provider responses or secrets.

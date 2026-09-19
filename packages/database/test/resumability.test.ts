@@ -98,4 +98,65 @@ describe('durable resumability persistence', () => {
     const stale = createWorkflowNodeOutput({ ...output, nodeId: 'other-node', outputId: 'output-other' });
     await expect(db.workflowNodeOutputs.save(stale)).rejects.toMatchObject({ code: 'WORKFLOW_OUTPUT_CONFLICT' });
   });
+
+  it('reloads an execution profile from a newly opened database instance', async () => {
+    const { execution } = await createLifecycle();
+    const profile = createExecutionProfile({
+      executionId: execution.id,
+      workflowId: 'judge',
+      workflowVersion: 1,
+      graphFingerprint: 'c'.repeat(64),
+      command: 'judge',
+      ticker: 'BBCA',
+      payload: { reasoningMode: 'usual', conditional: true, researchers: { market: true, news: false } },
+      createdAt: '2026-09-19T03:00:00.000Z',
+    });
+
+    await db.executionProfiles.save(profile);
+    db.raw.close();
+    db = openDb({ homeDir: dir });
+
+    const reopened = await db.executionProfiles.getByExecutionId(execution.id);
+    expect(reopened?.payload).toEqual(profile.payload);
+    expect(reopened?.fingerprint).toBe(profile.fingerprint);
+    expect(reopened?.createdAt).toBe(profile.createdAt);
+  });
+
+  it('reloads a workflow node output from a newly opened database instance', async () => {
+    const { execution } = await createLifecycle();
+    const profile = createExecutionProfile({
+      executionId: execution.id,
+      workflowId: 'judge',
+      workflowVersion: 1,
+      graphFingerprint: 'd'.repeat(64),
+      command: 'judge',
+      ticker: 'BBCA',
+      payload: { reasoningMode: 'usual', conditional: false },
+      createdAt: '2026-09-19T03:10:00.000Z',
+    });
+    await db.executionProfiles.save(profile);
+    const output = createWorkflowNodeOutput({
+      outputId: 'output-restart',
+      executionId: execution.id,
+      workflowId: 'judge',
+      workflowVersion: 1,
+      nodeId: 'research',
+      status: 'completed',
+      outputKind: 'json',
+      dependencyFingerprint: 'e'.repeat(64),
+      payload: { sourceCount: 4, sources: ['company-report', 'quarterly-financials'] },
+      completionGeneration: 0,
+      createdAt: '2026-09-19T03:11:00.000Z',
+    });
+
+    await db.workflowNodeOutputs.save(output);
+    db.raw.close();
+    db = openDb({ homeDir: dir });
+
+    const reopened = await db.workflowNodeOutputs.getNodeOutput(execution.id, output.nodeId);
+    expect(reopened?.payload).toEqual(output.payload);
+    expect(reopened?.dependencyFingerprint).toBe(output.dependencyFingerprint);
+    expect(reopened?.outputFingerprint).toBe(output.outputFingerprint);
+    expect(reopened?.completionGeneration).toBe(output.completionGeneration);
+  });
 });
