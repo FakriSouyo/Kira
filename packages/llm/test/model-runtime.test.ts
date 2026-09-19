@@ -206,6 +206,20 @@ describe('ModelRuntimeDescriptor', () => {
     expect(createModelRuntimeDescriptor({ model: secretA, generationControls: { temperature: 0.2, maxOutputTokens: 100 } }).runtimeFingerprint)
       .toBe(createModelRuntimeDescriptor({ model: secretB, generationControls: { temperature: 0.2, maxOutputTokens: 100 } }).runtimeFingerprint);
   });
+
+  it('excludes private request transport identity from the runtime fingerprint', () => {
+    const requestA = new ProviderDirectory([provider('request-identity', 'endpoint-a', {
+      requestId: 'request-a',
+      clientRequestId: 'client-request-a',
+    })]).resolveModel({ providerId: 'request-identity', modelId: 'model-a' });
+    const requestB = new ProviderDirectory([provider('request-identity', 'endpoint-a', {
+      requestId: 'request-b',
+      clientRequestId: 'client-request-b',
+    })]).resolveModel({ providerId: 'request-identity', modelId: 'model-a' });
+
+    expect(createModelRuntimeDescriptor({ model: requestA, generationControls: { temperature: 0.2, maxOutputTokens: 100 } }).runtimeFingerprint)
+      .toBe(createModelRuntimeDescriptor({ model: requestB, generationControls: { temperature: 0.2, maxOutputTokens: 100 } }).runtimeFingerprint);
+  });
 });
 
 describe('ModelRuntime prepared calls', () => {

@@ -68,6 +68,53 @@ describe('LLMClient', () => {
     const client = new LLMClient({ config: DEFAULT_AGENT_CONFIG, maxRetries: 1, modelFactory: () => model });
     await expect(client.streamObject({ schema: OBJECT_SCHEMA, prompt: 'test' })).rejects.toBe(failure);
   });
+  it('does not retry or fall back after structured stream output becomes visible', async () => {
+    const failure = new APICallError({ message: 'stream failed after visible output', statusCode: 503, url: 'https://example.test', requestBodyValues: {} });
+    const primary = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: '{"answer":"visible","score":1}' });
+            setTimeout(() => controller.error(failure), 0);
+          },
+        }),
+      }),
+    });
+    const fallback = new MockLanguageModelV2({
+      doStream: async () => {
+        throw new Error('fallback must not start after visible output');
+      },
+    });
+    const models = [primary, fallback];
+    const visiblePartials: Array<Partial<{ answer: string; score: number }>> = [];
+    const client = new LLMClient({
+      config: { ...DEFAULT_AGENT_CONFIG, model: 'primary-model' },
+      fallbackConfigs: [{ ...DEFAULT_AGENT_CONFIG, provider: 'anthropic', model: 'fallback-model' }],
+      maxRetries: 3,
+      modelFactory: () => models.shift()!,
+      retryBaseDelayMs: 1,
+    });
+
+    let thrown: unknown;
+    try {
+      await client.streamObject({
+        schema: OBJECT_SCHEMA,
+        prompt: 'stream',
+        onPartial: (partial) => visiblePartials.push(partial),
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(visiblePartials).toEqual(expect.arrayContaining([
+      expect.objectContaining({ answer: 'visible' }),
+    ]));
+    expect(primary.doStreamCalls).toHaveLength(1);
+    expect(fallback.doStreamCalls).toHaveLength(0);
+    expect(thrown).toBe(failure);
+  });
   it('aborts text checks without retrying or falling back', async () => {
     const controller = new AbortController();
     let calls = 0;
