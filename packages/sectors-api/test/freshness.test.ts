@@ -71,8 +71,9 @@ describe('Sectors cache freshness (Audit doc F)', () => {
     const { client, count } = countingClient(cacheDir);
     const first = await client.getCompanyReport('BBCA');
     const second = await client.getCompanyReport('BBCA');
-    expect(first.ticker).toBe('BBCA');
-    expect(second).toEqual(first);
+    expect(first.data.ticker).toBe('BBCA');
+    expect(second.data).toEqual(first.data);
+    expect(second.metadata.origin).toBe('CACHE');
     expect(count().company).toBe(1);
   });
 
@@ -93,7 +94,7 @@ describe('Sectors cache freshness (Audit doc F)', () => {
     // Backdate fetchedAt kemarin: periodik (tanpa calendarDay) tetap cache-hit dalam configured TTL.
     backdate(cacheDir, cachedFile(cacheDir, 'company_report'));
     const second = await client.getCompanyReport('BBCA');
-    expect(second.ticker).toBe('BBCA');
+    expect(second.data.ticker).toBe('BBCA');
     expect(count().company).toBe(1);
   });
 
@@ -108,9 +109,9 @@ describe('Sectors cache freshness (Audit doc F)', () => {
         return jsonResponse({ ...V2_REPORT, valuation: { ...V2_REPORT.valuation, last_close_price: fetches } });
       }) as typeof fetch,
     });
-    expect((await client.getCompanyReport('BBCA')).valuation.price).toBe(1);
+    expect((await client.getCompanyReport('BBCA')).data.valuation.price).toBe(1);
     now = new Date('2026-09-19T12:00:00Z');
-    expect((await client.getCompanyReport('BBCA')).valuation.price).toBe(2);
+    expect((await client.getCompanyReport('BBCA')).data.valuation.price).toBe(2);
     expect(fetches).toBe(2);
   });
 

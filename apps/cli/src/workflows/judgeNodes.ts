@@ -2,6 +2,22 @@ import type { BearCounterpoint, BearLLMOutput, BullLLMOutput, Claim, Evidence, J
 import type { JudgeNodeExecutors, JudgeNodeId, JudgeRoundDecision } from '@harness/command-judge';
 import type { SubagentResult } from '@harness/subagent-core';
 import { assembleSpecialistContext, type SpecialistContextPacket, type SpecialistPhase, type SpecialistRole } from '@harness/context';
+import {
+  createNotRequestedObservation,
+  createUnavailableObservation,
+  createVerifiedFinancialSnapshot,
+  verifyFinancialObservation,
+  type CompanyReport,
+  type DailyTransaction,
+  type Filing,
+  type FinancialDataResult,
+  type FinancialObservation,
+  type ForeignFlow,
+  type NewsArticle,
+  type QuarterlyFinancials,
+  type Sentiment,
+  type PresentFinancialObservation,
+} from '@harness/financial-data';
 import { SECTORS_SOURCES } from '@harness/sectors-api';
 import { buildEvidenceZone, normalizeJudgmentScore, stanceForScore, UserFriendlyError, ValidationError } from '@harness/shared';
 import type { AgentEvent, AgentToolName } from '../repl/events';
@@ -32,6 +48,7 @@ export interface JudgeRunDeps {
   /** Reasoning mode always runs the arbitration round; `--conditional` opens it for a neutral verdict. */
   reasoning: boolean;
   conditional: boolean;
+  executionStartedAt?: string;
   trace?: JudgeNodeTrace;
   lifecycle?: { sessionId: string; turnId: string };
 }
@@ -43,6 +60,7 @@ export interface CollectedSources {
   newsEvidence: Evidence[];
   marketAvailable: boolean;
   newsAvailable: boolean;
+  financialSnapshotId?: string;
 }
 
 export interface EvidenceSelection {
@@ -159,6 +177,12 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
     }
   };
 
+  const stableErrorCode = (error: unknown): string => {
+    if (typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string') return error.code;
+    if (error instanceof Error && error.name && error.name !== 'Error') return error.name;
+    return 'PROVIDER_ERROR';
+  };
+
   const saveEvidence = async (source: string, data: unknown): Promise<Evidence> => {
     const persisted = await ctx.db.evidence.save({ runId, ticker, source, data: data as Record<string, unknown> });
     events({ type: 'evidence.found', id: persisted.id, source });
@@ -167,11 +191,21 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
     return persisted.runId === runId ? persisted : { ...persisted, runId };
   };
 
+  const materialize = async <K extends FinancialObservation['kind']>(
+    observation: PresentFinancialObservation<K>,
+    source: string,
+  ): Promise<{ observation: PresentFinancialObservation<K>; evidence: Evidence }> => {
+    const evidence = await saveEvidence(source, observation.data);
+    return { observation: { ...observation, evidenceIds: [evidence.id] }, evidence };
+  };
+
   const record = async (nodeId: JudgeNodeId, result: SubagentResult<unknown>): Promise<void> => {
     if (deps.trace) await deps.trace.recordSubagentResult(nodeId, result);
   };
   let round1BearCounterpoints: BearCounterpoint[] = [];
   let conditionalBearCounterpoints: BearCounterpoint[] = [];
+  let marketFailureCode: string | undefined;
+  let newsFailureCode: string | undefined;
 
   const specialistContext = (params: {
     role: SpecialistRole;
@@ -227,17 +261,15 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'agent.start', agent: 'researcher' });
       progress('researcher', `I'm starting with Company Report and Quarterly Financials for ${ticker}...`);
       const report = await tool('company_report', signal, () => ctx.financialData.getCompanyReport(ticker));
-      const evidence = await saveEvidence(SECTORS_SOURCES.companyReport, report);
       progress('researcher', '✓ Company Report retrieved');
-      return evidence;
+      return report;
     },
 
     /** Quarterly Financials — required ground truth; a failed request ends the run. */
     'fetch-financials': async (_inputs, signal) => {
       const financials = await tool('quarterly_financials', signal, () => ctx.financialData.getQuarterlyFinancials(ticker));
-      const evidence = await saveEvidence(SECTORS_SOURCES.quarterlyFinancials, financials);
       progress('researcher', '✓ Quarterly Financials retrieved');
-      return evidence;
+      return financials;
     },
 
     /**
@@ -252,6 +284,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
         return { daily, foreign };
       } catch (error) {
         assertNotAborted(signal);
+        marketFailureCode = stableErrorCode(error);
         const warning = '⚠ Market data unavailable — marketMomentum left unevaluated';
         progress('researcher', warning);
         events({ type: 'command.output', text: warning });
@@ -268,6 +301,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
         return { news, filings, sentiment };
       } catch (error) {
         assertNotAborted(signal);
+        newsFailureCode = stableErrorCode(error);
         const warning = '⚠ News data unavailable — risk left unevaluated';
         progress('researcher', warning);
         events({ type: 'command.output', text: warning });
@@ -280,34 +314,122 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
      * Absent market/news data stays absent evidence — never a silent zero — while a
      * persistence failure is required and therefore fails the run.
      */
-    'collect-sources': async (inputs) => {
-      const report = nodeValue<Evidence>(inputs, 'identify-company');
-      const financials = nodeValue<Evidence>(inputs, 'fetch-financials');
-      const market = optionalValue<{ daily: unknown; foreign: unknown }>(inputs, 'fetch-market-data');
-      const news = optionalValue<{ news: unknown; filings: unknown; sentiment: unknown }>(inputs, 'fetch-news');
-      const evidenceIds = [report.id, financials.id];
+    'collect-sources': async (inputs, signal) => {
+      assertNotAborted(signal);
+      const reportResult = nodeValue<FinancialDataResult<CompanyReport>>(inputs, 'identify-company');
+      const financialsResult = nodeValue<FinancialDataResult<QuarterlyFinancials>>(inputs, 'fetch-financials');
+      const market = optionalValue<{
+        daily: FinancialDataResult<DailyTransaction>;
+        foreign: FinancialDataResult<ForeignFlow>;
+      }>(inputs, 'fetch-market-data');
+      const news = optionalValue<{
+        news: FinancialDataResult<NewsArticle[]>;
+        filings: FinancialDataResult<Filing[]>;
+        sentiment: FinancialDataResult<Sentiment>;
+      }>(inputs, 'fetch-news');
+
+      // Required verification is complete before any provider response is
+      // materialized as Evidence. A malformed required payload therefore
+      // cannot leak into the evidence store.
+      const reportObservation = verifyFinancialObservation('company_report', reportResult, ticker);
+      const financialsObservation = verifyFinancialObservation('quarterly_financials', financialsResult, ticker);
+      const observations: FinancialObservation[] = [reportObservation, financialsObservation];
+      const evidenceIds: string[] = [];
       let marketEvidence: Evidence[] = [];
       let newsEvidence: Evidence[] = [];
       let marketAvailable = false;
       let newsAvailable = false;
 
-      if (market) {
-        const daily = await saveEvidence(SECTORS_SOURCES.dailyTransaction, market.daily);
-        const foreign = await saveEvidence(SECTORS_SOURCES.foreignFlow, market.foreign);
-        marketEvidence = [daily, foreign];
-        marketAvailable = true;
-        evidenceIds.push(daily.id, foreign.id);
-        progress('researcher', '✓ Market data (Daily Transaction + Foreign Flow) retrieved');
+      const report = await materialize(reportObservation, SECTORS_SOURCES.companyReport);
+      const financials = await materialize(financialsObservation, SECTORS_SOURCES.quarterlyFinancials);
+      evidenceIds.push(report.evidence.id, financials.evidence.id);
+      observations[0] = report.observation;
+      observations[1] = financials.observation;
+
+      if (!ctx.researchers.market) {
+        observations.push(createNotRequestedObservation('daily_transaction'), createNotRequestedObservation('foreign_flow'));
+      } else if (!market) {
+        observations.push(
+          createUnavailableObservation('daily_transaction', 'PROVIDER_ERROR', marketFailureCode),
+          createUnavailableObservation('foreign_flow', 'PROVIDER_ERROR', marketFailureCode),
+        );
+      } else {
+        let dailyObservation: ReturnType<typeof verifyFinancialObservation<'daily_transaction'>> | undefined;
+        let foreignObservation: ReturnType<typeof verifyFinancialObservation<'foreign_flow'>> | undefined;
+        try {
+          dailyObservation = verifyFinancialObservation('daily_transaction', market.daily, ticker);
+          foreignObservation = verifyFinancialObservation('foreign_flow', market.foreign, ticker);
+        } catch (error) {
+          observations.push(
+            createUnavailableObservation('daily_transaction', 'VERIFICATION_FAILED', stableErrorCode(error)),
+            createUnavailableObservation('foreign_flow', 'VERIFICATION_FAILED', stableErrorCode(error)),
+          );
+        }
+        if (dailyObservation && foreignObservation) {
+          const daily = await materialize(dailyObservation, SECTORS_SOURCES.dailyTransaction);
+          const foreign = await materialize(foreignObservation, SECTORS_SOURCES.foreignFlow);
+          marketEvidence = [daily.evidence, foreign.evidence];
+          marketAvailable = true;
+          evidenceIds.push(daily.evidence.id, foreign.evidence.id);
+          observations.push(daily.observation, foreign.observation);
+          progress('researcher', '✓ Market data (Daily Transaction + Foreign Flow) retrieved');
+        }
       }
 
-      if (news) {
-        const item = await saveEvidence(SECTORS_SOURCES.news, news.news);
-        const filings = await saveEvidence(SECTORS_SOURCES.filings, news.filings);
-        const sentiment = await saveEvidence(SECTORS_SOURCES.sentiment, news.sentiment);
-        newsEvidence = [item, filings, sentiment];
-        newsAvailable = true;
-        evidenceIds.push(item.id, filings.id, sentiment.id);
-        progress('researcher', '✓ News / Filings / Sentiment retrieved');
+      if (!ctx.researchers.news) {
+        observations.push(
+          createNotRequestedObservation('news'),
+          createNotRequestedObservation('filings'),
+          createNotRequestedObservation('sentiment'),
+        );
+      } else if (!news) {
+        observations.push(
+          createUnavailableObservation('news', 'PROVIDER_ERROR', newsFailureCode),
+          createUnavailableObservation('filings', 'PROVIDER_ERROR', newsFailureCode),
+          createUnavailableObservation('sentiment', 'PROVIDER_ERROR', newsFailureCode),
+        );
+      } else {
+        let newsObservation: ReturnType<typeof verifyFinancialObservation<'news'>> | undefined;
+        let filingsObservation: ReturnType<typeof verifyFinancialObservation<'filings'>> | undefined;
+        let sentimentObservation: ReturnType<typeof verifyFinancialObservation<'sentiment'>> | undefined;
+        try {
+          newsObservation = verifyFinancialObservation('news', news.news, ticker);
+          filingsObservation = verifyFinancialObservation('filings', news.filings, ticker);
+          sentimentObservation = verifyFinancialObservation('sentiment', news.sentiment, ticker);
+        } catch (error) {
+          observations.push(
+            createUnavailableObservation('news', 'VERIFICATION_FAILED', stableErrorCode(error)),
+            createUnavailableObservation('filings', 'VERIFICATION_FAILED', stableErrorCode(error)),
+            createUnavailableObservation('sentiment', 'VERIFICATION_FAILED', stableErrorCode(error)),
+          );
+        }
+        if (newsObservation && filingsObservation && sentimentObservation) {
+          const item = await materialize(newsObservation, SECTORS_SOURCES.news);
+          const filings = await materialize(filingsObservation, SECTORS_SOURCES.filings);
+          const sentiment = await materialize(sentimentObservation, SECTORS_SOURCES.sentiment);
+          newsEvidence = [item.evidence, filings.evidence, sentiment.evidence];
+          newsAvailable = true;
+          evidenceIds.push(item.evidence.id, filings.evidence.id, sentiment.evidence.id);
+          observations.push(item.observation, filings.observation, sentiment.observation);
+          progress('researcher', '✓ News / Filings / Sentiment retrieved');
+        }
+      }
+
+      let financialSnapshotId: string | undefined;
+      if (deps.lifecycle && deps.executionStartedAt) {
+        assertNotAborted(signal);
+        const snapshot = createVerifiedFinancialSnapshot({
+          ...deps.lifecycle,
+          executionId: runId,
+          ticker,
+          requestedAsOf: null,
+          executionStartedAt: deps.executionStartedAt,
+          finalizedAt: new Date().toISOString(),
+          observations,
+          materializedEvidenceIds: evidenceIds,
+        });
+        const persisted = await ctx.db.financialSnapshots.save(snapshot);
+        financialSnapshotId = persisted.snapshotId;
       }
 
       await ctx.db.conversation.addMessage({
@@ -318,8 +440,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'agent.text', agent: 'researcher', text: `I identified ${evidenceIds.length} evidence items for ${ticker} and passed them to the debate.` });
       events({ type: 'agent.complete', agent: 'researcher' });
       return {
-        evidence: [report, financials, ...marketEvidence, ...newsEvidence],
-        evidenceIds, marketEvidence, newsEvidence, marketAvailable, newsAvailable,
+        evidence: [report.evidence, financials.evidence, ...marketEvidence, ...newsEvidence],
+        evidenceIds, marketEvidence, newsEvidence, marketAvailable, newsAvailable, financialSnapshotId,
       } satisfies CollectedSources;
     },
 

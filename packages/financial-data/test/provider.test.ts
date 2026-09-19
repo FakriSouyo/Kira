@@ -12,6 +12,11 @@ import type {
   Sentiment,
 } from '../src/index';
 
+const metadata = {
+  providerId: 'test', source: 'test.company_report', origin: 'MOCK' as const,
+  fetchedAt: null, dataAsOf: null, requestedAsOf: null, period: null, derivedFrom: [],
+};
+
 describe('FinancialDataProvider contract', () => {
   it('exposes provider-neutral failures for composition error mapping', () => {
     const error = new FinancialDataError('NOT_FOUND', 'Ticker missing', 'Try another ticker');
@@ -38,23 +43,23 @@ describe('FinancialDataProvider contract', () => {
     const sentiment: Sentiment = { ticker: 'BBCA', asOf: '', window: '0d' };
     const screened: ScreenerResult[] = [];
     const provider: FinancialDataProvider = {
-      async getCompanyReport() { return report; },
-      async getQuarterlyFinancials() { return quarterly; },
-      async getDailyTransaction() { return daily; },
-      async getForeignFlow() { return foreign; },
-      async getNews() { return news; },
-      async getFilings() { return filings; },
-      async getSentiment() { return sentiment; },
+      async getCompanyReport() { return { data: report, metadata }; },
+      async getQuarterlyFinancials() { return { data: quarterly, metadata: { ...metadata, source: 'test.quarterly_financials' } }; },
+      async getDailyTransaction() { return { data: daily, metadata: { ...metadata, source: 'test.daily_transaction' } }; },
+      async getForeignFlow() { return { data: foreign, metadata: { ...metadata, source: 'test.foreign_flow' } }; },
+      async getNews() { return { data: news, metadata: { ...metadata, source: 'test.news' } }; },
+      async getFilings() { return { data: filings, metadata: { ...metadata, source: 'test.filings' } }; },
+      async getSentiment() { return { data: sentiment, metadata: { ...metadata, source: 'test.sentiment' } }; },
       async screen() { return screened; },
     };
 
-    await expect(provider.getCompanyReport('BBCA')).resolves.toBe(report);
-    await expect(provider.getQuarterlyFinancials('BBCA')).resolves.toBe(quarterly);
-    await expect(provider.getDailyTransaction('BBCA')).resolves.toBe(daily);
-    await expect(provider.getForeignFlow('BBCA')).resolves.toBe(foreign);
-    await expect(provider.getNews('BBCA')).resolves.toBe(news);
-    await expect(provider.getFilings('BBCA')).resolves.toBe(filings);
-    await expect(provider.getSentiment('BBCA')).resolves.toBe(sentiment);
+    await expect(provider.getCompanyReport('BBCA')).resolves.toMatchObject({ data: report });
+    await expect(provider.getQuarterlyFinancials('BBCA')).resolves.toMatchObject({ data: quarterly });
+    await expect(provider.getDailyTransaction('BBCA')).resolves.toMatchObject({ data: daily });
+    await expect(provider.getForeignFlow('BBCA')).resolves.toMatchObject({ data: foreign });
+    await expect(provider.getNews('BBCA')).resolves.toMatchObject({ data: news });
+    await expect(provider.getFilings('BBCA')).resolves.toMatchObject({ data: filings });
+    await expect(provider.getSentiment('BBCA')).resolves.toMatchObject({ data: sentiment });
     await expect(provider.screen([])).resolves.toBe(screened);
   });
 });

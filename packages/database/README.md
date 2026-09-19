@@ -10,6 +10,7 @@ Implementasi SQLite — satu-satunya paket yang menyentuh Drizzle/better-sqlite3
 | `researchSessionStoreSqlite.ts` | Persistence boundary canonical untuk Session, Turn, dan Execution attempt |
 | `workingContextStoreSqlite.ts` | Penyimpanan versioned `SessionWorkingContext` (PR D) dengan commit compare-and-set |
 | `artifactStoreSqlite.ts` | Penyimpanan immutable typed artifacts PR F, idempotent per execution/kind, dengan lookup durable |
+| `financialSnapshotStoreSqlite.ts` | Penyimpanan immutable `VerifiedFinancialSnapshot` PR N, unik per Execution, dengan lookup ID/Execution |
 | `conversationJournalSqlite.ts` | Audit/replay append-only; menyimpan event berkorelasi tanpa membuat atau memiliki Session |
 | `*StoreSqlite.ts` | Implementasi store interface lain dari paket kontrak masing-masing |
 
@@ -37,3 +38,10 @@ Catatan:
   diproduksi `/judge`: Bull case (thesis + rebuttal), Bear case, dan deterministic
   Verdict. Setiap row wajib terhubung ke Session/Turn/completed judge Execution;
   identity immutable, write ulang ekuivalen idempotent, dan konflik ditolak.
+- `financial_snapshots` (migrasi `0012`, PR N) menyimpan canonical verified
+  financial inputs for one Session/Turn/Execution. The store validates lifecycle
+  ownership and ticker/command, preserves the canonical payload and fingerprint
+  across restart, returns an identical retry idempotently, and rejects a
+  competing payload for the same Execution. Snapshot rows are separate from
+  Evidence, Artifacts, and ContextSnapshots; the payload contains the Evidence
+  IDs materialized from accepted observations.

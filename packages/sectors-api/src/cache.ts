@@ -11,6 +11,8 @@ export interface CacheEntryMeta {
   schemaVersion?: number;
   adapterVersion?: string;
   source?: 'sectors-api' | 'mock';
+  /** Deterministic lineage for values derived from other provider operations. */
+  derivedFrom?: string[];
 }
 
 export interface CacheEntry<T> {
@@ -76,7 +78,7 @@ export class FileCache {
     return entry.data;
   }
 
-  set<T>(name: string, data: T, meta?: CacheEntryMeta): void {
+  set<T>(name: string, data: T, meta?: CacheEntryMeta): CacheEntry<T> {
     const file = this.fileFor(name);
     const tmp = `${file}.tmp`;
     const entry: CacheEntry<T> = { fetchedAt: (this.options.now?.() ?? new Date()).toISOString(), data, meta };
@@ -92,5 +94,6 @@ export class FileCache {
     } catch {
       // cache write is best-effort; jangan ganggu flow utama
     }
+    return entry;
   }
 }
