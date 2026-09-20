@@ -2,11 +2,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { contextPacketFingerprint } from '@harness/context';
+import { DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS, contextPacketFingerprint } from '@harness/context';
 import { openDb, type FinharnessDatabase } from '@harness/database';
 import { renderContextPacket } from '@harness/orchestrator';
 import type { FinancialDataProvider } from '@harness/financial-data';
 import { loadConfig } from '../src/config';
+import { createConversationContextCoordinator } from '../src/runtime/conversationContextCoordinator';
 import { createHarnessSession } from '../src/repl/session';
 
 describe('PR I conversational context integration', () => {
@@ -178,9 +179,13 @@ describe('PR I conversational context integration', () => {
 
   it('snapshots the post-compaction packet and keeps protected downside context', async () => {
     const config = loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true });
-    config.llm.agent = { ...config.llm.agent, contextWindowTokens: 1100, maxTokens: 64 };
     const session = await createHarnessSession(db, config, { write: () => {} });
     await session.commands.get('judge')!(['BBRI']);
+    session.context.conversationContext = createConversationContextCoordinator(db, {
+      modelCapabilities: { contextWindowTokens: 1100 },
+      reservedOutputTokens: 64,
+      safetyMarginTokens: DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS,
+    });
 
     const current = await db.workingContext.current(session.conversation.id);
     expect(current).not.toBeNull();
@@ -215,9 +220,13 @@ describe('PR I conversational context integration', () => {
 
   it('fails before snapshot/model invocation when the protected context cannot fit', async () => {
     const config = loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true });
-    config.llm.agent = { ...config.llm.agent, contextWindowTokens: 128, maxTokens: 64 };
     const session = await createHarnessSession(db, config, { write: () => {} });
     await session.commands.get('judge')!(['BBRI']);
+    session.context.conversationContext = createConversationContextCoordinator(db, {
+      modelCapabilities: { contextWindowTokens: 128 },
+      reservedOutputTokens: 64,
+      safetyMarginTokens: DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS,
+    });
     const respond = vi.spyOn(session.context.mainAgent, 'respond');
     const snapshotsBeforeFollowUp = (db.raw.prepare('SELECT COUNT(*) AS count FROM context_snapshots').get() as { count: number }).count;
 

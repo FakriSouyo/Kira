@@ -220,9 +220,56 @@ describe('ModelRuntimeDescriptor', () => {
     expect(createModelRuntimeDescriptor({ model: requestA, generationControls: { temperature: 0.2, maxOutputTokens: 100 } }).runtimeFingerprint)
       .toBe(createModelRuntimeDescriptor({ model: requestB, generationControls: { temperature: 0.2, maxOutputTokens: 100 } }).runtimeFingerprint);
   });
+
+  it('does not include display labels, documentation, or private implementation source in graph identity', () => {
+    const left = new ProviderDirectory([{
+      descriptor: { ...provider('semantic-route').descriptor, displayName: 'Provider A' },
+      models: [{ id: 'model-a', displayName: 'Model A', capabilities, connection: { docs: 'docs-a', functionSource: 'source-a', buildPath: 'build-a' } }],
+    }]).resolveModel({ providerId: 'semantic-route', modelId: 'model-a' });
+    const right = new ProviderDirectory([{
+      descriptor: { ...provider('semantic-route').descriptor, displayName: 'Provider B' },
+      models: [{ id: 'model-a', displayName: 'Model B', capabilities, connection: { docs: 'docs-b', functionSource: 'source-b', buildPath: 'build-b' } }],
+    }]).resolveModel({ providerId: 'semantic-route', modelId: 'model-a' });
+
+    expect(createModelRuntimeDescriptor({ model: left, generationControls: { temperature: 0.2, maxOutputTokens: 100 } }).runtimeFingerprint)
+      .toBe(createModelRuntimeDescriptor({ model: right, generationControls: { temperature: 0.2, maxOutputTokens: 100 } }).runtimeFingerprint);
+  });
 });
 
 describe('ModelRuntime prepared calls', () => {
+  it('validates adapter availability for describeCall without invoking an adapter', () => {
+    const adapter = new RecordingAdapter();
+    const registration = {
+      ...provider('known-provider'),
+      descriptor: { ...provider('known-provider').descriptor, adapterId: 'missing-adapter' },
+    };
+    const runtime = new ModelRuntime({
+      directory: new ProviderDirectory([registration]),
+      adapters: [adapter],
+    });
+
+    for (const resolve of [
+      () => runtime.describeCall(
+        { providerId: 'known-provider', modelId: 'model-a' },
+        { temperature: 0.2, maxOutputTokens: 100 },
+      ),
+      () => runtime.prepareCall(
+        { providerId: 'known-provider', modelId: 'model-a' },
+        { temperature: 0.2, maxOutputTokens: 100 },
+      ),
+    ]) {
+      let error: unknown;
+      try {
+        resolve();
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toMatchObject({ code: 'UNKNOWN_ADAPTER' });
+    }
+    expect(adapter.prepared).toEqual([]);
+    expect(adapter.invocations).toEqual([]);
+  });
+
   it('AI SDK adapters capture private generation config at prepare time', async () => {
     let temperature: number | undefined;
     const model = new MockLanguageModelV2({

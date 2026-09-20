@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import type { GenerateObjectParams, LLMClientLike } from '@harness/llm';
+import type { GenerateObjectParams, LLMCallMetadata, LLMClientLike } from '@harness/llm';
 import type { Claim } from '@harness/schemas';
 import { FilesystemSkillProvider } from '@harness/skill-filesystem';
 import { SubagentRuntime } from '@harness/subagent-core';
@@ -17,8 +17,8 @@ const claim: Claim = {
 
 function runtimeFor(targetClaimId: string): SubagentRuntime {
   const llm = {
-    async generateObject<T>(params: GenerateObjectParams<T>): Promise<T> {
-      return params.schema.parse({
+    async generateObjectResult<T>(params: GenerateObjectParams<T>): Promise<{ value: T; metadata: LLMCallMetadata }> {
+      return { value: params.schema.parse({
         reasoning: 'The constructive case depends on an assumption that needs further testing.',
         counterpoints: [{
           targetClaimId,
@@ -26,7 +26,10 @@ function runtimeFor(targetClaimId: string): SubagentRuntime {
           strength: 'moderate',
         }],
         evidenceIds: [evidenceId],
-      });
+      }), metadata: {
+        provider: 'mock', model: 'bear-test', inputTokens: null, outputTokens: null,
+        cachedInputTokens: null, totalTokens: null, finishReason: 'stop', latencyMs: 0,
+      } };
     },
   } as LLMClientLike;
   return new SubagentRuntime(

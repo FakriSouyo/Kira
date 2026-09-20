@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GenerateObjectParams, LLMClientLike } from '@harness/llm';
 import { IntentRouter } from '../src/index.js';
 
-class FixedLLM implements LLMClientLike {
+class FixedLLM implements Pick<LLMClientLike, 'generateObject'> {
   constructor(private readonly output: unknown) {}
   async generateObject<T>(params: GenerateObjectParams<T>): Promise<T> { return params.schema.parse(this.output); }
   async streamObject<T>(): Promise<T> { throw new Error('not used'); }

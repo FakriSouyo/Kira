@@ -93,6 +93,12 @@ describe('E2E — /judge offline (mock sectors + mock LLM)', () => {
       expect(executions[0]).toMatchObject({ ticker: 'BBCA', command: 'judge', status: 'completed' });
       expect(executions[0].execution_time).toBeGreaterThan(0);
 
+      const modelCall = db.raw.prepare('SELECT provider_id, model_id, adapter_id, protocol, runtime_fingerprint FROM model_calls ORDER BY created_at LIMIT 1').get() as {
+        provider_id: string | null; model_id: string | null; adapter_id: string | null; protocol: string | null; runtime_fingerprint: string | null;
+      };
+      expect(modelCall).toMatchObject({ provider_id: 'mock', model_id: 'deterministic-financial-mock', adapter_id: 'mock', protocol: 'mock' });
+      expect(modelCall.runtime_fingerprint).toMatch(/^[a-f0-9]{64}$/);
+
       const evidence = db.raw.prepare('SELECT id, source FROM evidence').all() as Array<{ id: string; source: string }>;
       expect(evidence).toHaveLength(7);
       const sources = evidence.map((e) => e.source).sort();

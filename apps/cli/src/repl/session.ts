@@ -1,7 +1,7 @@
 import type { FinharnessDatabase } from '@harness/database';
 import { UserFriendlyError } from '@harness/shared';
 import { buildContext } from '../context';
-import { loadConfig, writeActiveModel, writeActiveProviderModel, type FinharnessConfig } from '../config';
+import { loadConfig, type FinharnessConfig } from '../config';
 import { buildCommands } from '../commands';
 import type { AgentEvent } from './events';
 import type { CommandHandler } from './loop';
@@ -16,9 +16,29 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
 } = {}) {
   const rawWrite = options.write ?? ((text: string) => { process.stdout.write(text); });
   const controller = await ConversationController.create(db, initialConfig, event => options.events?.(event));
+  const initialSelection = await db.sessions.getCurrentModelSelection(controller.snapshot.id);
+  const configForSelection = (base: FinharnessConfig, selection: Awaited<ReturnType<FinharnessDatabase['sessions']['getCurrentModelSelection']>>): FinharnessConfig => {
+    // Initial/legacy rows describe the config that created the Session. Only a
+    // durable user choice overrides a newly supplied process configuration;
+    // this preserves PR P's provider-drift compatibility gate for old runs.
+    if (!selection || selection.source !== 'user') return base;
+    const currentProviderId = base.llm.agent.providerId ?? base.llm.agent.provider;
+    let next = base;
+    if (selection.providerId !== currentProviderId && !base.providers?.[selection.providerId]) {
+      throw new UserFriendlyError('INVALID_PROVIDER', `The selected provider ${selection.providerId} is not available in the active configuration.`, 'Configure the provider before opening this Session.');
+    }
+    if (selection.providerId !== currentProviderId && base.providers?.[selection.providerId]) {
+      const providerConfig = loadConfig({ homeDir: base.homeDir, providerId: selection.providerId, mockSectors: base.sectors.mock, mockLlm: base.mockLlm });
+      next = { ...base, providerSetup: providerConfig.providerSetup, providers: providerConfig.providers, llm: { ...base.llm, agent: providerConfig.llm.agent } };
+    }
+    return {
+      ...next,
+      llm: { ...next.llm, agent: { ...next.llm.agent, providerId: selection.providerId, model: selection.modelId } },
+    };
+  };
   const write = (text: string) => { controller.output(text); rawWrite(controller.publicText(text)); };
   const emit = (event: AgentEvent) => { controller.accept(event); options.events?.(event); };
-  let config = initialConfig;
+  let config = configForSelection(initialConfig, initialSelection);
   let reasoningMode: 'usual' | 'reasoning' = 'usual';
   const context = buildContext(db, config);
   const cleanup: Array<() => Promise<void>> = [];
@@ -26,8 +46,9 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
     config = next;
     Object.assign(context, buildContext(db, config));
   };
-  const reload = () => {
-    applyConfig(loadConfig({ homeDir: initialConfig.homeDir, mockSectors: initialConfig.sectors.mock, mockLlm: initialConfig.mockLlm }));
+  const reload = async () => {
+    const loaded = loadConfig({ homeDir: initialConfig.homeDir, mockSectors: initialConfig.sectors.mock, mockLlm: initialConfig.mockLlm });
+    applyConfig(configForSelection(loaded, await db.sessions.getCurrentModelSelection(controller.snapshot.id)));
   };
   const handlers = buildCommands(context, {
     ...options,
@@ -133,18 +154,19 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
           turnSettled = true;
           controller.settleTurn(turn.id, 'completed');
           await controller.newConversation();
+          await reload();
           return;
         }
         controller.user(input);
         const result = await handler(args, { ...execution, input, lifecycle: { sessionId: turn.sessionId, turnId: turn.id } });
-        if (result?.reload) reload();
+        if (result?.reload) await reload();
         await db.sessions.settleTurn(turn.id, 'completed');
         turnSettled = true;
         await publishAfterSettledTurn(turn.id);
         controller.settleTurn(turn.id, 'completed');
         if (result?.suspend) {
           const suspend = result.suspend;
-          return { ...result, suspend: async () => { try { await suspend(); } finally { reload(); } } };
+          return { ...result, suspend: async () => { try { await suspend(); } finally { await reload(); } } };
         }
         return result;
       } catch (error) {
@@ -162,21 +184,41 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
   return {
     context, commands,
     get conversation() { return controller.snapshot; },
-    async openConversation(id: string) { await controller.open(id); await publisher.reconcileJournal(id); },
+    async openConversation(id: string) {
+      await controller.open(id);
+      const loaded = loadConfig({ homeDir: initialConfig.homeDir, mockSectors: initialConfig.sectors.mock, mockLlm: initialConfig.mockLlm });
+      applyConfig(configForSelection(loaded, await db.sessions.getCurrentModelSelection(id)));
+      await publisher.reconcileJournal(id);
+    },
     get config() { return config; },
-    /** Session-local model selection; rebuilds pure clients and affects future turns. */
-    setModel(model: string) {
+    /** Session-local model selection; durable per Session and never writes config.json. */
+    async setModel(model: string) {
       if (!model.trim()) throw new UserFriendlyError('INVALID_MODEL', 'Model ID cannot be empty', 'Choose a discovered model or enter its exact ID.');
-      writeActiveModel(config.homeDir, model);
+      const current = await db.sessions.getCurrentModelSelection(controller.snapshot.id);
+      await db.sessions.selectModel({
+        sessionId: controller.snapshot.id,
+        providerId: current?.providerId ?? config.llm.agent.providerId ?? config.llm.agent.provider,
+        modelId: model,
+        source: 'user',
+      });
       applyConfig({
         ...config,
-        llm: { ...config.llm, agent: { ...config.llm.agent, model } },
+        llm: { ...config.llm, agent: { ...config.llm.agent, providerId: current?.providerId ?? config.llm.agent.providerId ?? config.llm.agent.provider, model } },
       });
     },
-    /** Provider-scoped selection changes endpoint, protocol, credentials and model together. */
-    setProviderModel(providerId: string, model: string) {
-      writeActiveProviderModel(config.homeDir, providerId, model);
-      reload();
+    /** Provider-scoped selection changes endpoint, protocol, credentials and model together without config.json writes. */
+    async setProviderModel(providerId: string, model: string) {
+      const selected = loadConfig({ homeDir: config.homeDir, providerId, skipRepair: true, mockSectors: config.sectors.mock, mockLlm: config.mockLlm });
+      if (selected.providerSetup && !selected.providerSetup.models.some(candidate => candidate.id === model)) {
+        throw new UserFriendlyError('INVALID_MODEL', `Model ${model} does not belong to provider ${providerId}`, 'Choose a discovered model for this provider.');
+      }
+      await db.sessions.selectModel({ sessionId: controller.snapshot.id, providerId, modelId: model, source: 'user' });
+      applyConfig({
+        ...config,
+        providerSetup: selected.providerSetup,
+        providers: selected.providers,
+        llm: { ...config.llm, agent: { ...selected.llm.agent, providerId, model } },
+      });
     },
     /** Usual keeps the standard debate; Reasoning enables the extra challenge/rebuttal pass. */
     setReasoning(mode: 'usual' | 'reasoning') { reasoningMode = mode; },
@@ -226,20 +268,25 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
           message: question,
         });
         const modelCallStarted = performance.now();
-        const recordConversationModelCall = async () => {
+        const recordConversationModelCall = async (metadata: import('@harness/llm').LLMCallMetadata) => {
           await db.sessions.recordModelCall({
             callId: `call_${turn.id}`,
             turnId: turn.id,
             subagent: 'conversation',
-            provider: config.llm.agent.provider,
-            model: config.llm.agent.model,
+            provider: metadata.provider,
+            model: metadata.model,
+            providerId: metadata.providerId ?? null,
+            modelId: metadata.modelId ?? null,
+            adapterId: metadata.adapterId ?? null,
+            protocol: metadata.protocol ?? null,
+            runtimeFingerprint: metadata.runtimeFingerprint ?? null,
             attempt: 1,
-            inputTokens: null,
-            outputTokens: null,
-            cachedInputTokens: null,
-            totalTokens: null,
+            inputTokens: metadata.inputTokens,
+            outputTokens: metadata.outputTokens,
+            cachedInputTokens: metadata.cachedInputTokens,
+            totalTokens: metadata.totalTokens,
             latencyMs: Math.max(0, Math.round(performance.now() - modelCallStarted)),
-            finishReason: 'stop',
+            finishReason: metadata.finishReason,
             cost: null,
             currency: null,
             contextSnapshotId: preparedContext?.snapshot.snapshotId ?? null,

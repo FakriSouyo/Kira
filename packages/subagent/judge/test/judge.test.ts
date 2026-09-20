@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import type { GenerateObjectParams, LLMClientLike } from '@harness/llm';
+import type { GenerateObjectParams, LLMCallMetadata, LLMClientLike } from '@harness/llm';
 import type { Claim } from '@harness/schemas';
 import { FilesystemSkillProvider } from '@harness/skill-filesystem';
 import { SubagentRuntime } from '@harness/subagent-core';
@@ -15,8 +15,11 @@ describe('JudgeAgent specialist', () => {
     expect(JUDGE_MANIFEST.persona).toContain('Judge Agent');
   });
   it('overrides model score and stance with the locked deterministic rubric', async () => {
-    const llm = { async generateObject<T>(params: GenerateObjectParams<T>): Promise<T> {
-      return params.schema.parse({ score: 1, stance: 'bearish', confidence: 'high', breakdown: { financialHealth: 80, growth: 65, valuation: 70, marketMomentum: 99, risk: 99 }, summary: 'Model narrative.' });
+    const llm = { async generateObjectResult<T>(params: GenerateObjectParams<T>): Promise<{ value: T; metadata: LLMCallMetadata }> {
+      return { value: params.schema.parse({ score: 1, stance: 'bearish', confidence: 'high', breakdown: { financialHealth: 80, growth: 65, valuation: 70, marketMomentum: 99, risk: 99 }, summary: 'Model narrative.' }), metadata: {
+        provider: 'mock', model: 'judge-test', inputTokens: null, outputTokens: null,
+        cachedInputTokens: null, totalTokens: null, finishReason: 'stop', latencyMs: 0,
+      } };
     } } as LLMClientLike;
     const runtime = new SubagentRuntime(llm, new FilesystemSkillProvider(fileURLToPath(new URL('..', import.meta.url))));
     const result = await new JudgeAgent(runtime).evaluate({

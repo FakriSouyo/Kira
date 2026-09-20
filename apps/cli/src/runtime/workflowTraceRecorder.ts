@@ -24,7 +24,8 @@ interface TraceStore {
     durationMs?: number; summary?: string; error?: string;
   }): Promise<unknown>;
   recordModelCall(params: {
-    callId?: string; runId: string; stepId: string; subagent: string; provider: string; model: string; attempt: number;
+    callId?: string; runId: string; stepId: string; subagent: string; provider: string; model: string;
+    providerId?: string | null; modelId?: string | null; adapterId?: string | null; protocol?: string | null; runtimeFingerprint?: string | null; attempt: number;
     inputTokens: number | null; outputTokens: number | null; cachedInputTokens: number | null; totalTokens: number | null;
     latencyMs: number; finishReason: string | null; cost: number | null; currency: string | null;
     contextSnapshotId?: string | null;
@@ -87,11 +88,13 @@ export class WorkflowTraceRecorder {
       stepId: this.stepId(nodeId), runId: this.options.runId, nodeId, parentNodeIds: node.dependsOn ?? [],
       subagent: result.subagent, skills: result.skills, status: 'running', ...(summary ? { summary } : {}),
     });
-    if (!result.modelCall && result.contextSnapshotId === undefined) return;
-    const modelCall = result.modelCall ?? {
-      provider: 'mock' as const, model: 'unknown', inputTokens: null, outputTokens: null,
-      cachedInputTokens: null, totalTokens: null, latencyMs: 0, finishReason: null,
-    };
+    if (!result.modelCall) {
+      if (result.contextSnapshotId === undefined) return;
+      const error = new Error('Workflow trace requires actual model metadata');
+      Object.assign(error, { code: 'MODEL_METADATA_REQUIRED' });
+      throw error;
+    }
+    const modelCall = result.modelCall;
     const pricing = this.options.pricingFor?.(modelCall.provider, modelCall.model) ?? null;
     const billed = calculateModelCost(modelCall, pricing);
     const stepId = this.stepId(nodeId);
@@ -101,7 +104,13 @@ export class WorkflowTraceRecorder {
     const attempt = Math.max(0, ...existing.map(call => call.attempt)) + 1;
     await this.options.store.recordModelCall({
       callId: `call_${this.options.runId}_${nodeId}_${attempt}`, runId: this.options.runId, stepId, subagent: result.subagent,
-      provider: modelCall.provider, model: modelCall.model, attempt,
+      provider: modelCall.provider, model: modelCall.model,
+      providerId: modelCall.providerId ?? null,
+      modelId: modelCall.modelId ?? null,
+      adapterId: modelCall.adapterId ?? null,
+      protocol: modelCall.protocol ?? null,
+      runtimeFingerprint: modelCall.runtimeFingerprint ?? null,
+      attempt,
       inputTokens: modelCall.inputTokens, outputTokens: modelCall.outputTokens,
       cachedInputTokens: modelCall.cachedInputTokens, totalTokens: modelCall.totalTokens,
       latencyMs: modelCall.latencyMs, finishReason: modelCall.finishReason,

@@ -52,7 +52,7 @@ function createConfig(dir: string, overrides: Partial<FinharnessConfig['llm']['a
 async function createFixture(
   db: FinharnessDatabase,
   config: FinharnessConfig,
-  options: { suffix?: string; reasoningMode?: 'usual' | 'reasoning'; conditional?: boolean } = {},
+  options: { suffix?: string; reasoningMode?: 'usual' | 'reasoning'; conditional?: boolean; runtimePlan?: boolean } = {},
 ): Promise<Fixture> {
   const suffix = options.suffix ?? 'acceptance';
   const sessionId = `conversation_${suffix}`;
@@ -68,12 +68,14 @@ async function createFixture(
   const execution = await db.sessions.createExecution({
     executionId, sessionId: session.id, turnId: turn.id, ticker: 'BBCA', command: 'judge',
   });
+  const runtimePlan = options.runtimePlan ? buildContext(db, config).runtimePlan : undefined;
   const profile = createJudgeExecutionProfile({
     executionId: execution.id, ticker: 'BBCA',
     reasoningMode: options.reasoningMode ?? 'usual',
     conditional: options.conditional ?? false,
     researchers: config.researchers,
-    provider: config.llm.agent.provider, model: config.llm.agent.model,
+    provider: config.llm.agent.providerId ?? config.llm.agent.provider, model: config.llm.agent.model,
+    ...(runtimePlan ? { runtimePlan } : {}),
     createdAt: execution.createdAt,
   });
   await db.executionProfiles.save(profile);
@@ -215,6 +217,32 @@ describe('PR P final acceptance hardening', () => {
     await compatible.close();
     expect((await sessionRows(fixture)).executions[0]).toMatchObject({ status: 'completed', resumeGeneration: 1 });
   });
+
+  it('rejects a switched Session model before acquisition and resumes the same Execution after restoring A', async () => {
+    const config = createConfig(dir, { model: 'model-a' });
+    const fixture = await createFixture(db, config, { suffix: 'q2_switch', runtimePlan: true });
+    await runPrefix(fixture, 'collect-sources');
+
+    const runtime = await openRuntime(fixture, config);
+    await runtime.setModel('model-b');
+    const providers = providerSpies(runtime.context.financialData);
+    const models = modelSpies(runtime);
+
+    await expect(runtime.commands.get('resume')!([fixture.executionId], { input: `/resume ${fixture.executionId}` }))
+      .rejects.toMatchObject({ code: 'MODEL_MISMATCH' });
+    const rejected = (await sessionRows(fixture)).executions;
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]).toMatchObject({ id: fixture.executionId, turnId: fixture.turnId, status: 'interrupted', resumeGeneration: 0 });
+    expect(providers.every(call => call.mock.calls.length === 0)).toBe(true);
+    expect(models.every(call => call.mock.calls.length === 0)).toBe(true);
+
+    await runtime.setModel('model-a');
+    await runtime.commands.get('resume')!([fixture.executionId], { input: `/resume ${fixture.executionId}` });
+    const resumed = (await sessionRows(fixture)).executions;
+    expect(resumed).toHaveLength(1);
+    expect(resumed[0]).toMatchObject({ id: fixture.executionId, turnId: fixture.turnId, status: 'completed', resumeGeneration: 1 });
+    await runtime.close();
+  }, 30000);
 
   it('rejects an explicit resume from the wrong Session without creating a Turn', async () => {
     const config = createConfig(dir);

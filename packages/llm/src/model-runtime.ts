@@ -3,6 +3,7 @@ import { RuntimeError } from './errors';
 import type { ModelAdapter, ModelInvocationResult, PreparedAdapterCall, PreparedTextStream } from './adapter';
 import { createModelRuntimeDescriptor, type ModelGenerationControls, type ModelRuntimeDescriptor } from './descriptor';
 import { ProviderDirectory, type ModelDescriptor, type ModelRoute } from './provider-directory';
+import { createModelRuntimePlan, type ModelRuntimePlan, type ModelRuntimePlanRequest } from './plan';
 
 export interface ModelRuntimeOptions {
   readonly directory: ProviderDirectory;
@@ -72,12 +73,40 @@ export class ModelRuntime {
     this.adapters = ModelRuntime.adapterMap(adapters);
   }
 
-  prepareCall(route: ModelRoute, generationControls: ModelGenerationControls): PreparedModelCall {
+  private resolveCall(route: ModelRoute, generationControls: ModelGenerationControls): {
+    model: ModelDescriptor;
+    adapter: ModelAdapter;
+    descriptor: ModelRuntimeDescriptor;
+  } {
     const model = this.directory.resolveModel(route);
     const adapter = this.adapters.get(model.provider.adapterId);
     if (!adapter) throw new RuntimeError('UNKNOWN_ADAPTER', `Unknown model adapter: ${model.provider.adapterId}`);
-    const descriptor = createModelRuntimeDescriptor({ model, generationControls });
-    const prepared = adapter.prepareCall({ model, descriptor, connection: this.directory.connectionFor(route) });
-    return new PreparedModelCall(model, descriptor, prepared);
+    return {
+      model,
+      adapter,
+      descriptor: createModelRuntimeDescriptor({ model, generationControls }),
+    };
+  }
+
+  /** Resolves detached semantic runtime data and validates dispatch availability without preparing a call. */
+  describeCall(route: ModelRoute, generationControls: ModelGenerationControls): ModelRuntimeDescriptor {
+    return this.resolveCall(route, generationControls).descriptor;
+  }
+
+  describePlan(requests: readonly ModelRuntimePlanRequest[]): ModelRuntimePlan {
+    return createModelRuntimePlan(requests.map(request => ({
+      route: { ...request.route },
+      descriptor: this.describeCall(request.route, request.generationControls),
+    })));
+  }
+
+  prepareCall(route: ModelRoute, generationControls: ModelGenerationControls): PreparedModelCall {
+    const resolved = this.resolveCall(route, generationControls);
+    const prepared = resolved.adapter.prepareCall({
+      model: resolved.model,
+      descriptor: resolved.descriptor,
+      connection: this.directory.connectionFor(route),
+    });
+    return new PreparedModelCall(resolved.model, resolved.descriptor, prepared);
   }
 }

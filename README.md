@@ -494,11 +494,14 @@ L  Artifact-aware retrieval + validity + prior-context reuse
  N  Verified Financial Snapshot
  O  Durable Resumability Foundation
  P  /judge Same-Execution Checkpoint / Resume
- Q1 Model Runtime + Provider Directory (current)
+ Q1 Model Runtime + Provider Directory (complete)
+ Q2 Durable Model Selection + Production Integration (complete)
+ R1 Typed Tool Runtime (planned)
+ R2 Capability Registry + Policy + Integrations (planned)
 ```
 
-A-P are complete and merged into `master`. Q1 is the current model-runtime
-milestone; durable model selection and production integration remain Q2 work.
+A-P are complete and merged into `master`. Q1 and Q2 are complete on this
+implementation branch. R1 is the next planned milestone.
 
 PR M adds the Financial Data Provider Seam; PR N adds the verified input boundary:
 
@@ -517,20 +520,26 @@ rather than replacing the A-L foundation.
 
 Current direction after PR P:
 
-1. Q — Model Runtime
-2. R — Capability Runtime
-3. S — Files & Documents
-4. T — Evidence Intelligence
-5. U — Research Composition
-6. V — Decision Intelligence
-7. W — Long-Term Research State
-8. X — Decision Memory
-9. Y — Learning Loop
-10. Z — Product Platform
+1. R1 — Typed Tool Runtime
+2. R2 — Capability Registry + Policy + Integrations
+3. S1 — Durable File / Attachment Layer
+4. S2 — Workspace + File Capability
+5. S3 — Document Understanding / Retrieval
+6. Evidence Policy + Claim Graph
+7. Reusable Research Subgraphs
+8. Risk Committee
+9. Research Graph
+10. Decision Journal
+11. Outcome Tracking + Reflection
+12. Z1 — Application Host / API Boundary
+13. Z2 — Web Surface
+14. Z3 — Desktop Host + Desktop Shell
+15. Z4 — Cross-Surface Integration / Final Polish
 
 This product overview points to the canonical roadmap for the detailed future
-sequence. Q1 does not include durable model selection, Tool Runtime, files,
-Web/Desktop work, or changes to PR P.
+sequence. R1 is planned only; this branch does not claim R1 implementation. Q2
+does not change PR P same-Execution resume semantics or add a second `/resume`
+architecture.
 
 ## Documentation
 

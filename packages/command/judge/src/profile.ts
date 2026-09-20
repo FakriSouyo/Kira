@@ -17,6 +17,8 @@ export type JudgeExecutionProfilePayload = {
   researchers: { market: boolean; news: boolean };
   provider: string;
   model: string;
+  runtimePlanFingerprint?: string;
+  runtimePlan?: JsonValue;
 } & { [key: string]: JsonValue };
 
 export type JudgeExecutionProfile = ExecutionProfile<JudgeExecutionProfilePayload>;
@@ -33,6 +35,7 @@ export function createJudgeExecutionProfile(params: {
   researchers: { market: boolean; news: boolean };
   provider: string;
   model: string;
+  runtimePlan?: JsonValue;
   createdAt: string;
 }): JudgeExecutionProfile {
   return createExecutionProfile({
@@ -48,6 +51,12 @@ export function createJudgeExecutionProfile(params: {
       researchers: params.researchers,
       provider: params.provider,
       model: params.model,
+      ...(params.runtimePlan ? {
+        runtimePlan: params.runtimePlan,
+        ...(typeof params.runtimePlan === 'object' && params.runtimePlan !== null && !Array.isArray(params.runtimePlan) && typeof params.runtimePlan.runtimeFingerprint === 'string'
+          ? { runtimePlanFingerprint: params.runtimePlan.runtimeFingerprint }
+          : {}),
+      } : {}),
     },
     createdAt: params.createdAt,
   });

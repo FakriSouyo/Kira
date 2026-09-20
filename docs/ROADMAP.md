@@ -27,56 +27,55 @@ reasoning inside explicit command boundaries.
 - **N — Verified Financial Snapshot:** provider results are verified and finalized into an immutable execution-scoped input boundary.
 - **O — Durable Resumability Foundation:** interrupted lifecycle state, immutable profiles and node outputs, generation fencing, startup reconciliation, and generic restored-node runner support are available.
 - **P — `/judge` Same-Execution Checkpoint / Resume:** typed Judge checkpoints, validated DAG restoration, same-Execution continuation, `/resume`, `/continue`, projection repair, and idempotent publication are complete.
+- **Q1 — Model Runtime + Provider Directory:** provider-neutral runtime contracts, immutable directory snapshots, adapter boundaries, safe fingerprints, one-shot prepared calls, invocation metadata, and compatibility integration are complete.
+- **Q2 — Durable Model Selection + Production Integration:** append-only Session model intent, immutable runtime-plan composition, plan-aware Context budgeting, actual model provenance, and runtime-plan-compatible Judge resume are complete.
 
 ## Current milestone
 
-### Q — Model Runtime
+### R1 — Typed Tool Runtime
 
-- **Q1 — Model Runtime + Provider Directory:** provider-neutral runtime
-  contracts, immutable provider/model directory snapshots, adapter boundaries,
-  safe runtime descriptors, one-shot prepared calls, actual invocation
-  metadata, and compatibility-facade integration.
-- **Q2 — Durable Model Selection + Production Integration:** planned; not part
-  of Q1.
+Status: planned. No R1 implementation is claimed by the current repository
+state. The next design work will establish the typed tool-runtime boundary
+without changing the canonical Session → Turn → Execution lifecycle.
+
+### R2 — Capability Registry + Policy + Integrations
+
+Status: planned after R1. Capability discovery, policy, and integrations remain
+separate from the R1 typed tool-runtime milestone.
 
 ## Future milestones
 
-### R — Capability Runtime
-
-- R1 — Typed Tool Runtime
-- R2 — Capability Registry + Policy + Integrations
-
-### S — Files & Documents
+### Files & Documents
 
 - S1 — Durable File / Attachment Layer
 - S2 — Workspace + File Capability
 - S3 — Document Understanding / Retrieval
 
-### T — Evidence Intelligence
+### Evidence Intelligence
 
 - Evidence Policy + Claim Graph
 
-### U — Research Composition
+### Research Composition
 
 - Reusable Research Subgraphs
 
-### V — Decision Intelligence
+### Decision Intelligence
 
 - Risk Committee
 
-### W — Long-Term Research State
+### Long-Term Research State
 
 - Research Graph
 
-### X — Decision Memory
+### Decision Memory
 
 - Decision Journal
 
-### Y — Learning Loop
+### Learning Loop
 
 - Outcome Tracking + Reflection
 
-### Z — Product Platform
+### Product Platform
 
 - Z1 — Application Host / API Boundary
 - Z2 — Web Surface

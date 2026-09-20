@@ -23,7 +23,7 @@ import type { Evidence } from '@harness/schemas';
 import { BearCounterpointSchema, BearLLMOutputSchema, BullLLMOutputSchema, ClaimSchema, JudgmentSchema } from '@harness/schemas';
 import type { ArtifactEnvelope } from '@harness/schemas';
 import { verifyFinancialObservation } from '@harness/financial-data';
-import type { SubagentResult } from '@harness/subagent-core';
+import type { SubagentResultLike, RestoredSubagentResult } from '@harness/subagent-core';
 import type { LLMCallMetadata } from '@harness/llm';
 import type { FinharnessDatabase } from '@harness/database';
 import type { ExecutionProfile, ResearchExecution } from '@harness/session-core';
@@ -60,7 +60,7 @@ export function workflowDependencyFingerprint(node: { id: string; dependsOn?: st
   });
 }
 
-function modelAudit(result: SubagentResult<unknown>): JudgeModelAudit {
+function modelAudit(result: SubagentResultLike<unknown>): JudgeModelAudit {
   return {
     subagent: result.subagent,
     skills: result.skills,
@@ -68,6 +68,11 @@ function modelAudit(result: SubagentResult<unknown>): JudgeModelAudit {
       modelCall: {
         provider: result.modelCall.provider,
         model: result.modelCall.model,
+        ...(result.modelCall.providerId ? { providerId: result.modelCall.providerId } : {}),
+        ...(result.modelCall.modelId ? { modelId: result.modelCall.modelId } : {}),
+        ...(result.modelCall.adapterId ? { adapterId: result.modelCall.adapterId } : {}),
+        ...(result.modelCall.protocol ? { protocol: result.modelCall.protocol } : {}),
+        ...(result.modelCall.runtimeFingerprint ? { runtimeFingerprint: result.modelCall.runtimeFingerprint } : {}),
         inputTokens: result.modelCall.inputTokens,
         outputTokens: result.modelCall.outputTokens,
         cachedInputTokens: result.modelCall.cachedInputTokens,
@@ -226,6 +231,7 @@ interface JudgeProfilePayload {
   researchers: { market: boolean; news: boolean };
   provider: string;
   model: string;
+  runtimePlanFingerprint?: string;
 }
 
 function profilePayload(profile: ExecutionProfile): JudgeProfilePayload {
@@ -309,6 +315,7 @@ export async function planJudgeResume(params: {
   currentGraphFingerprint: string;
   provider: string;
   model: string;
+  runtimePlanFingerprint?: string;
 }): Promise<JudgeResumePlan> {
   const { db, execution, profile, definition } = params;
   if (profile.schemaVersion !== 1 || profile.command !== 'judge' || profile.workflowId !== 'judge') {
@@ -321,6 +328,9 @@ export async function planJudgeResume(params: {
   if (profile.ticker !== execution.ticker) throw new Error('Judge execution profile ticker does not match the Execution');
   if (payload.provider !== params.provider || payload.model !== params.model) {
     throw new UserFriendlyError('MODEL_MISMATCH', `Resume requires ${payload.provider}/${payload.model}, but the active runtime is ${params.provider}/${params.model}.`, 'Switch back to the original provider/model before resuming.');
+  }
+  if (payload.runtimePlanFingerprint && payload.runtimePlanFingerprint !== params.runtimePlanFingerprint) {
+    throw new UserFriendlyError('MODEL_MISMATCH', 'Resume requires the original semantic runtime plan, but the active runtime plan has changed.', 'Restore the original provider/model/runtime settings before resuming.');
   }
 
   const outputs = await db.workflowNodeOutputs.listNodeOutputsForExecution(execution.id);
@@ -621,14 +631,11 @@ export async function repairJudgeProjections(params: {
       await params.db.judgments.save({ runId: params.execution.id, judgment: completedPayload.judgment as never });
     }
     const audit = auditFromPayload(completedPayload);
-    if (audit && (audit.modelCall || audit.contextSnapshotId !== undefined)) {
+    if (audit?.modelCall) {
       const stepId = `step_${params.execution.id}_${nodeId}`;
       const existing = await params.db.sessions.listModelCallsForStep(params.execution.id, stepId);
       if (existing.length === 0) {
-        const modelCall = audit.modelCall ?? {
-          provider: 'mock', model: 'unknown', inputTokens: null, outputTokens: null,
-          cachedInputTokens: null, totalTokens: null, finishReason: null, latencyMs: 0,
-        };
+        const modelCall = audit.modelCall;
         await params.db.sessions.recordModelCall({
           callId: `call_${params.execution.id}_${nodeId}_1`,
           runId: params.execution.id,
@@ -636,6 +643,11 @@ export async function repairJudgeProjections(params: {
           subagent: audit.subagent,
           provider: modelCall.provider,
           model: modelCall.model,
+          providerId: modelCall.providerId ?? null,
+          modelId: modelCall.modelId ?? null,
+          adapterId: modelCall.adapterId ?? null,
+          protocol: modelCall.protocol ?? null,
+          runtimeFingerprint: modelCall.runtimeFingerprint ?? null,
           attempt: 1,
           inputTokens: modelCall.inputTokens,
           outputTokens: modelCall.outputTokens,
@@ -676,6 +688,7 @@ export async function ensureJudgeArtifacts(params: {
     currentGraphFingerprint: judgeWorkflowGraphFingerprint(definition),
     provider: payload.provider,
     model: payload.model,
+    runtimePlanFingerprint: payload.runtimePlanFingerprint,
   });
   const outputs = new Map(plan.outputs.map(output => [output.nodeId, output]));
   const collected = await decodeJudgeCheckpoint('collect-sources', requiredOutput(outputs, 'collect-sources'), params.db, params.execution) as CollectedSources;
@@ -740,10 +753,15 @@ export async function repairCompletedJudgeArtifacts(params: {
   return repaired;
 }
 
-function resultFromAudit(audit: JudgeModelAudit, value: unknown): SubagentResult<unknown> {
+function resultFromAudit(audit: JudgeModelAudit, value: unknown): RestoredSubagentResult<unknown> {
   const modelCall: LLMCallMetadata | undefined = audit.modelCall ? {
     provider: audit.modelCall.provider as LLMCallMetadata['provider'],
     model: audit.modelCall.model,
+    ...(audit.modelCall.providerId ? { providerId: audit.modelCall.providerId } : {}),
+    ...(audit.modelCall.modelId ? { modelId: audit.modelCall.modelId } : {}),
+    ...(audit.modelCall.adapterId ? { adapterId: audit.modelCall.adapterId } : {}),
+    ...(audit.modelCall.protocol ? { protocol: audit.modelCall.protocol } : {}),
+    ...(audit.modelCall.runtimeFingerprint ? { runtimeFingerprint: audit.modelCall.runtimeFingerprint } : {}),
     inputTokens: audit.modelCall.inputTokens,
     outputTokens: audit.modelCall.outputTokens,
     cachedInputTokens: audit.modelCall.cachedInputTokens,

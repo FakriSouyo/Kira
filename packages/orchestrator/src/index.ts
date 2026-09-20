@@ -1,4 +1,4 @@
-import type { LLMClientLike } from '@harness/llm';
+import type { LLMCallMetadata, LLMClientLike } from '@harness/llm';
 
 export * from './conversationContext.js';
 
@@ -28,7 +28,7 @@ export interface MainAgentCallOptions {
   readonly abortSignal?: AbortSignal;
   readonly context?: MainAgentContext;
   /** Called only after an external model call succeeds. */
-  readonly onModelCall?: () => Promise<void>;
+  readonly onModelCall?: (metadata: LLMCallMetadata) => Promise<void>;
 }
 
 function systemPrompt(context?: MainAgentContext): string | string[] {
@@ -37,7 +37,7 @@ function systemPrompt(context?: MainAgentContext): string | string[] {
 
 /** Conversational host. Commands still own workflows and selectively invoke specialist subagents. */
 export class MainFinHarnessAgent {
-  constructor(private readonly llm: Pick<LLMClientLike, 'generateText' | 'streamText'>) {}
+  constructor(private readonly llm: Pick<LLMClientLike, 'generateTextResult' | 'streamTextResult'>) {}
 
   async respond(input: string, options: MainAgentCallOptions = {}): Promise<string> {
     const question = input.trim();
@@ -47,13 +47,14 @@ export class MainFinHarnessAgent {
     if (CLEARLY_OFF_TOPIC.test(question)) {
       return OFF_TOPIC_ANSWER;
     }
-    const answer = await this.llm.generateText({
+    const params = {
       system: systemPrompt(options.context),
       prompt: buildMainAgentPrompt(question),
       abortSignal: options.abortSignal,
-    });
-    await options.onModelCall?.();
-    return answer;
+    };
+    const result = await this.llm.generateTextResult(params);
+    await options.onModelCall?.(result.metadata);
+    return result.value;
   }
 
   /**
@@ -71,7 +72,9 @@ export class MainFinHarnessAgent {
       yield OFF_TOPIC_ANSWER;
       return;
     }
-    for await (const chunk of this.llm.streamText({ system: systemPrompt(options.context), prompt: buildMainAgentPrompt(question) })) yield chunk;
-    await options.onModelCall?.();
+    const params = { system: systemPrompt(options.context), prompt: buildMainAgentPrompt(question), abortSignal: options.abortSignal };
+    const result = this.llm.streamTextResult(params);
+    for await (const chunk of result.chunks) yield chunk;
+    await options.onModelCall?.(await result.metadata);
   }
 }

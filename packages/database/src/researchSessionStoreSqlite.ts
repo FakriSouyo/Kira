@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, isNull, max, or } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, max, or } from 'drizzle-orm';
 import type {
   ModelCallRecord,
   ResearchExecution,
   ResearchSession,
   ResearchSessionArtifacts,
   ResearchSessionStore,
+  SessionModelSelection,
   ResearchTurn,
   WorkflowStepRecord,
 } from '@harness/session-core';
@@ -13,7 +14,7 @@ import { transitionTurn } from '@harness/session-core';
 import { ContextSnapshotIdSchema } from '@harness/context';
 import { canonicalJson } from '@harness/shared';
 import type { Orm } from './client';
-import { contextSnapshots, executions, modelCalls, researchSessions, researchTurns, workflowSteps } from './schema';
+import { contextSnapshots, executions, modelCalls, researchSessions, researchTurns, sessionModelSelections, workflowSteps } from './schema';
 
 function toExecution(row: typeof executions.$inferSelect): ResearchExecution {
   if (row.sessionId === null || row.turnId === null || row.attempt === null) {
@@ -50,8 +51,57 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
       createdAt: now,
       updatedAt: now,
     };
-    await this.db.insert(researchSessions).values(session);
-    return session;
+    const selection: SessionModelSelection = {
+      sessionId: session.id,
+      version: 1,
+      providerId: params.providerId ?? session.provider,
+      modelId: params.modelId ?? session.model,
+      source: 'initial',
+      selectedAt: now,
+    };
+    return this.db.transaction((tx) => {
+      tx.insert(researchSessions).values(session).run();
+      tx.insert(sessionModelSelections).values(selection).run();
+      return session;
+    });
+  }
+
+  async getCurrentModelSelection(sessionId: string): Promise<SessionModelSelection | null> {
+    const rows = await this.db.select().from(sessionModelSelections)
+      .where(eq(sessionModelSelections.sessionId, sessionId))
+      .orderBy(desc(sessionModelSelections.version)).limit(1);
+    return (rows[0] as SessionModelSelection | undefined) ?? null;
+  }
+
+  async listModelSelections(sessionId: string): Promise<SessionModelSelection[]> {
+    const rows = await this.db.select().from(sessionModelSelections)
+      .where(eq(sessionModelSelections.sessionId, sessionId))
+      .orderBy(asc(sessionModelSelections.version));
+    return rows as SessionModelSelection[];
+  }
+
+  async selectModel(params: Parameters<ResearchSessionStore['selectModel']>[0]): Promise<SessionModelSelection> {
+    return this.db.transaction((tx) => {
+      const session = tx.select({ id: researchSessions.id }).from(researchSessions)
+        .where(eq(researchSessions.id, params.sessionId)).limit(1).get();
+      if (!session) throw new Error(`Session ${params.sessionId} not found`);
+      if (!params.providerId.trim() || !params.modelId.trim()) throw new Error('Model selection providerId and modelId must be non-empty');
+      const current = tx.select({ value: max(sessionModelSelections.version) }).from(sessionModelSelections)
+        .where(eq(sessionModelSelections.sessionId, params.sessionId)).get();
+      const selectedAt = params.selectedAt ?? new Date().toISOString();
+      const selection: SessionModelSelection = {
+        sessionId: params.sessionId,
+        version: (current?.value ?? 0) + 1,
+        providerId: params.providerId,
+        modelId: params.modelId,
+        source: params.source ?? 'user',
+        selectedAt,
+      };
+      tx.insert(sessionModelSelections).values(selection).run();
+      tx.update(researchSessions).set({ provider: selection.providerId, model: selection.modelId, updatedAt: selectedAt })
+        .where(eq(researchSessions.id, params.sessionId)).run();
+      return selection;
+    });
   }
 
   async createTurn(params: Parameters<ResearchSessionStore['createTurn']>[0]): Promise<ResearchTurn> {
@@ -310,6 +360,11 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
       subagent: params.subagent,
       provider: params.provider,
       model: params.model,
+      providerId: params.providerId ?? null,
+      modelId: params.modelId ?? null,
+      adapterId: params.adapterId ?? null,
+      protocol: params.protocol ?? null,
+      runtimeFingerprint: params.runtimeFingerprint ?? null,
       attempt: params.attempt,
       inputTokens: params.inputTokens,
       outputTokens: params.outputTokens,
@@ -331,6 +386,11 @@ export class ResearchSessionStoreSqlite implements ResearchSessionStore {
       subagent: value.subagent,
       provider: value.provider,
       model: value.model,
+      providerId: value.providerId,
+      modelId: value.modelId,
+      adapterId: value.adapterId,
+      protocol: value.protocol,
+      runtimeFingerprint: value.runtimeFingerprint,
       attempt: value.attempt,
       inputTokens: value.inputTokens,
       outputTokens: value.outputTokens,

@@ -27,9 +27,15 @@ export interface SubagentResult<T> {
   value: T;
   subagent: string;
   skills: SkillReference[];
-  modelCall?: LLMCallMetadata;
+  /** Actual metadata from the successful model-backed invocation. */
+  modelCall: LLMCallMetadata;
   contextSnapshotId?: string | null;
 }
+
+/** Historical restore values may predate result-bearing model metadata. */
+export type RestoredSubagentResult<T> = Omit<SubagentResult<T>, 'modelCall'> & { modelCall?: LLMCallMetadata };
+
+export type SubagentResultLike<T> = SubagentResult<T> | RestoredSubagentResult<T>;
 
 export interface RunObjectRequest<T> {
   manifest: SubagentManifest;
@@ -47,10 +53,6 @@ export interface SubagentRuntimeOptions {
     readonly modelCapabilities: ContextModelCapabilities;
     readonly reservedOutputTokens: number;
     readonly safetyMarginTokens: number;
-  };
-  readonly modelIdentity?: {
-    readonly provider: LLMCallMetadata['provider'];
-    readonly model: string;
   };
 }
 
@@ -108,29 +110,12 @@ export class SubagentRuntime {
       prompt: request.prompt,
       system: [evidenceZone, roleZone ? `${roleZone}\n\n${specialistZone}` : specialistZone],
     };
-    const startedAt = Date.now();
-    const generated = this.llm.generateObjectResult
-      ? await this.llm.generateObjectResult(params)
-      : { value: await this.llm.generateObject(params) };
-    const modelCall = 'metadata' in generated
-      ? generated.metadata
-      : request.specialistContext && this.options.modelIdentity
-        ? {
-          provider: this.options.modelIdentity.provider,
-          model: this.options.modelIdentity.model,
-          inputTokens: null,
-          outputTokens: null,
-          cachedInputTokens: null,
-          totalTokens: null,
-          finishReason: null,
-          latencyMs: Date.now() - startedAt,
-        } satisfies LLMCallMetadata
-        : undefined;
+    const generated = await this.llm.generateObjectResult(params);
     return {
       value: request.schema.parse(generated.value),
       subagent: request.manifest.id,
       skills: loadedSkills.map(({ name, contentHash }) => ({ name, contentHash })),
-      ...(modelCall ? { modelCall } : {}),
+      modelCall: generated.metadata,
       ...(request.specialistContext ? { contextSnapshotId } : {}),
     };
   }

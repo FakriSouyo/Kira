@@ -3,7 +3,8 @@ import { APICallError } from 'ai';
 import { MockLanguageModelV2 } from 'ai/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { DEFAULT_AGENT_CONFIG, LLMClient, classifyLLMError, createProvider, parseJsonResponse, toSystemPrompt } from '../src/index';
+import type { LLMClientLike } from '../src/types';
+import { DEFAULT_AGENT_CONFIG, LLMClient, MockLLMClient, classifyLLMError, createProvider, parseJsonResponse, toSystemPrompt } from '../src/index';
 
 const OBJECT_SCHEMA = z.object({ answer: z.string(), score: z.number() });
 
@@ -40,6 +41,22 @@ function textModel(text: string): MockLanguageModelV2 {
 }
 
 describe('LLMClient', () => {
+  it('exposes mandatory runtime and result-bearing APIs for real and mock clients', async () => {
+    const clients: LLMClientLike[] = [
+      new LLMClient({ config: DEFAULT_AGENT_CONFIG, modelFactory: () => textModel('real client') }),
+      new MockLLMClient(),
+    ];
+
+    for (const client of clients) {
+      const plan = client.describeRuntimePlan();
+      expect(plan.runtimeFingerprint).toMatch(/^[0-9a-f]{64}$/);
+      expect(typeof client.generateObjectResult).toBe('function');
+      expect(typeof client.generateTextResult).toBe('function');
+      expect(typeof client.streamTextResult).toBe('function');
+      await expect(client.generateTextResult({ prompt: 'contract check' })).resolves.toHaveProperty('metadata');
+    }
+  });
+
   it('validates a fenced custom-provider JSON reply locally', () => {
     expect(parseJsonResponse('```json\n{"answer":"ok","score":7}\n```', OBJECT_SCHEMA))
       .toEqual({ answer: 'ok', score: 7 });

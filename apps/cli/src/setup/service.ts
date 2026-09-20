@@ -71,8 +71,8 @@ export function saveProvider(
   const router = (llm.router ?? {}) as Record<string, unknown>;
   (existing as Record<string, unknown>).llm = {
     ...llm,
-    agent: { ...agent, provider: spec.provider, model: agentModelId, ...(baseURL ? { base_url: baseURL } : {}) },
-    router: { ...router, provider: spec.provider, model: routerModelId, ...(baseURL ? { base_url: baseURL } : {}) },
+    agent: { ...agent, provider_id: spec.id, provider: spec.provider, model: agentModelId, ...(baseURL ? { base_url: baseURL } : {}) },
+    router: { ...router, provider_id: spec.id, provider: spec.provider, model: routerModelId, ...(baseURL ? { base_url: baseURL } : {}) },
   };
   mkdirSync(homeDir, { recursive: true });
   writeFileSync(configPath, `${JSON.stringify(existing, null, 2)}\n`, 'utf8');

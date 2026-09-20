@@ -147,8 +147,9 @@ export async function judgeWorkflow(
         profile,
         definition,
         currentGraphFingerprint: judgeWorkflowGraphFingerprint(definition),
-        provider: ctx.config.llm.agent.provider,
+        provider: ctx.config.llm.agent.providerId ?? ctx.config.llm.agent.provider,
         model: ctx.config.llm.agent.model,
+        runtimePlanFingerprint: ctx.runtimePlan?.runtimeFingerprint,
       });
       return await ctx.db.sessions.acquireInterruptedExecution(existing.id);
     })()
@@ -175,8 +176,9 @@ export async function judgeWorkflow(
         reasoningMode: reasoning ? 'reasoning' : 'usual',
         conditional,
         researchers,
-        provider: ctx.config.llm.agent.provider,
+        provider: ctx.config.llm.agent.providerId ?? ctx.config.llm.agent.provider,
         model: ctx.config.llm.agent.model,
+        runtimePlan: ctx.runtimePlan as never,
         createdAt: run.createdAt,
       });
       await ctx.db.executionProfiles.save(profile);
