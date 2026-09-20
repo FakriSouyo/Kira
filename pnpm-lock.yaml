@@ -109,6 +109,12 @@ importers:
       '@harness/subagent-researcher':
         specifier: workspace:*
         version: link:../../packages/subagent/researcher
+      '@harness/tool-runtime':
+        specifier: workspace:*
+        version: link:../../packages/tool-runtime
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
 
   packages/command/core:
     dependencies:
@@ -392,6 +398,12 @@ importers:
       '@harness/subagent-core':
         specifier: workspace:*
         version: link:../core
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+
+  packages/tool-runtime:
+    dependencies:
       zod:
         specifier: ^3.25.0
         version: 3.25.76

@@ -13,12 +13,16 @@ import { BullAgent } from '@harness/subagent-bull';
 import { SubagentRuntime } from '@harness/subagent-core';
 import { JudgeAgent } from '@harness/subagent-judge';
 import { ResearcherAgent } from '@harness/subagent-researcher';
+import { ToolRuntime } from '@harness/tool-runtime';
 import type { FinharnessConfig } from './config';
+import { createFinancialTools, type FinancialTools } from './tools/financialTools';
 import { createConversationContextCoordinator, type ConversationContextCoordinator } from './runtime/conversationContextCoordinator';
 
 export interface HarnessContext {
   db: FinharnessDatabase;
   financialData: FinancialDataProvider;
+  toolRuntime: ToolRuntime;
+  financialTools: FinancialTools;
   researcher: ResearcherAgent;
   bull: BullAgent;
   bear: BearAgent;
@@ -61,6 +65,16 @@ export function runtimeBudgetForPlan(plan: ModelRuntimePlan): RuntimeBudget {
 export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): HarnessContext {
   const agentLlm = createLLMClient(config.llm.agent, { mock: config.mockLlm });
   const routerLlm = createLLMClient(config.llm.router, { mock: config.mockLlm });
+  const financialData = createSectorsFinancialDataProvider({
+    mock: config.sectors.mock,
+    apiKey: config.sectors.apiKey || undefined,
+    baseUrl: config.sectors.baseUrl,
+    cacheTtlHours: config.sectors.cacheTtlHours,
+    newsCacheTtlHours: config.sectors.newsCacheTtlHours,
+    homeDir: config.homeDir,
+  });
+  const toolRuntime = new ToolRuntime();
+  const financialTools = createFinancialTools(financialData);
   const runtimePlan = agentLlm.describeRuntimePlan();
   const runtimeBudget = runtimeBudgetForPlan(runtimePlan);
   const modelCapabilities = runtimeBudget.modelCapabilities;
@@ -82,14 +96,9 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
     config,
     runtimePlan,
     db,
-    financialData: createSectorsFinancialDataProvider({
-      mock: config.sectors.mock,
-      apiKey: config.sectors.apiKey || undefined,
-      baseUrl: config.sectors.baseUrl,
-      cacheTtlHours: config.sectors.cacheTtlHours,
-      newsCacheTtlHours: config.sectors.newsCacheTtlHours,
-      homeDir: config.homeDir,
-    }),
+    financialData,
+    toolRuntime,
+    financialTools,
     researcher: new ResearcherAgent(specialist('researcher')),
     bull: new BullAgent(specialist('bull')),
     bear: new BearAgent(specialist('bear')),

@@ -407,12 +407,28 @@ credentials.
 
 The current and future milestone order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md). Q2 is complete on this implementation
-branch; the next milestone is:
+branch. R1 is now complete on this implementation branch; the next milestone
+is:
 
-**R1 — Typed Tool Runtime**
+**R2 — Capability Registry + Policy + Integrations**
 
-R1 is planned and not implemented here. R2 — Capability Registry + Policy +
-Integrations remains planned after R1. Q1 and Q2 are complete on this branch;
-PR P continues to restore the same Execution's validated snapshot, Evidence,
-and typed debate outputs without changing its lifecycle or Judge graph. The
-full future order is maintained in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Q1, Q2, and R1 are complete on this branch. PR P continues to restore the same
+Execution's validated snapshot, Evidence, and typed debate outputs without
+changing its lifecycle or Judge graph. The full future order is maintained in
+[`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+### R1 Typed Tool Runtime
+
+`@harness/tool-runtime` executes one explicitly supplied `ToolDefinition` at a
+time. It validates typed input and output with Zod, preserves handler/domain
+error identity, fences cancellation before and after handler execution, and
+emits one terminal lifecycle event through a per-invocation observer. It has no
+lookup, registry, policy, retry, workflow scheduling, model-loop, or durable
+tool state.
+
+The CLI composes eight explicit financial definitions over the authoritative
+`FinancialDataProvider` seam. Judge uses seven ticker operations and Screen
+uses the screening operation; both retain their existing business behavior and
+public event projections. The generic runtime remains domain-neutral and does
+not import CLI event types or financial packages. R2 is the future capability
+registry, policy, and integration layer.
