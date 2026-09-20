@@ -34,14 +34,18 @@ reasoning inside explicit command boundaries.
 
 ### R1 — Typed Tool Runtime
 
-Status: planned. No R1 implementation is claimed by the current repository
-state. The next design work will establish the typed tool-runtime boundary
-without changing the canonical Session → Turn → Execution lifecycle.
+Status: complete on this implementation branch. R1 provides explicit typed
+tool definitions, one-shot validation and execution, per-invocation lifecycle
+observation, cancellation fencing, and CLI financial adapters without adding
+a capability registry or durable tool authority.
+
+### Next milestone
 
 ### R2 — Capability Registry + Policy + Integrations
 
-Status: planned after R1. Capability discovery, policy, and integrations remain
-separate from the R1 typed tool-runtime milestone.
+Status: next / planned after R1. Capability discovery, policy, and
+integrations remain separate from the completed R1 typed tool-runtime
+milestone.
 
 ## Future milestones
 

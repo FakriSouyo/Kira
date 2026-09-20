@@ -14,7 +14,7 @@ export async function screenWorkflow(
   ctx: HarnessContext,
   criteria: string[],
 ): Promise<ScreenArtifacts> {
-  const results = await ctx.financialData.screen(criteria);
+  const results = (await ctx.toolRuntime.invoke(ctx.financialTools.screen, { criteria })).value;
   return {
     criteria,
     results: results.filter((r) => r.matchScore > 0).slice(0, MAX_ROWS),

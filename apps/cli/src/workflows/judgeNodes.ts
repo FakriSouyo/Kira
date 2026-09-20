@@ -20,8 +20,10 @@ import {
 } from '@harness/financial-data';
 import { SECTORS_SOURCES } from '@harness/sectors-api';
 import { buildEvidenceZone, normalizeJudgmentScore, stanceForScore, UserFriendlyError, ValidationError } from '@harness/shared';
-import type { AgentEvent, AgentToolName } from '../repl/events';
+import type { ToolDefinition } from '@harness/tool-runtime';
+import type { AgentEvent } from '../repl/events';
 import type { HarnessContext } from '../context';
+import { projectFinancialToolEvent } from '../tools/financialToolEvents';
 
 /** Phase shown by progress renderers; the composition layer re-exports it for events.ts. */
 export type JudgeProgressPhase = 'researcher' | 'bull' | 'bear' | 'judge';
@@ -118,10 +120,6 @@ export function assertNotAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new UserFriendlyError('ABORTED', 'Aborted', ABORT_SUGGESTION);
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /** Emit public, auditable text without exposing private chain-of-thought. */
 function emitPublicText(
   events: (event: AgentEvent) => void,
@@ -170,21 +168,16 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
   const { ctx, ticker, runId, events, progress, decision } = deps;
   const researchers = deps.researchers ?? ctx.researchers;
 
-  const tool = async <T>(name: AgentToolName, signal: AbortSignal | undefined, fetcher: () => Promise<T>): Promise<T> => {
-    assertNotAborted(signal);
-    events({ type: 'tool.start', tool: name, ticker, agent: 'researcher' });
-    const started = Date.now();
-    let failure: string | undefined;
-    try {
-      const value = await fetcher();
-      assertNotAborted(signal);
-      return value;
-    } catch (error) {
-      failure = errorMessage(error);
-      throw error;
-    } finally {
-      events({ type: 'tool.complete', tool: name, agent: 'researcher', durationMs: Date.now() - started, ...(failure ? { error: failure } : {}) });
-    }
+  const invokeFinancialTool = async <TId extends string, TInput, TOutput>(
+    definition: ToolDefinition<TId, TInput, TOutput>,
+    input: TInput,
+    signal: AbortSignal | undefined,
+  ): Promise<TOutput> => {
+    const result = await ctx.toolRuntime.invoke(definition, input, {
+      signal,
+      onEvent: event => projectFinancialToolEvent(event, { ticker, emit: events }),
+    });
+    return result.value;
   };
 
   const stableErrorCode = (error: unknown): string => {
@@ -273,14 +266,14 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'phase', phase: 'researcher', label: "I'm starting with Company Report and Quarterly Financials." });
       events({ type: 'agent.start', agent: 'researcher' });
       progress('researcher', `I'm starting with Company Report and Quarterly Financials for ${ticker}...`);
-      const report = await tool('company_report', signal, () => ctx.financialData.getCompanyReport(ticker));
+      const report = await invokeFinancialTool(ctx.financialTools.companyReport, { ticker }, signal);
       progress('researcher', '✓ Company Report retrieved');
       return report;
     },
 
     /** Quarterly Financials — required ground truth; a failed request ends the run. */
     'fetch-financials': async (_inputs, signal) => {
-      const financials = await tool('quarterly_financials', signal, () => ctx.financialData.getQuarterlyFinancials(ticker));
+      const financials = await invokeFinancialTool(ctx.financialTools.quarterlyFinancials, { ticker }, signal);
       progress('researcher', '✓ Quarterly Financials retrieved');
       return financials;
     },
@@ -292,8 +285,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
      */
     'fetch-market-data': async (_inputs, signal) => {
       try {
-        const daily = await tool('daily_transaction', signal, () => ctx.financialData.getDailyTransaction(ticker));
-        const foreign = await tool('foreign_flow', signal, () => ctx.financialData.getForeignFlow(ticker));
+        const daily = await invokeFinancialTool(ctx.financialTools.dailyTransaction, { ticker }, signal);
+        const foreign = await invokeFinancialTool(ctx.financialTools.foreignFlow, { ticker }, signal);
         return { daily, foreign };
       } catch (error) {
         assertNotAborted(signal);
@@ -308,9 +301,9 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
     /** News + Filings + Sentiment. Any failed source request degrades the whole group. */
     'fetch-news': async (_inputs, signal) => {
       try {
-        const news = await tool('news', signal, () => ctx.financialData.getNews(ticker));
-        const filings = await tool('filings', signal, () => ctx.financialData.getFilings(ticker));
-        const sentiment = await tool('sentiment', signal, () => ctx.financialData.getSentiment(ticker));
+        const news = await invokeFinancialTool(ctx.financialTools.news, { ticker }, signal);
+        const filings = await invokeFinancialTool(ctx.financialTools.filings, { ticker }, signal);
+        const sentiment = await invokeFinancialTool(ctx.financialTools.sentiment, { ticker }, signal);
         return { news, filings, sentiment };
       } catch (error) {
         assertNotAborted(signal);
