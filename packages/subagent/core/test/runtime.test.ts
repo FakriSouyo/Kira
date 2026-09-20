@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { MockLLMClient } from '@harness/llm';
 import type { GenerateObjectParams, LLMClientLike, LLMResult } from '@harness/llm';
 import type { LoadedSkill, SkillProvider } from '@harness/skill-core';
 import { assembleSpecialistContext, renderSpecialistContext, type ContextSnapshot } from '@harness/context';
@@ -101,7 +102,9 @@ describe('SubagentRuntime', () => {
   });
 
   it('propagates model-call metadata for durable usage accounting', async () => {
+    const runtimePlan = new MockLLMClient().describeRuntimePlan();
     const llm: LLMClientLike = {
+      describeRuntimePlan(): typeof runtimePlan { return runtimePlan; },
       async generateObject<T>(): Promise<T> {
         throw new Error('value-only API must not be used when metadata is available');
       },
@@ -123,6 +126,8 @@ describe('SubagentRuntime', () => {
       async streamObject<T>(): Promise<T> { throw new Error('unexpected streamObject'); },
       async generateText(): Promise<string> { throw new Error('unexpected generateText'); },
       streamText(): AsyncIterable<string> { throw new Error('unexpected streamText'); },
+      async generateTextResult(): Promise<never> { throw new Error('unexpected generateTextResult'); },
+      streamTextResult(): never { throw new Error('unexpected streamTextResult'); },
     };
 
     const result = await new SubagentRuntime(llm, new FixedSkillProvider()).runObject({
@@ -166,7 +171,7 @@ describe('SubagentRuntime', () => {
     await expect(runtime.runObject({
       manifest: manifest('You are the Bull Agent.'), specialistContext: context, prompt: 'Analyze.',
       schema: z.object({ summary: z.string() }),
-    })).rejects.toMatchObject({ code: 'MODEL_METADATA_REQUIRED' });
+    })).rejects.toBeInstanceOf(TypeError);
 
     expect(order).toEqual(['snapshot']);
     expect(snapshots).toHaveLength(1);

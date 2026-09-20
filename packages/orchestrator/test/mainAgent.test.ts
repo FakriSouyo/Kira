@@ -10,11 +10,17 @@ it('answers identity locally without spending an LLM request', async () => {
 });
 
 it('grounds general financial chat in a bounded main-agent prompt', async () => {
-  const llm = { generateText: vi.fn().mockResolvedValue('Diversifikasi menyebarkan risiko. Coba /research untuk pembahasan berbukti.') };
+  const llm = {
+    generateText: vi.fn(),
+    generateTextResult: vi.fn().mockResolvedValue({
+      value: 'Diversifikasi menyebarkan risiko. Coba /research untuk pembahasan berbukti.',
+      metadata: { provider: 'mock', model: 'test', providerId: 'mock', modelId: 'test', adapterId: 'mock', protocol: 'mock', runtimeFingerprint: 'f'.repeat(64), inputTokens: null, outputTokens: null, cachedInputTokens: null, totalTokens: null, finishReason: 'stop', latencyMs: 0 },
+    }),
+  };
   const agent = new MainFinHarnessAgent(llm as never);
   const answer = await agent.respond('apa itu diversifikasi?');
   expect(answer).toContain('Diversifikasi');
-  expect(llm.generateText).toHaveBeenCalledWith(expect.objectContaining({
+  expect(llm.generateTextResult).toHaveBeenCalledWith(expect.objectContaining({
     system: expect.stringMatching(/Main FinHarness Agent.*financial-only/s),
   }));
 });

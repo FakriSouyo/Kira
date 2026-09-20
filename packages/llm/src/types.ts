@@ -103,13 +103,13 @@ export interface StreamTextParams {
  * dan MockLLMClient (offline, deterministik). Agent hanya bergantung ke sini.
  */
 export interface LLMClientLike {
-  /** Pure semantic runtime snapshot when supplied by the production client. */
-  describeRuntimePlan?(): import('./plan').ModelRuntimePlan;
+  /** Pure semantic runtime snapshot for the resolved production or mock client. */
+  describeRuntimePlan(): import('./plan').ModelRuntimePlan;
   generateObject<T>(params: GenerateObjectParams<T>): Promise<T>;
-  /** Transitional usage-aware API; command subagents migrate before legacy value-only methods are removed. */
-  generateObjectResult?<T>(params: GenerateObjectParams<T>): Promise<LLMResult<T>>;
-  /** Q1 result-bearing text compatibility path. */
-  generateTextResult?(params: GenerateTextParams): Promise<LLMResult<string>>;
+  /** Result-bearing structured API used by metadata-aware production consumers. */
+  generateObjectResult<T>(params: GenerateObjectParams<T>): Promise<LLMResult<T>>;
+  /** Result-bearing text API used by metadata-aware production consumers. */
+  generateTextResult(params: GenerateTextParams): Promise<LLMResult<string>>;
   streamObject<T>(params: StreamObjectParams<T>): Promise<T>;
   generateText(params: GenerateTextParams): Promise<string>;
   /**
@@ -119,6 +119,6 @@ export interface LLMClientLike {
    * di-retry tengah jalan).
    */
   streamText(params: StreamTextParams): AsyncIterable<string>;
-  /** Q1 metadata-capable stream compatibility path. */
-  streamTextResult?(params: StreamTextParams): LLMTextStreamResult;
+  /** Result-bearing text stream API used by metadata-aware production consumers. */
+  streamTextResult(params: StreamTextParams): LLMTextStreamResult;
 }

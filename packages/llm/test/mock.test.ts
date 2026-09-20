@@ -102,6 +102,25 @@ Respond with your rebuttal. The evidence is in the system context.`;
 describe('MockLLMClient — Intent Router', () => {
   const mock = new MockLLMClient();
 
+  it('describes an explicit deterministic runtime plan', () => {
+    const plan = mock.describeRuntimePlan();
+    expect(plan.fallbacks).toEqual([]);
+    expect(plan.primary.descriptor).toEqual(expect.objectContaining({
+      providerId: 'mock',
+      modelId: 'deterministic-financial-mock',
+      adapterId: 'mock',
+      protocol: 'mock',
+      capabilities: expect.objectContaining({
+        contextWindowTokens: 16_384,
+        maxOutputTokens: 2_000,
+        supportsTextInput: true,
+        supportsStructuredOutput: true,
+        supportsTextStreaming: true,
+        supportsStructuredStreaming: true,
+      }),
+    }));
+  });
+
   it('provides the same result-bearing runtime contract with explicit mock identity', async () => {
     const result = await mock.generateObjectResult({
       schema: INTENT_SCHEMA,

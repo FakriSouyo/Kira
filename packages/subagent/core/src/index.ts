@@ -110,11 +110,6 @@ export class SubagentRuntime {
       prompt: request.prompt,
       system: [evidenceZone, roleZone ? `${roleZone}\n\n${specialistZone}` : specialistZone],
     };
-    if (!this.llm.generateObjectResult) {
-      const error = new Error('Subagent runtime requires result-bearing model metadata');
-      Object.assign(error, { code: 'MODEL_METADATA_REQUIRED' });
-      throw error;
-    }
     const generated = await this.llm.generateObjectResult(params);
     return {
       value: request.schema.parse(generated.value),

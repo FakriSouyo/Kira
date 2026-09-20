@@ -73,9 +73,24 @@ export class ModelRuntime {
     this.adapters = ModelRuntime.adapterMap(adapters);
   }
 
-  /** Resolves only detached semantic runtime data; it does not prepare an adapter call. */
+  private resolveCall(route: ModelRoute, generationControls: ModelGenerationControls): {
+    model: ModelDescriptor;
+    adapter: ModelAdapter;
+    descriptor: ModelRuntimeDescriptor;
+  } {
+    const model = this.directory.resolveModel(route);
+    const adapter = this.adapters.get(model.provider.adapterId);
+    if (!adapter) throw new RuntimeError('UNKNOWN_ADAPTER', `Unknown model adapter: ${model.provider.adapterId}`);
+    return {
+      model,
+      adapter,
+      descriptor: createModelRuntimeDescriptor({ model, generationControls }),
+    };
+  }
+
+  /** Resolves detached semantic runtime data and validates dispatch availability without preparing a call. */
   describeCall(route: ModelRoute, generationControls: ModelGenerationControls): ModelRuntimeDescriptor {
-    return createModelRuntimeDescriptor({ model: this.directory.resolveModel(route), generationControls });
+    return this.resolveCall(route, generationControls).descriptor;
   }
 
   describePlan(requests: readonly ModelRuntimePlanRequest[]): ModelRuntimePlan {
@@ -86,11 +101,12 @@ export class ModelRuntime {
   }
 
   prepareCall(route: ModelRoute, generationControls: ModelGenerationControls): PreparedModelCall {
-    const model = this.directory.resolveModel(route);
-    const adapter = this.adapters.get(model.provider.adapterId);
-    if (!adapter) throw new RuntimeError('UNKNOWN_ADAPTER', `Unknown model adapter: ${model.provider.adapterId}`);
-    const descriptor = this.describeCall(route, generationControls);
-    const prepared = adapter.prepareCall({ model, descriptor, connection: this.directory.connectionFor(route) });
-    return new PreparedModelCall(model, descriptor, prepared);
+    const resolved = this.resolveCall(route, generationControls);
+    const prepared = resolved.adapter.prepareCall({
+      model: resolved.model,
+      descriptor: resolved.descriptor,
+      connection: this.directory.connectionFor(route),
+    });
+    return new PreparedModelCall(resolved.model, resolved.descriptor, prepared);
   }
 }

@@ -237,6 +237,39 @@ describe('ModelRuntimeDescriptor', () => {
 });
 
 describe('ModelRuntime prepared calls', () => {
+  it('validates adapter availability for describeCall without invoking an adapter', () => {
+    const adapter = new RecordingAdapter();
+    const registration = {
+      ...provider('known-provider'),
+      descriptor: { ...provider('known-provider').descriptor, adapterId: 'missing-adapter' },
+    };
+    const runtime = new ModelRuntime({
+      directory: new ProviderDirectory([registration]),
+      adapters: [adapter],
+    });
+
+    for (const resolve of [
+      () => runtime.describeCall(
+        { providerId: 'known-provider', modelId: 'model-a' },
+        { temperature: 0.2, maxOutputTokens: 100 },
+      ),
+      () => runtime.prepareCall(
+        { providerId: 'known-provider', modelId: 'model-a' },
+        { temperature: 0.2, maxOutputTokens: 100 },
+      ),
+    ]) {
+      let error: unknown;
+      try {
+        resolve();
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toMatchObject({ code: 'UNKNOWN_ADAPTER' });
+    }
+    expect(adapter.prepared).toEqual([]);
+    expect(adapter.invocations).toEqual([]);
+  });
+
   it('AI SDK adapters capture private generation config at prepare time', async () => {
     let temperature: number | undefined;
     const model = new MockLanguageModelV2({

@@ -3,6 +3,7 @@ import { ModelRuntime } from '../src/model-runtime';
 import { ProviderDirectory } from '../src/provider-directory';
 import { LLMClient } from '../src/client';
 import { MockLanguageModelV2 } from 'ai/test';
+import type { ModelAdapter } from '../src/adapter';
 
 const capabilities = {
   contextWindowTokens: 16_384,
@@ -15,6 +16,7 @@ const capabilities = {
 };
 
 function runtime(): ModelRuntime {
+  const adapter = (id: string): ModelAdapter => ({ id, prepareCall: () => { throw new Error('not used by plan tests'); } });
   return new ModelRuntime({
     directory: new ProviderDirectory([
       {
@@ -26,7 +28,7 @@ function runtime(): ModelRuntime {
         models: [{ id: 'claude-sonnet', capabilities }],
       },
     ]),
-    adapters: [],
+    adapters: [adapter('openai-compatible'), adapter('anthropic')],
   });
 }
 

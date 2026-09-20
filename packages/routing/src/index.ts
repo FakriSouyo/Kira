@@ -8,7 +8,7 @@ Classify user input as judge, screen, challenge, compare, or clarification.
 Return confidence from 0 to 1. If intent is ambiguous, return clarification with a useful question.`;
 
 export class IntentRouter {
-  constructor(private readonly llm: LLMClientLike) {}
+  constructor(private readonly llm: Pick<LLMClientLike, 'generateObject'>) {}
 
   async route(input: string): Promise<Intent> {
     const intent = await this.llm.generateObject({ schema: IntentSchema, system: INTENT_ROUTER_SYSTEM_PROMPT, prompt: input });

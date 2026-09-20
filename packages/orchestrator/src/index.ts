@@ -37,7 +37,7 @@ function systemPrompt(context?: MainAgentContext): string | string[] {
 
 /** Conversational host. Commands still own workflows and selectively invoke specialist subagents. */
 export class MainFinHarnessAgent {
-  constructor(private readonly llm: Pick<LLMClientLike, 'generateText' | 'streamText' | 'generateTextResult' | 'streamTextResult'>) {}
+  constructor(private readonly llm: Pick<LLMClientLike, 'generateTextResult' | 'streamTextResult'>) {}
 
   async respond(input: string, options: MainAgentCallOptions = {}): Promise<string> {
     const question = input.trim();
@@ -52,10 +52,8 @@ export class MainFinHarnessAgent {
       prompt: buildMainAgentPrompt(question),
       abortSignal: options.abortSignal,
     };
-    const result = this.llm.generateTextResult
-      ? await this.llm.generateTextResult(params)
-      : { value: await this.llm.generateText(params), metadata: undefined };
-    if (result.metadata) await options.onModelCall?.(result.metadata);
+    const result = await this.llm.generateTextResult(params);
+    await options.onModelCall?.(result.metadata);
     return result.value;
   }
 
@@ -75,12 +73,8 @@ export class MainFinHarnessAgent {
       return;
     }
     const params = { system: systemPrompt(options.context), prompt: buildMainAgentPrompt(question), abortSignal: options.abortSignal };
-    if (this.llm.streamTextResult) {
-      const result = this.llm.streamTextResult(params);
-      for await (const chunk of result.chunks) yield chunk;
-      await options.onModelCall?.(await result.metadata);
-      return;
-    }
-    for await (const chunk of this.llm.streamText(params)) yield chunk;
+    const result = this.llm.streamTextResult(params);
+    for await (const chunk of result.chunks) yield chunk;
+    await options.onModelCall?.(await result.metadata);
   }
 }
