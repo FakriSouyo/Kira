@@ -1,0 +1,14 @@
+{
+  "name": "@harness/capability",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@harness/tool-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "zod": "^3.25.0"
+  }
+}
