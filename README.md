@@ -496,7 +496,8 @@ L  Artifact-aware retrieval + validity + prior-context reuse
  P  /judge Same-Execution Checkpoint / Resume
  Q1 Model Runtime + Provider Directory (complete)
  Q2 Durable Model Selection + Production Integration (complete)
- R1 Capability Registry + Typed Tool Runtime (planned)
+ R1 Typed Tool Runtime (planned)
+ R2 Capability Registry + Policy + Integrations (planned)
 ```
 
 A-P are complete and merged into `master`. Q1 and Q2 are complete on this
@@ -519,16 +520,21 @@ rather than replacing the A-L foundation.
 
 Current direction after PR P:
 
-1. R1 — Capability Registry + Typed Tool Runtime
-2. Model Runtime Generalization
-3. Document & File Workspace
-4. Evidence Policy + Claim Graph
-5. Reusable Research Subgraphs
-6. Risk Committee
-7. Research Graph
-8. Decision Journal
-9. Outcome Tracking + Reflection
-10. UI integration / polish
+1. R1 — Typed Tool Runtime
+2. R2 — Capability Registry + Policy + Integrations
+3. S1 — Durable File / Attachment Layer
+4. S2 — Workspace + File Capability
+5. S3 — Document Understanding / Retrieval
+6. Evidence Policy + Claim Graph
+7. Reusable Research Subgraphs
+8. Risk Committee
+9. Research Graph
+10. Decision Journal
+11. Outcome Tracking + Reflection
+12. Z1 — Application Host / API Boundary
+13. Z2 — Web Surface
+14. Z3 — Desktop Host + Desktop Shell
+15. Z4 — Cross-Surface Integration / Final Polish
 
 This product overview points to the canonical roadmap for the detailed future
 sequence. R1 is planned only; this branch does not claim R1 implementation. Q2

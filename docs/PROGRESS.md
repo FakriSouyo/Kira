@@ -7,7 +7,8 @@ Last updated: 2026-09-20
 The stateful architecture milestones **A–P** are complete on master. Q1 and Q2
 are complete on the current implementation branch.
 
-The next milestone is **R1 — Capability Registry + Typed Tool Runtime**.
+The next milestone is **R1 — Typed Tool Runtime**. **R2 — Capability Registry +
+Policy + Integrations** remains planned after R1.
 
 PR O is the durable resumability foundation. PR P connects it to the production
 Judge graph for true same-Execution `/judge` resume. Q1 established the
@@ -95,13 +96,18 @@ same Execution and same Turn; Q2 does not redesign checkpoints or add another
 
 ## Next milestone
 
-### R1 — Capability Registry + Typed Tool Runtime
+### R1 — Typed Tool Runtime
 
 Status: **planned**
 
 R1 is the next design milestone. It is not implemented by this repository
-state; no capability registry, typed tool runtime, or R1 runtime behavior is
-being claimed here.
+state; no typed tool runtime or R1 runtime behavior is being claimed here.
+
+### R2 — Capability Registry + Policy + Integrations
+
+Status: **planned after R1**
+
+Capability registry, policy, and integrations are intentionally not part of R1.
 
 ### PR P — `/judge` Same-Execution Checkpoint / Resume
 

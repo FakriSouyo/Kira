@@ -409,9 +409,10 @@ The current and future milestone order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md). Q2 is complete on this implementation
 branch; the next milestone is:
 
-**R1 — Capability Registry + Typed Tool Runtime**
+**R1 — Typed Tool Runtime**
 
-R1 is planned and not implemented here. Q1 and Q2 are complete on this branch;
+R1 is planned and not implemented here. R2 — Capability Registry + Policy +
+Integrations remains planned after R1. Q1 and Q2 are complete on this branch;
 PR P continues to restore the same Execution's validated snapshot, Evidence,
 and typed debate outputs without changing its lifecycle or Judge graph. The
 full future order is maintained in [`docs/ROADMAP.md`](docs/ROADMAP.md).

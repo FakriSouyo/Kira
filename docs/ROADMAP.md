@@ -32,18 +32,18 @@ reasoning inside explicit command boundaries.
 
 ## Current milestone
 
-### R1 — Capability Registry + Typed Tool Runtime
+### R1 — Typed Tool Runtime
 
 Status: planned. No R1 implementation is claimed by the current repository
-state. The next design work will generalize model capabilities into a typed
-capability registry and tool-runtime boundary without changing the canonical
-Session → Turn → Execution lifecycle.
+state. The next design work will establish the typed tool-runtime boundary
+without changing the canonical Session → Turn → Execution lifecycle.
+
+### R2 — Capability Registry + Policy + Integrations
+
+Status: planned after R1. Capability discovery, policy, and integrations remain
+separate from the R1 typed tool-runtime milestone.
 
 ## Future milestones
-
-### Future order
-
-- Model Runtime Generalization
 
 ### Files & Documents
 
