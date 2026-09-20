@@ -116,6 +116,16 @@ importers:
         specifier: ^3.25.0
         version: 3.25.76
 
+  packages/capability:
+    dependencies:
+      '@harness/tool-runtime':
+        specifier: workspace:*
+        version: link:../tool-runtime
+    devDependencies:
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+
   packages/command/core:
     dependencies:
       '@harness/shared':
