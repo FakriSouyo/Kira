@@ -108,4 +108,88 @@ describe('ToolRuntime', () => {
     expect(events.filter(event => event.type !== 'tool.started')).toHaveLength(1);
     expect(events[1]?.type).toBe('tool.failed');
   });
+
+  it('isolates a completed observer failure from the successful tool outcome', async () => {
+    const events: ToolRuntimeEvent[] = [];
+    let calls = 0;
+    const tool = echoTool(async (input) => {
+      calls += 1;
+      return { value: input.value };
+    });
+
+    await expect(new ToolRuntime({ now: () => 0 }).invoke(tool, { value: 'input' }, {
+      onEvent: event => {
+        events.push(event);
+        if (event.type === 'tool.completed') {
+          throw new Error('telemetry failed');
+        }
+      },
+    })).resolves.toEqual({
+      value: { value: 'input' },
+      metadata: { toolId: 'test.echo', durationMs: 0 },
+    });
+    expect(calls).toBe(1);
+    expect(events.map(event => event.type)).toEqual(['tool.started', 'tool.completed']);
+  });
+
+  it('isolates a failed observer failure from the original failed tool outcome', async () => {
+    const events: ToolRuntimeEvent[] = [];
+    const failure = new Error('handler failed');
+    const tool = echoTool(async () => {
+      throw failure;
+    });
+
+    await expect(new ToolRuntime({ now: () => 0 }).invoke(tool, { value: 'input' }, {
+      onEvent: event => {
+        events.push(event);
+        if (event.type === 'tool.failed') {
+          throw new Error('telemetry failed');
+        }
+      },
+    })).rejects.toBe(failure);
+    expect(events.map(event => event.type)).toEqual(['tool.started', 'tool.failed']);
+  });
+
+  it('isolates a cancelled observer failure from the cancelled tool outcome', async () => {
+    const controller = new AbortController();
+    const events: ToolRuntimeEvent[] = [];
+    const tool = echoTool(async (_input, context) => {
+      context.signal?.addEventListener('abort', () => undefined, { once: true });
+      controller.abort();
+      return { value: 'discarded' };
+    });
+
+    await expect(new ToolRuntime({ now: () => 0 }).invoke(tool, { value: 'input' }, {
+      signal: controller.signal,
+      onEvent: event => {
+        events.push(event);
+        if (event.type === 'tool.cancelled') {
+          throw new Error('telemetry failed');
+        }
+      },
+    })).rejects.toMatchObject({ code: 'TOOL_ABORTED' });
+    expect(events.map(event => event.type)).toEqual(['tool.started', 'tool.cancelled']);
+  });
+
+  it('classifies a handler rejection after abort as cancellation', async () => {
+    const controller = new AbortController();
+    const events: ToolRuntimeEvent[] = [];
+    const failure = new Error('request aborted');
+    let calls = 0;
+    const tool = echoTool(async (_input, context) => {
+      calls += 1;
+      await new Promise<void>((resolve) => {
+        context.signal?.addEventListener('abort', () => resolve(), { once: true });
+        controller.abort();
+      });
+      throw failure;
+    });
+
+    await expect(new ToolRuntime({ now: () => 0 }).invoke(tool, { value: 'input' }, {
+      signal: controller.signal,
+      onEvent: event => events.push(event),
+    })).rejects.toBe(failure);
+    expect(calls).toBe(1);
+    expect(events.map(event => event.type)).toEqual(['tool.started', 'tool.cancelled']);
+  });
 });

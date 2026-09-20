@@ -28,6 +28,16 @@ export class ToolRuntime {
     const startedAt = this.now();
     await this.emit(options.onEvent, { type: 'tool.started', toolId: tool.id });
 
+    let outcome:
+      | {
+          readonly result: ToolInvocationResult<TOutput>;
+          readonly event: ToolRuntimeEvent;
+        }
+      | {
+          readonly error: unknown;
+          readonly event: ToolRuntimeEvent;
+        };
+
     try {
       this.throwIfAborted(options.signal);
 
@@ -39,34 +49,46 @@ export class ToolRuntime {
       this.throwIfAborted(options.signal);
       const parsedOutput = this.parseOutput(tool, output);
       const durationMs = this.durationSince(startedAt);
-      await this.emit(options.onEvent, {
-        type: 'tool.completed',
-        toolId: tool.id,
-        durationMs,
-      });
-
-      return {
-        value: parsedOutput,
-        metadata: { toolId: tool.id, durationMs },
+      outcome = {
+        result: {
+          value: parsedOutput,
+          metadata: { toolId: tool.id, durationMs },
+        },
+        event: {
+          type: 'tool.completed',
+          toolId: tool.id,
+          durationMs,
+        },
       };
     } catch (error) {
       const durationMs = this.durationSince(startedAt);
-      if (this.isAbortedError(error)) {
-        await this.emit(options.onEvent, {
-          type: 'tool.cancelled',
-          toolId: tool.id,
-          durationMs,
-        });
-      } else {
-        await this.emit(options.onEvent, {
-          type: 'tool.failed',
-          toolId: tool.id,
-          durationMs,
+      if (this.isAbortedError(error, options.signal)) {
+        outcome = {
           error,
-        });
+          event: {
+            type: 'tool.cancelled',
+            toolId: tool.id,
+            durationMs,
+          },
+        };
+      } else {
+        outcome = {
+          error,
+          event: {
+            type: 'tool.failed',
+            toolId: tool.id,
+            durationMs,
+            error,
+          },
+        };
       }
-      throw error;
     }
+
+    await this.emit(options.onEvent, outcome.event);
+    if ('result' in outcome) {
+      return outcome.result;
+    }
+    throw outcome.error;
   }
 
   private validateDefinition<TId extends string, TInput, TOutput>(
@@ -124,8 +146,10 @@ export class ToolRuntime {
     }
   }
 
-  private isAbortedError(error: unknown): boolean {
-    return error instanceof ToolRuntimeError && error.code === 'TOOL_ABORTED';
+  private isAbortedError(error: unknown, signal: AbortSignal | undefined): boolean {
+    return signal?.aborted === true || (
+      error instanceof ToolRuntimeError && error.code === 'TOOL_ABORTED'
+    );
   }
 
   private durationSince(startedAt: number): number {
