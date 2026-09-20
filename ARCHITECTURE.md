@@ -121,6 +121,50 @@ Resume validation still occurs before acquisition and allows credential
 rotation when semantic runtime identity is unchanged. Q2 does not change the
 15-node Judge graph or introduce a new checkpoint/resume lifecycle.
 
+## Capability runtime — R2A
+
+R2A adds the domain-neutral `@harness/capability` package without changing
+production Judge or Screen wiring. Its dependency direction is deliberately
+small:
+
+```text
+@harness/capability
+          |
+          v
+@harness/tool-runtime
+```
+
+The implemented contracts are:
+
+```text
+CapabilityDescriptor
+    = safe public data-only metadata
+
+CapabilityRegistration<TTool>
+    = descriptor + explicit ToolDefinition binding
+
+CapabilityRegistry
+    = immutable registration and discovery truth
+
+resolveTool(id)
+    = trusted lookup-only access to the registered ToolDefinition
+
+ToolRuntime
+    = execution authority
+```
+
+`CapabilityRegistry.list()` and `describe(id)` return detached frozen public
+descriptors ordered by canonical capability ID. Construction validates required
+descriptor fields, duplicate IDs, minimum tool-definition structure, and exact
+descriptor/tool ID agreement. `resolveTool()` returns the registered explicit
+`ToolDefinition`; it does not execute, invoke, wrap, schedule, authorize, or
+otherwise become another runtime.
+
+R2A is not authorization. It provides no policy, principals, grants, gateway,
+durable capability execution plan, capability-aware resume compatibility,
+financial production migration, or MCP integration. `resolveTool()` is a
+trusted composition hook, not an authorization boundary.
+
 ## Core boundaries and invariants
 
 - `Session → Turn → Execution` is the canonical lifecycle. A conversational
@@ -130,7 +174,8 @@ rotation when semantic runtime identity is unchanged. Q2 does not change the
 - Bull, Bear, and Judge are workflow-scoped specialists. Other commands do not
   implicitly invoke the debate pipeline.
 - Natural-language input is handled by `MainFinHarnessAgent`; it does not
-  silently execute `/judge`, `/research`, `/compare`, or `/screen`.
+  silently execute `/judge`, `/research`, `/compare`, `/challenge`,
+  `/investigate`, or `/screen`.
 - Provider cache/freshness, Evidence, artifacts, context, and workflow
   execution are separate storage and authority boundaries.
 - `SessionWorkingContext` is durable relevance state, `ContextPacket` is a
@@ -139,6 +184,10 @@ rotation when semantic runtime identity is unchanged. Q2 does not change the
 - Historical artifacts can be reused as bounded same-session context, but they
   do not memoize a new `/judge` or become authoritative current-run evidence.
 - Persistence is owned by workflow/composition boundaries, not by model output.
+- `CapabilityRegistry` is discovery truth, not policy or execution authority.
+- `ToolRuntime` remains the sole authority for executing an explicit `ToolDefinition`.
+- `WorkflowNode.executor` remains audit ownership metadata, not authorization.
+- Skills and skill content are instructions, not capability grants.
 
 ## Canonical lifecycle
 
@@ -171,7 +220,8 @@ same Execution row and ID; it does not create a retry Execution.
 
 The implemented command surface includes `/judge`, `/screen`, `/search`,
 `/history`, `/session`, `/resume`, `/web`, `/export`, `/version`, setup/status
-commands, and local session controls. `/challenge`, `/compare`,
+commands, and local session controls. `/judge` is the current mature research
+vertical; `/screen` and `/search` are implemented. `/challenge`, `/compare`,
 `/investigate`, and `/research` remain planned stubs.
 
 `/resume <executionId>` validates and continues an interrupted canonical Judge
@@ -231,6 +281,12 @@ journal replay. Context snapshots are immutable invocation records. Model calls
 link to the exact snapshot when one is used. Conversation context may reuse
 valid same-session research references, but it does not turn historical output
 into current-run evidence or trigger a hidden workflow.
+
+The current conversation preparation path explicitly passes
+`conversationHistory: ''` to the context budgeter. Durable research-context
+follow-up is implemented, but general retained multi-turn transcript injection,
+summary composition, and robust cross-turn reference resolution are not yet a
+general model-context feature.
 
 ## Workflow runtime
 
@@ -406,15 +462,15 @@ credentials.
 ## Current roadmap
 
 The current and future milestone order is maintained in
-[`docs/ROADMAP.md`](docs/ROADMAP.md). Q2 is complete on this implementation
-branch. R1 is now complete on this implementation branch; the next milestone
-is:
+[`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, and R2A are complete on
+`master`. The next milestone is:
 
-**R2 — Capability Registry + Policy + Integrations**
+**R2B — Deterministic Policy + Capability Gateway**
 
-Q1, Q2, and R1 are complete on this branch. PR P continues to restore the same
-Execution's validated snapshot, Evidence, and typed debate outputs without
-changing its lifecycle or Judge graph. The full future order is maintained in
+R2C — Production Capability Integration + Resume Semantics — remains future
+work. PR P continues to restore the same Execution's validated snapshot,
+Evidence, and typed debate outputs without changing its lifecycle or Judge
+graph. The full future order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ### R1 Typed Tool Runtime
@@ -430,5 +486,6 @@ The CLI composes eight explicit financial definitions over the authoritative
 `FinancialDataProvider` seam. Judge uses seven ticker operations and Screen
 uses the screening operation; both retain their existing business behavior and
 public event projections. The generic runtime remains domain-neutral and does
-not import CLI event types or financial packages. R2 is the future capability
-registry, policy, and integration layer.
+not import CLI event types or financial packages. R2A adds immutable capability
+contracts and discovery; R2B and R2C remain future policy and production
+integration work.

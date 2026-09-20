@@ -4,149 +4,145 @@ Last updated: 2026-09-20
 
 ## Current state
 
-The stateful architecture milestones **A–P** are complete on master. Q1, Q2,
-and R1 are complete on the current implementation branch.
+The stateful architecture milestones **A-P** are complete on `master`. **Q1**,
+**Q2**, **R1**, and **R2A** are also complete on `master`.
 
-The next milestone is **R2 — Capability Registry + Policy + Integrations**.
-R2 remains planned after the completed **R1 — Typed Tool Runtime** milestone.
+The current next milestone is **R2B — Deterministic Policy + Capability
+Gateway**. **R2C — Production Capability Integration + Resume Semantics** is
+future work.
 
-PR O is the durable resumability foundation. PR P connects it to the production
-Judge graph for true same-Execution `/judge` resume. Q1 established the
-provider-neutral model runtime seam; Q2 connects it to durable Session
-selection, production context budgeting, actual ModelCall provenance, and
-runtime-plan-aware Judge profiles without changing PR P lifecycle semantics.
+The canonical future sequence and dependency rationale live in
+[`docs/ROADMAP.md`](ROADMAP.md). This document is the mutable current-status
+view, not a second detailed roadmap.
 
 ## Recently completed
 
-### PR O — Durable Resumability Foundation
+### R2A — Capability Contracts + Immutable Registry
 
-Key result:
+Status: **complete on master**.
 
-```text
-interrupted lifecycle
-        +
-immutable ExecutionProfile
-        +
-workflow version / graph fingerprint
-        +
-immutable WorkflowNodeOutput
-        +
-WorkflowRunner restore seeds
-        +
-startup reconciliation
-```
+R2A adds the domain-neutral `@harness/capability` package with:
 
-PR P adds typed Judge checkpoints, a pre-acquisition compatibility gate,
-same-Turn control-command handling, DAG-safe restore, projection repair,
-idempotent final publication, `/resume <executionId>`, and `/continue`.
+- `CapabilityDescriptor` for safe public data-only metadata;
+- `CapabilityRegistration<TTool>` for descriptor plus explicit typed tool binding;
+- immutable, deterministic `CapabilityRegistry` discovery;
+- typed `CapabilityRegistryError` failures;
+- `list()`, `describe(id)`, and trusted lookup-only `resolveTool(id)`.
 
-### PR N — Verified Financial Snapshot
-
-Key result:
-
-```text
-FinancialDataProvider
-        ↓
-deterministic verification
-        ↓
-Evidence
-        ↓
-VerifiedFinancialSnapshot
-        ↓
-Bull / Bear / Judge
-```
-
-The snapshot is immutable, execution-scoped, and finalized before reasoning.
-
-### PR M — Financial Data Provider Seam
-
-Financial workflows use a provider-neutral contract, with Sectors remaining the
-current provider implementation. Retrieval policy and provider metadata remain
-separate from evidence and snapshots.
-
-## Completed on this branch
-
-### Q1 — Model Runtime + Provider Directory
-
-Status: **complete on master**
-
-Q1 evolved `@harness/llm` into the canonical provider-neutral runtime seam.
-It provides immutable provider/model directory snapshots, explicit logical
-provider routes, adapter/protocol separation, safe runtime descriptors and
-fingerprints, one-shot prepared calls, actual invocation metadata, and mock
-parity.
+R2A validates required descriptor fields, duplicate canonical IDs, descriptor
+and tool ID agreement, and the minimum structural contract for a tool binding.
+It does not add authorization, policy, a gateway, production financial
+migration, MCP integration, or capability-aware resume semantics. `ToolRuntime`
+remains the sole execution authority.
 
 ### Q2 — Durable Model Selection + Production Integration
 
-Status: **complete**
-
 Q2 adds append-only, restart-persistent `SessionModelSelection` rows and keeps
 default configuration, Session intent, execution runtime plans, and actual
-ModelCall provenance distinct. Session-local model setters no longer write
-`config.json`. The selected logical provider is composed into a pure runtime
-plan with ordered fallbacks and effective capabilities; real Context budgeting
-uses that plan.
+ModelCall provenance distinct. The selected logical provider is composed into a
+pure runtime plan with ordered fallbacks and effective capabilities; real
+Context budgeting uses that plan.
 
 MainFinHarnessAgent and SubagentRuntime use result-bearing runtime calls, and
 durable ModelCalls persist actual provider/model, adapter, protocol, and
-secret-free runtime fingerprints. New Judge profiles pin the semantic runtime
-plan while old PR P profiles remain readable. Resume continues to mean the
-same Execution and same Turn; Q2 does not redesign checkpoints or add another
-`/resume` implementation.
-
-## Next milestone
+secret-free runtime fingerprints. Judge profiles pin the semantic runtime plan
+while older PR P profiles remain readable. Resume remains same-Execution and
+same-Turn behavior.
 
 ### R1 — Typed Tool Runtime
 
-Status: **complete on this implementation branch**
+R1 provides explicit typed `ToolDefinition` contracts, one-shot ToolRuntime
+validation and execution, lifecycle and cancellation semantics, and explicit
+CLI financial adapters. R1 did not add capability discovery, policy,
+integrations, or durable tool authority.
 
-R1 adds the explicit typed ToolRuntime contract, lifecycle and cancellation
-semantics, eight CLI financial adapters, and compatibility integration for
-Judge and Screen. It does not add capability discovery, policy, integrations,
-or durable tool authority.
+### PR O / PR P — Durable Resumability and Judge Resume
 
-### R2 — Capability Registry + Policy + Integrations
+PR O provides immutable lifecycle profiles, typed node outputs, generation
+fencing, startup reconciliation, and generic restored-node support. PR P
+connects those contracts to the production 15-node Judge graph for validated
+same-Execution `/resume` and `/continue`, projection repair, and idempotent
+publication.
 
-Status: **next / planned after R1**
+### PR M / PR N — Financial Provider Seam and Verified Snapshot
 
-Capability registry, policy, and integrations are intentionally not part of R1.
-
-### PR P — `/judge` Same-Execution Checkpoint / Resume
-
-Status: **complete on master**
-
-Target behavior:
-
-```text
-Execution #52
-
-Financial Snapshot     restored
-Evidence               restored
-Bull                   restored
-Bear                   restored
-Rebuttal               restored
-Judge                  interrupted
-
-        ↓ /resume #52
-
-Execution #52
-
-Judge                  execute
-evidence check         execute
-verdict synthesis      execute
-final publication      repaired / completed
-```
-
-The invariant is the same Execution. No Execution #53 is created by resume.
+Financial workflows depend on the provider-neutral `FinancialDataProvider`
+contract. Provider results are verified and finalized into an immutable,
+execution-scoped `VerifiedFinancialSnapshot` before reasoning.
 
 ## Current command status
 
-Implemented commands include `/judge`, `/screen`, `/search`, `/history`,
-`/session`, `/resume <executionId>`, `/continue`, `/web`, `/export`, `/version`,
-`/auth-set`, `/setup`, `/status`, `/providers`, `/new`, `/help`, and `/exit`.
+```text
+/judge
+implemented, mature research workflow
 
-The command surface also contains planned stubs for `/challenge`, `/compare`,
-`/investigate`, and `/research`.
+/screen
+implemented
+
+/search
+implemented
+
+/research
+stub
+
+/compare
+stub
+
+/challenge
+stub
+
+/investigate
+stub
+```
+
+The broader CLI also contains implemented lifecycle, setup, export, web,
+configuration, and session-control commands. `/judge` is the current mature
+research vertical; `/screen` and `/search` are implemented but remain open to
+future maturation. `/research`, `/compare`, `/challenge`, and `/investigate`
+remain planned stubs.
+
+## Current conversation status
+
+Implemented conversation foundation includes:
+
+- durable `ConversationJournal`;
+- `ConversationController` and streaming conversation output;
+- durable `SessionWorkingContext`;
+- artifact-aware context retrieval;
+- `ContextPacket` and immutable `ContextSnapshot`;
+- token budgeting and deterministic compaction;
+- same-session research-context follow-up;
+- restart-safe durable research context.
+
+Current production conversation preparation explicitly passes
+`conversationHistory: ''`. Therefore full general retained multi-turn transcript
+injection, bounded recent-turn selection, conversation-summary composition, and
+robust cross-turn reference resolution are not yet implemented as a general
+conversation system.
+
+Natural-language conversation does not silently execute `/judge`, `/research`,
+`/compare`, `/challenge`, `/investigate`, or `/screen`. Fresh research remains
+an explicit command boundary.
+
+## Next milestone
+
+### R2B — Deterministic Policy + Capability Gateway
+
+Status: **next**.
+
+R2B is future authorization work: explicit caller identity, deterministic
+policy, and a gateway that mediates access to registered capabilities before a
+trusted `ToolDefinition` reaches `ToolRuntime`. Exact principals, grants,
+policy representation, and gateway APIs are not yet locked.
+
+### R2C — Production Capability Integration + Resume Semantics
+
+Status: **future**.
+
+R2C will move production capabilities through the future gateway while
+preserving `FinancialDataProvider` as the financial seam and will address
+capability-related execution semantic compatibility for durable resume. No
+finalized capability plan or fingerprint contract exists yet.
 
 ## Maintenance policy
 
@@ -154,7 +150,8 @@ Update this file when:
 
 - a major architecture PR merges;
 - the current milestone changes;
-- the next milestone changes materially.
+- the next milestone changes materially;
+- a command changes between implemented and stub status.
 
-Do not create a new progress folder or per-PR status file. This document is the
-single mutable current-status view; Git history records previous versions.
+Do not create a new progress folder or per-PR status file. Git history records
+previous versions; [`docs/ROADMAP.md`](ROADMAP.md) owns future detail.

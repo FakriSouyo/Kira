@@ -37,15 +37,16 @@ User
 
 The Bull/Bear/Judge debate belongs to `/judge` only.
 
-Normal conversation does **not** silently auto-run `/judge`, `/research`, `/compare`, or `/screen`. Slash commands remain explicit workflow boundaries.
+Normal conversation does **not** silently auto-run `/judge`, `/research`, `/compare`, `/challenge`, `/investigate`, or `/screen`. Slash commands remain explicit workflow boundaries.
 
 ## What is implemented
 
 ### Stateful harness runtime
 
-The A-L stateful-context foundation is complete. M, N, and O extend it with a
-provider seam, verified financial input boundary, and durable resumability
-foundation:
+The A-P stateful lifecycle/context foundation, Q1, Q2, R1, and R2A are complete
+on `master`. They provide the canonical lifecycle, model runtime, typed tool
+runtime, immutable capability discovery, provider seam, verified financial input
+boundary, and durable resumability foundation:
 
 ```text
 Session
@@ -82,7 +83,7 @@ This gives FinHarness:
 - deterministic context selection
 - token budgeting and compaction
 - exact `ContextSnapshot → ModelCall` linkage
-- restart-safe conversational follow-up
+- restart-safe research-context follow-up (not full general transcript injection)
 - execution-scoped specialist context for Bull/Bear/Judge
 
 Artifact reuse means **reuse as prior conversational context**, not workflow memoization. A new `/judge BBRI` still executes a new judge workflow.
@@ -166,6 +167,18 @@ PR P connects those contracts to the production `/judge` graph. `/resume
 profile and typed checkpoints, restore the same interrupted Execution's valid
 DAG prefix, and continue pending nodes without refetching accepted financial
 input. `/session <executionId>` remains the read-only session/execution viewer.
+
+### Capability foundation — R2A
+
+R2A adds the domain-neutral `@harness/capability` package. Its immutable
+`CapabilityRegistry` exposes safe data-only descriptors through `list()` and
+`describe(id)`, while trusted composition code may use lookup-only
+`resolveTool(id)` to obtain the registered explicit `ToolDefinition`.
+
+The registry is not authorization and does not execute tools. `ToolRuntime`
+remains the sole execution authority. R2B — Deterministic Policy + Capability
+Gateway — is next; Judge and Screen production paths have not been migrated to
+the registry.
 
 ### Selective financial retrieval
 
@@ -357,7 +370,10 @@ downside paling bahaya apa?
 balik ke thesis BBRI tadi
 ```
 
-Follow-up turns can reuse structured same-session context without rerunning `/judge`.
+Follow-up turns can reuse structured same-session research context without
+rerunning `/judge`. This is not full general retained conversation-history
+injection: production conversation preparation currently passes
+`conversationHistory: ''` to the model context budgeter.
 
 Historical artifacts may be recovered as **prior research context** when they are valid and relevant. They are not presented as newly refreshed financial data.
 
@@ -389,13 +405,19 @@ External seams:
   packages/llm
   packages/financial-data  FinancialDataProvider contract
   packages/sectors-api
+  packages/capability      immutable capability discovery (R2A)
+  packages/tool-runtime    explicit ToolDefinition execution authority
 ```
+
+The R2A capability package is currently a domain-neutral foundation; existing
+Judge and Screen production wiring remains unchanged until future R2B/R2C work.
 
 ### Main packages
 
 ```text
 packages/
   command/       command/workflow contracts and /judge definition
+  capability/    safe capability descriptors and immutable registry
   context/       ContextPacket, retrieval, validity, policy, budget, snapshot
   conversation/  durable conversation store contracts
   database/      SQLite stores and migrations
@@ -411,6 +433,7 @@ packages/
   shared/        shared utilities
   skill/         skill contracts/providers
   subagent/      specialist manifests and runtime
+  tool-runtime/  typed one-shot tool execution runtime
 
 apps/
   cli/           REPL, workflow adapters, setup, local UI
@@ -475,7 +498,7 @@ Current CI runs on Node 22 and installs the pnpm version declared by `packageMan
 
 ## Current baseline
 
-The completed stateful harness roadmap is:
+The completed foundation and current capability-runtime position are:
 
 ```text
 A  Canonical Session → Turn → Execution
@@ -497,16 +520,19 @@ L  Artifact-aware retrieval + validity + prior-context reuse
  Q1 Model Runtime + Provider Directory (complete)
  Q2 Durable Model Selection + Production Integration (complete)
  R1 Typed Tool Runtime (complete)
- R2 Capability Registry + Policy + Integrations (next / planned)
+ R2A Capability Contracts + Immutable Registry (complete)
+ R2B Deterministic Policy + Capability Gateway (next)
+ R2C Production Capability Integration + Resume Semantics (future)
 ```
 
-A-P are complete and merged into `master`. Q1, Q2, and R1 are complete on this
-implementation branch. R2 is the next planned milestone.
+A-P, Q1, Q2, R1, and R2A are complete and merged into `master`. R2B is the
+next milestone; R2C remains future work. See [docs/ROADMAP.md](docs/ROADMAP.md)
+for the S-Z future sequence and dependency rationale.
 
 PR M adds the Financial Data Provider Seam; PR N adds the verified input boundary:
 
 ```text
-A-L  Stateful lifecycle/context foundation  COMPLETE
+A-L  Stateful lifecycle/context foundation         COMPLETE
  M   Financial Data Provider Seam           COMPLETE
  N   Verified Financial Snapshot             COMPLETE
  O   Durable Resumability Foundation         COMPLETE
@@ -515,30 +541,22 @@ A-L  Stateful lifecycle/context foundation  COMPLETE
 
 ## Next architecture work
 
-The next planned architecture phase starts from the PR O resumability boundary
-rather than replacing the A-L foundation.
+The next planned architecture phase starts from the R2A immutable capability
+boundary rather than replacing the A-P foundation.
 
-Current direction after R1:
+Current direction after R2A:
 
-1. R1 — Typed Tool Runtime (complete)
-2. R2 — Capability Registry + Policy + Integrations
-3. S1 — Durable File / Attachment Layer
-4. S2 — Workspace + File Capability
-5. S3 — Document Understanding / Retrieval
-6. Evidence Policy + Claim Graph
-7. Reusable Research Subgraphs
-8. Risk Committee
-9. Research Graph
-10. Decision Journal
-11. Outcome Tracking + Reflection
-12. Z1 — Application Host / API Boundary
-13. Z2 — Web Surface
-14. Z3 — Desktop Host + Desktop Shell
-15. Z4 — Cross-Surface Integration / Final Polish
+1. R2B — Deterministic Policy + Capability Gateway (next)
+2. R2C — Production Capability Integration + Resume Semantics
+3. S — Files & Documents
+4. T — Evidence Policy + Claim Graph
+5. U — Research Composition + Product Completion
+6. V-Y — Decision Intelligence
+7. Z — Product Platform
 
 This product overview points to the canonical roadmap for the detailed future
-sequence. R2 remains planned; this branch does not claim R2 implementation.
-Q2 and R1 do not change PR P same-Execution resume semantics or add a second
+sequence, including U1-U8. No future R2B/R2C or U implementation is claimed
+here. Q2 and R1 do not change PR P same-Execution resume semantics or add a second
 `/resume` architecture.
 
 ## Documentation
