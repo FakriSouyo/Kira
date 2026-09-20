@@ -72,4 +72,27 @@ describe('durable SessionModelSelection', () => {
       sessionId: 'legacy-session', version: 1, providerId: 'openai', modelId: 'gpt-legacy', source: 'legacy',
     });
   });
+
+  it('keeps concurrent selection writes monotonic and preserves every winning row', async () => {
+    const second = openDb({ homeDir: dir });
+    try {
+      const session = await db.sessions.createSession({
+        sessionId: 'session-selection-concurrent', title: 'Concurrent', provider: 'openai', model: 'gpt-a', reasoningMode: 'usual',
+      });
+
+      const results = await Promise.all([
+        db.sessions.selectModel({ sessionId: session.id, providerId: 'openai', modelId: 'gpt-b', source: 'user' }),
+        second.sessions.selectModel({ sessionId: session.id, providerId: 'openai', modelId: 'gpt-c', source: 'user' }),
+      ]);
+      const history = await db.sessions.listModelSelections(session.id);
+
+      expect(results).toHaveLength(2);
+      expect(history.map(item => item.version)).toEqual([1, 2, 3]);
+      expect(new Set(history.map(item => item.version)).size).toBe(history.length);
+      expect(history.slice(1).map(item => item.modelId).sort()).toEqual(['gpt-b', 'gpt-c']);
+      expect((await db.sessions.getCurrentModelSelection(session.id))?.modelId).toBe(history.at(-1)?.modelId);
+    } finally {
+      second.raw.close();
+    }
+  });
 });

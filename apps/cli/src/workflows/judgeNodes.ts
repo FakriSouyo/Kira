@@ -1,6 +1,6 @@
 import type { BearCounterpoint, BearLLMOutput, BullLLMOutput, Claim, Evidence, Judgment } from '@harness/schemas';
 import type { JudgeNodeExecutors, JudgeNodeId, JudgeRoundDecision } from '@harness/command-judge';
-import type { SubagentResult } from '@harness/subagent-core';
+import type { SubagentResult, SubagentResultLike } from '@harness/subagent-core';
 import { assembleSpecialistContext, type SpecialistContextPacket, type SpecialistPhase, type SpecialistRole } from '@harness/context';
 import {
   createNotRequestedObservation,
@@ -83,12 +83,12 @@ export interface EvidenceSelection {
 export interface ThesisTurn {
   response: BullAnalysisResponse;
   claims: Claim[];
-  result: SubagentResult<unknown>;
+  result: SubagentResultLike<unknown>;
 }
 
 export interface ChallengeTurn {
   response: BearChallengeResponse;
-  result: SubagentResult<unknown>;
+  result: SubagentResultLike<unknown>;
 }
 
 export interface JudgeTurn {
@@ -96,7 +96,7 @@ export interface JudgeTurn {
   allClaims: Claim[];
   /** Inconclusive round-1 verdict → the conditional arbitration round must reopen the debate. */
   needsExtra: boolean;
-  result: SubagentResult<unknown>;
+  result: SubagentResultLike<unknown>;
 }
 
 export interface SynthesisTurn {

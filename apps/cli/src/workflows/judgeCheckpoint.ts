@@ -23,7 +23,7 @@ import type { Evidence } from '@harness/schemas';
 import { BearCounterpointSchema, BearLLMOutputSchema, BullLLMOutputSchema, ClaimSchema, JudgmentSchema } from '@harness/schemas';
 import type { ArtifactEnvelope } from '@harness/schemas';
 import { verifyFinancialObservation } from '@harness/financial-data';
-import type { SubagentResult } from '@harness/subagent-core';
+import type { SubagentResultLike, RestoredSubagentResult } from '@harness/subagent-core';
 import type { LLMCallMetadata } from '@harness/llm';
 import type { FinharnessDatabase } from '@harness/database';
 import type { ExecutionProfile, ResearchExecution } from '@harness/session-core';
@@ -60,7 +60,7 @@ export function workflowDependencyFingerprint(node: { id: string; dependsOn?: st
   });
 }
 
-function modelAudit(result: SubagentResult<unknown>): JudgeModelAudit {
+function modelAudit(result: SubagentResultLike<unknown>): JudgeModelAudit {
   return {
     subagent: result.subagent,
     skills: result.skills,
@@ -631,14 +631,11 @@ export async function repairJudgeProjections(params: {
       await params.db.judgments.save({ runId: params.execution.id, judgment: completedPayload.judgment as never });
     }
     const audit = auditFromPayload(completedPayload);
-    if (audit && (audit.modelCall || audit.contextSnapshotId !== undefined)) {
+    if (audit?.modelCall) {
       const stepId = `step_${params.execution.id}_${nodeId}`;
       const existing = await params.db.sessions.listModelCallsForStep(params.execution.id, stepId);
       if (existing.length === 0) {
-        const modelCall = audit.modelCall ?? {
-          provider: 'mock', model: 'unknown', inputTokens: null, outputTokens: null,
-          cachedInputTokens: null, totalTokens: null, finishReason: null, latencyMs: 0,
-        };
+        const modelCall = audit.modelCall;
         await params.db.sessions.recordModelCall({
           callId: `call_${params.execution.id}_${nodeId}_1`,
           runId: params.execution.id,
@@ -756,7 +753,7 @@ export async function repairCompletedJudgeArtifacts(params: {
   return repaired;
 }
 
-function resultFromAudit(audit: JudgeModelAudit, value: unknown): SubagentResult<unknown> {
+function resultFromAudit(audit: JudgeModelAudit, value: unknown): RestoredSubagentResult<unknown> {
   const modelCall: LLMCallMetadata | undefined = audit.modelCall ? {
     provider: audit.modelCall.provider as LLMCallMetadata['provider'],
     model: audit.modelCall.model,

@@ -27,9 +27,15 @@ export interface SubagentResult<T> {
   value: T;
   subagent: string;
   skills: SkillReference[];
-  modelCall?: LLMCallMetadata;
+  /** Actual metadata from the successful model-backed invocation. */
+  modelCall: LLMCallMetadata;
   contextSnapshotId?: string | null;
 }
+
+/** Historical restore values may predate result-bearing model metadata. */
+export type RestoredSubagentResult<T> = Omit<SubagentResult<T>, 'modelCall'> & { modelCall?: LLMCallMetadata };
+
+export type SubagentResultLike<T> = SubagentResult<T> | RestoredSubagentResult<T>;
 
 export interface RunObjectRequest<T> {
   manifest: SubagentManifest;
@@ -47,10 +53,6 @@ export interface SubagentRuntimeOptions {
     readonly modelCapabilities: ContextModelCapabilities;
     readonly reservedOutputTokens: number;
     readonly safetyMarginTokens: number;
-  };
-  readonly modelIdentity?: {
-    readonly provider: LLMCallMetadata['provider'];
-    readonly model: string;
   };
 }
 
@@ -108,15 +110,17 @@ export class SubagentRuntime {
       prompt: request.prompt,
       system: [evidenceZone, roleZone ? `${roleZone}\n\n${specialistZone}` : specialistZone],
     };
-    const generated = this.llm.generateObjectResult
-      ? await this.llm.generateObjectResult(params)
-      : { value: await this.llm.generateObject(params) };
-    const modelCall = 'metadata' in generated ? generated.metadata : undefined;
+    if (!this.llm.generateObjectResult) {
+      const error = new Error('Subagent runtime requires result-bearing model metadata');
+      Object.assign(error, { code: 'MODEL_METADATA_REQUIRED' });
+      throw error;
+    }
+    const generated = await this.llm.generateObjectResult(params);
     return {
       value: request.schema.parse(generated.value),
       subagent: request.manifest.id,
       skills: loadedSkills.map(({ name, contentHash }) => ({ name, contentHash })),
-      ...(modelCall ? { modelCall } : {}),
+      modelCall: generated.metadata,
       ...(request.specialistContext ? { contextSnapshotId } : {}),
     };
   }

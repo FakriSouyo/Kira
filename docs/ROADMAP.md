@@ -28,24 +28,22 @@ reasoning inside explicit command boundaries.
 - **O — Durable Resumability Foundation:** interrupted lifecycle state, immutable profiles and node outputs, generation fencing, startup reconciliation, and generic restored-node runner support are available.
 - **P — `/judge` Same-Execution Checkpoint / Resume:** typed Judge checkpoints, validated DAG restoration, same-Execution continuation, `/resume`, `/continue`, projection repair, and idempotent publication are complete.
 - **Q1 — Model Runtime + Provider Directory:** provider-neutral runtime contracts, immutable directory snapshots, adapter boundaries, safe fingerprints, one-shot prepared calls, invocation metadata, and compatibility integration are complete.
+- **Q2 — Durable Model Selection + Production Integration:** append-only Session model intent, immutable runtime-plan composition, plan-aware Context budgeting, actual model provenance, and runtime-plan-compatible Judge resume are complete.
 
 ## Current milestone
 
-### Q — Model Runtime and durable selection
+### R1 — Capability Registry + Typed Tool Runtime
 
-- **Q2 — Durable Model Selection + Production Integration:** durable per-Session
-  model intent, logical provider composition, side-effect-free execution plans,
-  plan-aware context budgeting, result-bearing production integration, actual
-  ModelCall provenance, and Judge runtime-plan compatibility are complete on
-  this implementation branch. Q2 does not add a new `/resume` architecture;
-  it preserves PR P same-Execution resume semantics.
+Status: planned. No R1 implementation is claimed by the current repository
+state. The next design work will generalize model capabilities into a typed
+capability registry and tool-runtime boundary without changing the canonical
+Session → Turn → Execution lifecycle.
 
 ## Future milestones
 
 ### Future order
 
 - Model Runtime Generalization
-- Capability Registry + Typed Tool Runtime
 
 ### Files & Documents
 

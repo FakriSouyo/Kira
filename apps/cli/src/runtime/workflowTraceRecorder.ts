@@ -88,11 +88,13 @@ export class WorkflowTraceRecorder {
       stepId: this.stepId(nodeId), runId: this.options.runId, nodeId, parentNodeIds: node.dependsOn ?? [],
       subagent: result.subagent, skills: result.skills, status: 'running', ...(summary ? { summary } : {}),
     });
-    if (!result.modelCall && result.contextSnapshotId === undefined) return;
-    const modelCall = result.modelCall ?? {
-      provider: 'mock' as const, model: 'unknown', inputTokens: null, outputTokens: null,
-      cachedInputTokens: null, totalTokens: null, latencyMs: 0, finishReason: null,
-    };
+    if (!result.modelCall) {
+      if (result.contextSnapshotId === undefined) return;
+      const error = new Error('Workflow trace requires actual model metadata');
+      Object.assign(error, { code: 'MODEL_METADATA_REQUIRED' });
+      throw error;
+    }
+    const modelCall = result.modelCall;
     const pricing = this.options.pricingFor?.(modelCall.provider, modelCall.model) ?? null;
     const billed = calculateModelCost(modelCall, pricing);
     const stepId = this.stepId(nodeId);

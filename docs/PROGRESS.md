@@ -4,9 +4,10 @@ Last updated: 2026-09-20
 
 ## Current state
 
-The stateful architecture milestones **A–P** are complete on master.
+The stateful architecture milestones **A–P** are complete on master. Q1 and Q2
+are complete on the current implementation branch.
 
-The current milestone is **Q2 — Durable Model Selection + Production Integration**.
+The next milestone is **R1 — Capability Registry + Typed Tool Runtime**.
 
 PR O is the durable resumability foundation. PR P connects it to the production
 Judge graph for true same-Execution `/judge` resume. Q1 established the
@@ -62,7 +63,7 @@ Financial workflows use a provider-neutral contract, with Sectors remaining the
 current provider implementation. Retrieval policy and provider metadata remain
 separate from evidence and snapshots.
 
-## Current milestone
+## Completed on this branch
 
 ### Q1 — Model Runtime + Provider Directory
 
@@ -76,7 +77,7 @@ parity.
 
 ### Q2 — Durable Model Selection + Production Integration
 
-Status: **implemented on this branch**
+Status: **complete**
 
 Q2 adds append-only, restart-persistent `SessionModelSelection` rows and keeps
 default configuration, Session intent, execution runtime plans, and actual
@@ -91,6 +92,16 @@ secret-free runtime fingerprints. New Judge profiles pin the semantic runtime
 plan while old PR P profiles remain readable. Resume continues to mean the
 same Execution and same Turn; Q2 does not redesign checkpoints or add another
 `/resume` implementation.
+
+## Next milestone
+
+### R1 — Capability Registry + Typed Tool Runtime
+
+Status: **planned**
+
+R1 is the next design milestone. It is not implemented by this repository
+state; no capability registry, typed tool runtime, or R1 runtime behavior is
+being claimed here.
 
 ### PR P — `/judge` Same-Execution Checkpoint / Resume
 

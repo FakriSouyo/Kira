@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import type { GenerateObjectParams, LLMClientLike } from '@harness/llm';
+import type { GenerateObjectParams, LLMCallMetadata, LLMClientLike } from '@harness/llm';
 import { FilesystemSkillProvider } from '@harness/skill-filesystem';
 import { SubagentRuntime } from '@harness/subagent-core';
 import { BULL_MANIFEST, BullAgent } from '../src/index.js';
@@ -16,10 +16,10 @@ describe('BullAgent specialist', () => {
   it('builds a cited thesis and uses a distinct rebuttal prompt', async () => {
     const prompts: string[] = [];
     const llm = {
-      async generateObject<T>(params: GenerateObjectParams<T>): Promise<T> {
+      async generateObjectResult<T>(params: GenerateObjectParams<T>): Promise<{ value: T; metadata: LLMCallMetadata }> {
         prompts.push(params.prompt);
         const rebuttal = params.prompt.includes('Bear Agent raised the following challenges');
-        return params.schema.parse({
+        return { value: params.schema.parse({
           reasoning: rebuttal ? 'The challenge does not overturn the cited operating evidence.' : 'The evidence supports a constructive operating thesis.',
           claims: [{
             claimId: rebuttal ? 'rebuttal_1' : 'claim_1',
@@ -29,7 +29,10 @@ describe('BullAgent specialist', () => {
             evidenceIds: [evidenceId],
           }],
           evidenceIds: [evidenceId],
-        });
+        }), metadata: {
+          provider: 'mock', model: 'bull-test', inputTokens: null, outputTokens: null,
+          cachedInputTokens: null, totalTokens: null, finishReason: 'stop', latencyMs: 0,
+        } };
       },
     } as LLMClientLike;
     const runtime = new SubagentRuntime(

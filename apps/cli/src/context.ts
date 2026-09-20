@@ -33,12 +33,42 @@ export interface HarnessContext {
   runtimePlan?: ModelRuntimePlan;
 }
 
+export interface RuntimeBudget {
+  readonly modelCapabilities: {
+    readonly contextWindowTokens: number;
+    readonly fallbackContextWindowTokens?: readonly number[];
+  };
+  readonly reservedOutputTokens: number;
+}
+
+/** Derives context policy from the immutable runtime plan, including every retry route. */
+export function runtimeBudgetForPlan(plan: ModelRuntimePlan): RuntimeBudget {
+  const routes = [plan.primary, ...plan.fallbacks];
+  const outputLimits = routes.map(({ descriptor }) =>
+    descriptor.capabilities.maxOutputTokens ?? descriptor.generationControls.maxOutputTokens,
+  );
+  return {
+    modelCapabilities: {
+      contextWindowTokens: plan.primary.descriptor.capabilities.contextWindowTokens,
+      ...(plan.fallbacks.length
+        ? { fallbackContextWindowTokens: plan.fallbacks.map(route => route.descriptor.capabilities.contextWindowTokens) }
+        : {}),
+    },
+    reservedOutputTokens: Math.max(...outputLimits),
+  };
+}
+
 export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): HarnessContext {
   const agentLlm = createLLMClient(config.llm.agent, { mock: config.mockLlm });
   const routerLlm = createLLMClient(config.llm.router, { mock: config.mockLlm });
   const runtimePlan = agentLlm.describeRuntimePlan?.();
-  const budgetPlan = config.mockLlm ? undefined : runtimePlan;
-  const primaryCapabilities = budgetPlan?.primary.descriptor.capabilities ?? {
+  // Mock mode retains its existing deterministic conversation budget. Real
+  // model-backed lifecycle calls derive policy from the immutable plan.
+  const runtimeBudget = !config.mockLlm && runtimePlan ? runtimeBudgetForPlan(runtimePlan) : undefined;
+  const primaryCapabilities = !config.mockLlm && runtimeBudget ? {
+    ...runtimeBudget.modelCapabilities,
+    maxOutputTokens: runtimeBudget.reservedOutputTokens,
+  } : {
     contextWindowTokens: config.llm.agent.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
     maxOutputTokens: config.llm.agent.maxTokens,
     supportsTextInput: true,
@@ -48,7 +78,9 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
   };
   const modelCapabilities = {
     contextWindowTokens: primaryCapabilities.contextWindowTokens,
-    ...(budgetPlan?.fallbacks.length ? { fallbackContextWindowTokens: budgetPlan.fallbacks.map(route => route.descriptor.capabilities.contextWindowTokens) } : {}),
+    ...('fallbackContextWindowTokens' in primaryCapabilities && primaryCapabilities.fallbackContextWindowTokens
+      ? { fallbackContextWindowTokens: primaryCapabilities.fallbackContextWindowTokens }
+      : {}),
   };
   const conversationCapabilities = config.mockLlm
     ? { contextWindowTokens: config.llm.agent.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS }
@@ -65,7 +97,7 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
           // real lifecycle calls use the configured agent capability exactly.
           ...(config.mockLlm ? { contextWindowTokens: DEFAULT_CONTEXT_WINDOW_TOKENS } : modelCapabilities),
         },
-        reservedOutputTokens: config.llm.agent.maxTokens,
+        reservedOutputTokens: runtimeBudget?.reservedOutputTokens ?? config.llm.agent.maxTokens,
         safetyMarginTokens: DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS,
       },
     },
@@ -92,7 +124,7 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
       modelCapabilities: {
         ...conversationCapabilities,
       },
-      reservedOutputTokens: config.llm.agent.maxTokens,
+      reservedOutputTokens: runtimeBudget?.reservedOutputTokens ?? config.llm.agent.maxTokens,
       safetyMarginTokens: DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS,
     }),
     validator: new ClaimValidator(db.evidence),

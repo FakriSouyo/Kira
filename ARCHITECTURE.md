@@ -406,11 +406,12 @@ credentials.
 ## Current roadmap
 
 The current and future milestone order is maintained in
-[`docs/ROADMAP.md`](docs/ROADMAP.md). The next milestone is:
+[`docs/ROADMAP.md`](docs/ROADMAP.md). Q2 is complete on this implementation
+branch; the next milestone is:
 
-**Q2 — Durable Model Selection + Production Integration**
+**R1 — Capability Registry + Typed Tool Runtime**
 
-Q1 is complete. Q2 is the current implementation milestone on this branch. PR P
-continues to restore the same Execution's validated snapshot, Evidence, and
-typed debate outputs without changing its lifecycle or Judge graph. The full
-future order is maintained in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+R1 is planned and not implemented here. Q1 and Q2 are complete on this branch;
+PR P continues to restore the same Execution's validated snapshot, Evidence,
+and typed debate outputs without changing its lifecycle or Judge graph. The
+full future order is maintained in [`docs/ROADMAP.md`](docs/ROADMAP.md).

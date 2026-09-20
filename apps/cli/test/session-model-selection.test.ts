@@ -35,4 +35,17 @@ describe('session-local model selection', () => {
     });
     await session.close();
   });
+
+  it('seeds /new from the global default instead of the previous Session selection', async () => {
+    const session = await createHarnessSession(db, loadConfig({ homeDir, mockSectors: true, mockLlm: true }));
+    const firstSessionId = session.conversation.id;
+    await session.setModel('session-only-model');
+
+    await session.commands.get('new')!([], { input: '/new' });
+
+    expect(session.conversation.id).not.toBe(firstSessionId);
+    expect(await db.sessions.getCurrentModelSelection(firstSessionId)).toMatchObject({ version: 2, modelId: 'session-only-model', source: 'user' });
+    expect(await db.sessions.getCurrentModelSelection(session.conversation.id)).toMatchObject({ version: 1, providerId: 'openai', modelId: 'configured-model', source: 'initial' });
+    await session.close();
+  });
 });

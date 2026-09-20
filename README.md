@@ -495,11 +495,12 @@ L  Artifact-aware retrieval + validity + prior-context reuse
  O  Durable Resumability Foundation
  P  /judge Same-Execution Checkpoint / Resume
  Q1 Model Runtime + Provider Directory (complete)
- Q2 Durable Model Selection + Production Integration (current)
+ Q2 Durable Model Selection + Production Integration (complete)
+ R1 Capability Registry + Typed Tool Runtime (planned)
 ```
 
-A-P and Q1 are complete and merged into `master`. Q2 is the current
-durable-selection and production-integration milestone on this branch.
+A-P are complete and merged into `master`. Q1 and Q2 are complete on this
+implementation branch. R1 is the next planned milestone.
 
 PR M adds the Financial Data Provider Seam; PR N adds the verified input boundary:
 
@@ -518,21 +519,21 @@ rather than replacing the A-L foundation.
 
 Current direction after PR P:
 
-1. Q2 — Durable Model Selection + Production Integration
+1. R1 — Capability Registry + Typed Tool Runtime
 2. Model Runtime Generalization
-3. Capability Registry + Typed Tool Runtime
-4. Document & File Workspace
-5. Evidence Policy + Claim Graph
-6. Reusable Research Subgraphs
-7. Risk Committee
-8. Research Graph
-9. Decision Journal
-10. Outcome Tracking + Reflection
-11. UI integration / polish
+3. Document & File Workspace
+4. Evidence Policy + Claim Graph
+5. Reusable Research Subgraphs
+6. Risk Committee
+7. Research Graph
+8. Decision Journal
+9. Outcome Tracking + Reflection
+10. UI integration / polish
 
 This product overview points to the canonical roadmap for the detailed future
-sequence. Q2 does not begin R1 or Capability Registry work, and it does not
-change PR P same-Execution resume semantics.
+sequence. R1 is planned only; this branch does not claim R1 implementation. Q2
+does not change PR P same-Execution resume semantics or add a second `/resume`
+architecture.
 
 ## Documentation
 

@@ -30,13 +30,29 @@ function manifest(persona: string): SubagentManifest {
   };
 }
 
+const actualModelCall = {
+  provider: 'openai' as const,
+  model: 'usage-model',
+  providerId: 'openai',
+  modelId: 'usage-model',
+  adapterId: 'openai-compatible',
+  protocol: 'openai-chat',
+  runtimeFingerprint: 'f'.repeat(64),
+  inputTokens: 1,
+  outputTokens: 1,
+  cachedInputTokens: null,
+  totalTokens: 2,
+  finishReason: 'stop',
+  latencyMs: 1,
+};
+
 describe('SubagentRuntime', () => {
   it('keeps evidence in cache zone one and injects persona plus mandatory skills into zone two', async () => {
     let capturedSystem: string | string[] | undefined;
     const llm = {
-      async generateObject(params) {
+      async generateObjectResult(params) {
         capturedSystem = params.system;
-        return { summary: 'Primary source verified' };
+        return { value: params.schema.parse({ summary: 'Primary source verified' }), metadata: actualModelCall };
       },
     } as LLMClientLike;
     const runtime = new SubagentRuntime(llm, new FixedSkillProvider());
@@ -56,15 +72,16 @@ describe('SubagentRuntime', () => {
       value: { summary: 'Primary source verified' },
       subagent: 'researcher',
       skills: [{ name: 'source-quality', contentHash: 'hash-source-quality' }],
+      modelCall: actualModelCall,
     });
   });
 
   it('does not let different specialist personas alter the shared evidence zone', async () => {
     const systems: Array<string | string[]> = [];
     const llm = {
-      async generateObject(params) {
+      async generateObjectResult(params) {
         systems.push(params.system ?? '');
-        return { summary: 'ok' };
+        return { value: params.schema.parse({ summary: 'ok' }), metadata: actualModelCall };
       },
     } as LLMClientLike;
     const runtime = new SubagentRuntime(llm, new FixedSkillProvider());
@@ -118,7 +135,7 @@ describe('SubagentRuntime', () => {
     expect(result.modelCall).toEqual(expect.objectContaining({ model: 'usage-model', totalTokens: 33 }));
   });
 
-  it('does not fabricate model identity when a legacy value-only caller supplies no metadata', async () => {
+  it('rejects a legacy value-only caller before it can produce an unaudited specialist result', async () => {
     const evidence: Evidence[] = [{
       id: '11111111-1111-4111-8111-111111111111', runId: 'execution-1', ticker: 'BBCA', source: 'sectors.company_report',
       sourceType: 'api', contentHash: 'hash-a', retrievedAt: '2026-09-18T00:00:00.000Z', data: { financials: { roe: 18.4 } },
@@ -144,21 +161,16 @@ describe('SubagentRuntime', () => {
         async getById() { return snapshots[0] ?? null; },
       },
       budget: { modelCapabilities: { contextWindowTokens: 8192 }, reservedOutputTokens: 128, safetyMarginTokens: 32 },
-      modelIdentity: { provider: 'mock', model: 'mock-specialist' },
     });
 
-    const result = await runtime.runObject({
+    await expect(runtime.runObject({
       manifest: manifest('You are the Bull Agent.'), specialistContext: context, prompt: 'Analyze.',
       schema: z.object({ summary: z.string() }),
-    });
+    })).rejects.toMatchObject({ code: 'MODEL_METADATA_REQUIRED' });
 
-    expect(order).toEqual(['snapshot', 'model']);
+    expect(order).toEqual(['snapshot']);
     expect(snapshots).toHaveLength(1);
-    expect(capturedSystem).toEqual([
-      rendered.evidenceZone,
-      expect.stringContaining(rendered.roleZone),
-    ]);
-    expect(result.contextSnapshotId).toBe(snapshots[0]!.snapshotId);
-    expect(result.modelCall).toBeUndefined();
+    expect(capturedSystem).toBeUndefined();
+    expect(rendered.roleZone).toBeDefined();
   });
 });
