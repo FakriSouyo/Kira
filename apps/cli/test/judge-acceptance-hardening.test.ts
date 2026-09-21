@@ -68,13 +68,15 @@ async function createFixture(
   const execution = await db.sessions.createExecution({
     executionId, sessionId: session.id, turnId: turn.id, ticker: 'BBCA', command: 'judge',
   });
-  const runtimePlan = options.runtimePlan ? buildContext(db, config).runtimePlan : undefined;
+  const composition = buildContext(db, config);
+  const runtimePlan = options.runtimePlan ? composition.runtimePlan : undefined;
   const profile = createJudgeExecutionProfile({
     executionId: execution.id, ticker: 'BBCA',
     reasoningMode: options.reasoningMode ?? 'usual',
     conditional: options.conditional ?? false,
     researchers: config.researchers,
     provider: config.llm.agent.providerId ?? config.llm.agent.provider, model: config.llm.agent.model,
+    capabilityPlan: composition.judgeCapabilityPlan,
     ...(runtimePlan ? { runtimePlan } : {}),
     createdAt: execution.createdAt,
   });
@@ -289,7 +291,8 @@ describe('PR P final acceptance hardening', () => {
     const secondExecution = await db.sessions.createExecution({ executionId: 'run_continue_many_b', sessionId: ambiguous.sessionId, turnId: secondTurn.id, ticker: 'BBCA', command: 'judge' });
     const secondProfile = createJudgeExecutionProfile({
       executionId: secondExecution.id, ticker: 'BBCA', reasoningMode: 'usual', conditional: false,
-      researchers: config.researchers, provider: config.llm.agent.provider, model: config.llm.agent.model, createdAt: secondExecution.createdAt,
+      researchers: config.researchers, provider: config.llm.agent.provider, model: config.llm.agent.model,
+      capabilityPlan: buildContext(db, config).judgeCapabilityPlan, createdAt: secondExecution.createdAt,
     });
     await db.executionProfiles.save(secondProfile);
     await db.sessions.interruptExecution(secondExecution.id, 'second interruption');
@@ -453,6 +456,7 @@ describe('PR P final acceptance hardening', () => {
       profile: (await graphFixture.db.executionProfiles.getByExecutionId(graphFixture.executionId))!,
       definition: createJudgeWorkflow(), currentGraphFingerprint: judgeWorkflowGraphFingerprint(),
       provider: config.llm.agent.provider, model: config.llm.agent.model,
+      capabilityPlanFingerprint: (graphProfile!.payload as { capabilityPlanFingerprint: string }).capabilityPlanFingerprint,
     })).rejects.toMatchObject({ code: 'INCOMPATIBLE_CHECKPOINT' });
     expect((await sessionRows(graphFixture)).executions[0]?.status).toBe('interrupted');
 
@@ -468,6 +472,7 @@ describe('PR P final acceptance hardening', () => {
       profile: (await dependencyFixture.db.executionProfiles.getByExecutionId(dependencyFixture.executionId))!,
       definition: createJudgeWorkflow(), currentGraphFingerprint: judgeWorkflowGraphFingerprint(),
       provider: config.llm.agent.provider, model: config.llm.agent.model,
+      capabilityPlanFingerprint: ((await dependencyFixture.db.executionProfiles.getByExecutionId(dependencyFixture.executionId))!.payload as { capabilityPlanFingerprint: string }).capabilityPlanFingerprint,
     })).rejects.toThrow(/dependency fingerprint/i);
     expect((await sessionRows(dependencyFixture)).executions[0]?.status).toBe('interrupted');
   });
@@ -613,6 +618,7 @@ describe('PR P final acceptance hardening', () => {
     const plan = await planJudgeResume({
       db: fixture.db, execution: acquired, profile: profile!, definition,
       currentGraphFingerprint: judgeWorkflowGraphFingerprint(), provider: config.llm.agent.provider, model: config.llm.agent.model,
+      capabilityPlanFingerprint: (profile!.payload as { capabilityPlanFingerprint: string }).capabilityPlanFingerprint,
     });
     const context = buildContext(fixture.db, config);
     const recorder = new WorkflowTraceRecorder({ runId: fixture.executionId, definition, store: fixture.db.sessions });

@@ -18,8 +18,6 @@ describe('Screen tool-runtime composition', () => {
     const toolRuntime = new ToolRuntime();
     const financialTools = createFinancialTools(provider);
     const context = {
-      toolRuntime,
-      financialTools,
       capabilityGateway: createFinancialCapabilityGateway(financialTools, toolRuntime),
     } as unknown as HarnessContext;
 

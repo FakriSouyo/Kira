@@ -2,6 +2,8 @@ import {
   CapabilityGateway,
   CapabilityPolicy,
   CapabilityRegistry,
+  createCapabilityPlan,
+  type CapabilityPlan,
   type CapabilityRegistration,
 } from '@harness/capability';
 import type { ToolRuntime } from '@harness/tool-runtime';
@@ -11,6 +13,13 @@ export const FINANCIAL_CAPABILITY_INTEGRATION_ID = 'financial-data' as const;
 
 export const SCREEN_CAPABILITY_PRINCIPAL = Object.freeze({
   id: 'command.screen',
+} as const);
+
+export const JUDGE_CAPABILITY_PRINCIPALS = Object.freeze({
+  identifyCompany: Object.freeze({ id: 'workflow.judge.identify-company' } as const),
+  fetchFinancials: Object.freeze({ id: 'workflow.judge.fetch-financials' } as const),
+  fetchMarketData: Object.freeze({ id: 'workflow.judge.fetch-market-data' } as const),
+  fetchNews: Object.freeze({ id: 'workflow.judge.fetch-news' } as const),
 } as const);
 
 function registration<TTool extends FinancialTools[keyof FinancialTools]>(
@@ -86,6 +95,22 @@ export function createFinancialCapabilityGateway(
       principalId: SCREEN_CAPABILITY_PRINCIPAL.id,
       capabilityIds: [financialToolIds.screen],
     },
+    {
+      principalId: JUDGE_CAPABILITY_PRINCIPALS.identifyCompany.id,
+      capabilityIds: [financialToolIds.companyReport],
+    },
+    {
+      principalId: JUDGE_CAPABILITY_PRINCIPALS.fetchFinancials.id,
+      capabilityIds: [financialToolIds.quarterlyFinancials],
+    },
+    {
+      principalId: JUDGE_CAPABILITY_PRINCIPALS.fetchMarketData.id,
+      capabilityIds: [financialToolIds.dailyTransaction, financialToolIds.foreignFlow],
+    },
+    {
+      principalId: JUDGE_CAPABILITY_PRINCIPALS.fetchNews.id,
+      capabilityIds: [financialToolIds.news, financialToolIds.filings, financialToolIds.sentiment],
+    },
   ]);
 
   return new CapabilityGateway({ registry, policy, toolRuntime });
@@ -94,3 +119,9 @@ export function createFinancialCapabilityGateway(
 export type FinancialCapabilityGateway = ReturnType<
   typeof createFinancialCapabilityGateway
 >;
+
+export function createJudgeCapabilityPlan(
+  capabilityGateway: FinancialCapabilityGateway,
+): CapabilityPlan {
+  return createCapabilityPlan(capabilityGateway, Object.values(JUDGE_CAPABILITY_PRINCIPALS));
+}

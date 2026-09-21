@@ -21,3 +21,12 @@ export {
   CapabilityGateway,
   type CapabilityGatewayOptions,
 } from './gateway.js';
+export {
+  CAPABILITY_PLAN_SCHEMA_VERSION,
+  createCapabilityPlan,
+  validateCapabilityPlan,
+  type CapabilityPlan,
+  type CapabilityPlanEntry,
+  type CapabilityPlanPrincipal,
+} from './plan.js';
+export { CapabilityPlanError, type CapabilityPlanErrorCode } from './errors.js';

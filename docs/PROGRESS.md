@@ -5,11 +5,11 @@ Last updated: 2026-09-21
 ## Current state
 
 The stateful architecture milestones **A-P** are complete on `master`. **Q1**,
-**Q2**, **R1**, **R2A**, **R2B**, and **R2C1** are also complete on `master`.
+**Q2**, **R1**, **R2A**, **R2B**, **R2C1**, and **R2C2** are also complete on
+`master`.
 
-The current milestone is **R2C2 — Judge Capability Migration + Durable Resume
-Semantics**. **S1 — Durable File / Attachment Layer** follows it in the
-canonical sequence.
+The current milestone is **S1 — Durable File / Attachment Layer**. **S2 —
+Workspace + File Capability** follows it in the canonical sequence.
 
 The canonical future sequence and dependency rationale live in
 [`docs/ROADMAP.md`](ROADMAP.md). This document is the mutable current-status
@@ -35,16 +35,37 @@ principal. `ToolRuntime` still validates and executes the selected explicit
 tool, and Screen filtering, ranking, rendering, and the ten-row limit remain
 unchanged.
 
-The production transition is intentionally incomplete:
+R2C1 established the first production transition:
 
 ```text
 /screen -> CapabilityGateway -> ToolRuntime
-/judge  -> direct ToolRuntime
+/judge  -> direct ToolRuntime at the R2C1 boundary
 ```
 
-Raw `toolRuntime` and `financialTools` remain in `HarnessContext` for Judge.
-Judge principals/grants and capability-aware resume semantics do not exist yet;
-R2C2 owns that work.
+R2C2 completes the remaining Judge migration and removes raw `toolRuntime` and
+`financialTools` from `HarnessContext`.
+
+### R2C2 — Judge Capability Migration + Durable Resume Semantics
+
+Status: **complete on master**.
+
+Judge now invokes its seven required financial operations through four explicit
+workflow principals and the capability gateway. The mappings are:
+
+```text
+workflow.judge.identify-company -> financial.company-report
+workflow.judge.fetch-financials -> financial.quarterly-financials
+workflow.judge.fetch-market-data -> financial.daily-transaction, financial.foreign-flow
+workflow.judge.fetch-news -> financial.news, financial.filings, financial.sentiment
+```
+
+`CapabilityPlan` is a deterministic, secret-free, data-only, deeply immutable
+projection of those authorized descriptors. New Judge execution profiles store
+the plan and its fingerprint. Resume planning rejects profiles without
+capability semantics and rejects capability-plan drift before provider
+acquisition or workflow execution. Existing profile schema/version and Judge
+workflow version remain unchanged; checkpoint dependency fingerprints include
+the profile fingerprint transitively.
 
 ### R2B — Deterministic Policy + Capability Gateway
 
@@ -65,8 +86,8 @@ denials, and downstream runtime/domain error identity and cancellation
 semantics are preserved.
 
 R2B itself did not migrate production paths or add capability-aware durable
-resume semantics. R2C1 now migrates Screen; Judge and durable capability
-semantics remain R2C2 work.
+resume semantics. R2C1 then migrated Screen, and R2C2 completes the Judge
+migration and capability-semantic resume boundary.
 
 ### R2A — Capability Contracts + Immutable Registry
 
@@ -187,22 +208,14 @@ an explicit command boundary.
 
 ## Next milestone
 
-### R2C2 — Judge Capability Migration + Durable Resume Semantics
+### S1 — Durable File / Attachment Layer
 
-Status: **current / next implementation milestone**.
+Status: **next implementation milestone**.
 
-R2C2 will migrate Judge through explicit caller identity, policy, gateway, and
-`ToolRuntime` composition and will address capability-related execution
-semantic compatibility for durable resume. Current source requires
-`financial.company-report` for `identify-company`,
-`financial.quarterly-financials` for `fetch-financials`, daily transaction plus
-foreign flow for `fetch-market-data`, and news, filings, plus sentiment for
-`fetch-news`.
-
-Exact Judge principal IDs and grant decomposition remain unlocked.
-`WorkflowNode.executor` is not a principal and skills are not grants. Current
-execution profiles do not pin capability policy, grants, or binding semantics;
-no finalized capability plan or fingerprint contract exists yet.
+S1 is future work for durable user file and attachment identity, metadata,
+content hashes, and Session/Turn association. Its exact persistence and
+document schemas remain subject to future design review. `WorkflowNode.executor`
+is not a principal and skills are not grants.
 
 ## Maintenance policy
 

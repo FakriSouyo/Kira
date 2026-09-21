@@ -5,8 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkflowRunner } from '@harness/command-core';
 import { checkpointKindForNode, createJudgeWorkflow, JUDGE_NODE_IDS } from '@harness/command-judge';
 import { openDb, type FinharnessDatabase } from '@harness/database';
+import { createExecutionProfile, createWorkflowNodeOutput } from '@harness/session-core';
 import { loadConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
+import { workflowDependencyFingerprint } from '../src/workflows/judgeCheckpoint';
 
 describe('PR F /judge typed artifacts', () => {
   let dir: string;
@@ -109,6 +111,50 @@ describe('PR F /judge typed artifacts', () => {
     expect(run).not.toHaveBeenCalled();
     expect(await db.artifacts.getByExecution(execution.id)).toHaveLength(3);
     expect((await db.sessions.getSessionArtifacts(sessionId)).executions).toHaveLength(1);
+    await session.close();
+  });
+
+  it('repairs a completed pre-R2C2 profile without requiring active capability authority', async () => {
+    let session = await createHarnessSession(db, config(), { write: () => {} });
+    await session.commands.get('judge')!(['BBCA']);
+    const sessionId = session.conversation.id;
+    const execution = (await db.sessions.getSessionArtifacts(sessionId)).executions[0]!;
+    const profile = await db.executionProfiles.getByExecutionId(execution.id);
+    expect(profile).toBeTruthy();
+    const payload = profile!.payload as Record<string, unknown>;
+    const { capabilityPlan: _capabilityPlan, capabilityPlanFingerprint: _capabilityPlanFingerprint, ...legacyPayload } = payload;
+    const legacyProfile = createExecutionProfile({
+      executionId: profile!.executionId,
+      workflowId: profile!.workflowId,
+      workflowVersion: profile!.workflowVersion,
+      graphFingerprint: profile!.graphFingerprint,
+      command: profile!.command,
+      ticker: profile!.ticker,
+      payload: legacyPayload as never,
+      createdAt: profile!.createdAt,
+    });
+    db.raw.prepare('UPDATE execution_profiles SET payload_json = ?, fingerprint = ? WHERE execution_id = ?')
+      .run(JSON.stringify(legacyProfile.payload), legacyProfile.fingerprint, execution.id);
+    await session.close();
+    db.raw.prepare('DELETE FROM artifacts WHERE execution_id = ?').run(execution.id);
+    db.raw.close();
+    db = openDb({ homeDir: dir });
+
+    const outputs = await db.workflowNodeOutputs.listNodeOutputsForExecution(execution.id);
+    const fingerprints = new Map<string, string>();
+    for (const node of createJudgeWorkflow().nodes) {
+      const output = outputs.find(candidate => candidate.nodeId === node.id);
+      if (!output) continue;
+      const dependencyFingerprint = workflowDependencyFingerprint(node, fingerprints, legacyProfile.fingerprint);
+      const rewritten = createWorkflowNodeOutput({ ...output, dependencyFingerprint });
+      db.raw.prepare('UPDATE workflow_node_outputs SET dependency_fingerprint = ?, output_fingerprint = ? WHERE output_id = ?')
+        .run(dependencyFingerprint, rewritten.outputFingerprint, output.outputId);
+      fingerprints.set(node.id, rewritten.outputFingerprint);
+    }
+    const run = vi.spyOn(WorkflowRunner.prototype, 'run');
+    session = await createHarnessSession(db, config(), { write: () => {} });
+    expect(run).not.toHaveBeenCalled();
+    expect(await db.artifacts.getByExecution(execution.id)).toHaveLength(3);
     await session.close();
   });
 

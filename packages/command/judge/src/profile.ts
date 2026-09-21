@@ -2,6 +2,7 @@ import {
   workflowGraphFingerprint,
   type WorkflowDefinition,
 } from '@harness/command-core';
+import { validateCapabilityPlan, type CapabilityPlan } from '@harness/capability';
 import {
   createExecutionProfile,
   type ExecutionProfile,
@@ -17,6 +18,8 @@ export type JudgeExecutionProfilePayload = {
   researchers: { market: boolean; news: boolean };
   provider: string;
   model: string;
+  capabilityPlan: JsonValue;
+  capabilityPlanFingerprint: string;
   runtimePlanFingerprint?: string;
   runtimePlan?: JsonValue;
 } & { [key: string]: JsonValue };
@@ -35,9 +38,11 @@ export function createJudgeExecutionProfile(params: {
   researchers: { market: boolean; news: boolean };
   provider: string;
   model: string;
+  capabilityPlan: CapabilityPlan;
   runtimePlan?: JsonValue;
   createdAt: string;
 }): JudgeExecutionProfile {
+  const capabilityPlan = validateCapabilityPlan(params.capabilityPlan);
   return createExecutionProfile({
     executionId: params.executionId,
     workflowId: 'judge',
@@ -51,6 +56,8 @@ export function createJudgeExecutionProfile(params: {
       researchers: params.researchers,
       provider: params.provider,
       model: params.model,
+      capabilityPlan: capabilityPlan as unknown as JsonValue,
+      capabilityPlanFingerprint: capabilityPlan.fingerprint,
       ...(params.runtimePlan ? {
         runtimePlan: params.runtimePlan,
         ...(typeof params.runtimePlan === 'object' && params.runtimePlan !== null && !Array.isArray(params.runtimePlan) && typeof params.runtimePlan.runtimeFingerprint === 'string'

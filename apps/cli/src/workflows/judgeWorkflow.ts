@@ -150,6 +150,7 @@ export async function judgeWorkflow(
         provider: ctx.config.llm.agent.providerId ?? ctx.config.llm.agent.provider,
         model: ctx.config.llm.agent.model,
         runtimePlanFingerprint: ctx.runtimePlan?.runtimeFingerprint,
+        capabilityPlanFingerprint: ctx.judgeCapabilityPlan.fingerprint,
       });
       return await ctx.db.sessions.acquireInterruptedExecution(existing.id);
     })()
@@ -178,6 +179,7 @@ export async function judgeWorkflow(
         researchers,
         provider: ctx.config.llm.agent.providerId ?? ctx.config.llm.agent.provider,
         model: ctx.config.llm.agent.model,
+        capabilityPlan: ctx.judgeCapabilityPlan,
         runtimePlan: ctx.runtimePlan as never,
         createdAt: run.createdAt,
       });
