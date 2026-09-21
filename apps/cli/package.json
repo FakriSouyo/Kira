@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "dependencies": {
+    "@harness/capability": "workspace:*",
     "@harness/command-core": "workspace:*",
     "@harness/command-judge": "workspace:*",
     "@harness/context": "workspace:*",

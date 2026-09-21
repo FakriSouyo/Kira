@@ -43,18 +43,18 @@ Q2
 R1
 R2A
 R2B
+R2C1
 
 CURRENT
 
-R2C1
+R2C2
 
 NEXT
 
-R2C2
+S1
 
 FUTURE KNOWLEDGE INPUT
 
-S1
 S2
 S3
 
@@ -93,7 +93,7 @@ research capability maturation. Discovery and design for later milestones may
 begin earlier, but production implementations must not bypass the dependency
 boundaries established by earlier milestones.
 
-## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B
+## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1
 
 The following milestones are complete on `master`:
 
@@ -103,6 +103,7 @@ The following milestones are complete on `master`:
 - **R1 — Typed Tool Runtime:** explicit typed `ToolDefinition` values, one-shot validation and execution, lifecycle observation, cancellation fencing, and explicit CLI financial adapters.
 - **R2A — Capability Contracts + Immutable Registry:** domain-neutral capability descriptors, registration contracts, immutable deterministic discovery, duplicate/identity validation, and trusted lookup of explicit tool bindings.
 - **R2B — Deterministic Policy + Capability Gateway:** explicit caller principals, exact-match immutable grants, deterministic policy evaluation, scoped authorized discovery, registry/policy consistency validation, and lookup-only gateway delegation to `ToolRuntime`.
+- **R2C1 — Financial Capability Composition + Screen Migration:** all eight existing financial tools registered with provider-neutral descriptors, explicit least-privilege `command.screen` authorization, and production `/screen` execution through the capability gateway while Judge remains on its transitional direct-runtime path.
 
 The current Judge graph remains the source of truth: it has 15 stable nodes,
 `JUDGE_WORKFLOW_VERSION` remains `2`, and no obsolete historical Judge graph is
@@ -213,57 +214,81 @@ loop. `CapabilityRegistry` is not authorization, `CapabilityGateway` is not
 
 ### R2C1 — Financial Capability Composition + Screen Migration
 
-Status: **current next milestone**.
+Status: **complete**.
 
-Future direction: register the existing financial operations as explicit,
-provider-neutral capabilities and route the first production migration through
-the R2 policy and gateway boundary. The current financial tool IDs are
+R2C1 registers the existing financial operations as explicit, provider-neutral
+capabilities and routes the first production migration through the R2 policy
+and gateway boundary. The registered tool IDs are
 `financial.company-report`, `financial.quarterly-financials`,
 `financial.screen`, `financial.daily-transaction`, `financial.foreign-flow`,
 `financial.news`, `financial.filings`, and `financial.sentiment`.
 
-The future composition remains:
+The implemented Screen composition is:
 
 ```text
-Workflow / Command
-        |
-        v
-explicit caller identity
-        |
-        v
-Capability Gateway
-        |
-        v
-explicit ToolDefinition
-        |
-        v
-ToolRuntime
-        |
-        v
-domain integration
-        |
-        v
-FinancialDataProvider
-        |
-        v
-provider implementation
+/screen
+   |
+   v
+command.screen
+   |
+   v
+CapabilityGateway
+   |          |
+   v          v
+Policy     Registry
+              |
+              v
+       financial.screen
+              |
+              v
+         ToolRuntime
+              |
+              v
+   FinancialDataProvider
 ```
 
-The future registration remains provider-neutral and must preserve the
-`FinancialDataProvider` seam; Sectors is the current concrete provider. `/screen`
-is intended to be the first production migration candidate, but R2C1 is not
-implemented by this roadmap update.
+Descriptors use provider-neutral integration identity `financial-data`, and
+every registration binds the existing `ToolDefinition` created by
+`createFinancialTools(provider)` rather than recreating provider adapters. The
+registry knows all eight capabilities, while `command.screen` is granted only
+`financial.screen`. `HarnessContext` exposes `capabilityGateway`; raw
+`toolRuntime` and `financialTools` remain temporarily because Judge has not yet
+been migrated. Screen's filtering, ranking, result rendering, and ten-row limit
+are unchanged.
 
 ### R2C2 — Judge Capability Migration + Durable Resume Semantics
 
-Status: **future**.
+Status: **current milestone**.
 
 Future direction: migrate Judge's required operations through explicit
 capability principals, policy, gateway, and `ToolRuntime` without inferring
 authorization from `WorkflowNode.executor`, specialist skills, persona, model
-output, or workflow ownership. The current Judge and Screen production paths
-remain direct `ToolRuntime` compositions until their respective migration
-work is reviewed.
+output, or workflow ownership. Current source establishes these requirements:
+
+```text
+identify-company
+    -> financial.company-report
+
+fetch-financials
+    -> financial.quarterly-financials
+
+fetch-market-data
+    -> financial.daily-transaction
+    -> financial.foreign-flow
+
+fetch-news
+    -> financial.news
+    -> financial.filings
+    -> financial.sentiment
+```
+
+Exact Judge principal IDs and grant decomposition remain implementation design
+work. The current transitional authority boundary is explicit:
+
+```text
+/screen -> CapabilityGateway -> ToolRuntime
+/judge  -> direct ToolRuntime
+```
 
 R2C2 must also address capability-related execution semantic compatibility for
 durable resumability. Current execution profiles pin workflow/version,
@@ -745,8 +770,8 @@ gateway != ToolRuntime
 
 The following remain future design work:
 
-- exact R2C1 registration composition and migration wiring;
-- exact R2C2 capability-semantic fingerprint type and resume compatibility model;
+- exact R2C2 Judge principal IDs, grant decomposition, capability-semantic
+  fingerprint type, and resume compatibility model;
 - exact U workflow node counts, package topology, specialist mapping, future artifact schemas, and public APIs;
 - exact conversation-summary schema, Research Graph database model, and Decision Journal schema;
 - exact desktop framework, web framework, and API transport;

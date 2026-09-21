@@ -52,6 +52,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@harness/capability':
+        specifier: workspace:*
+        version: link:../../packages/capability
       '@harness/command-core':
         specifier: workspace:*
         version: link:../../packages/command/core

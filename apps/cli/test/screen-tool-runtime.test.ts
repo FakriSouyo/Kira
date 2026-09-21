@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ToolRuntime } from '@harness/tool-runtime';
 import type { FinancialDataProvider, ScreenerResult } from '@harness/financial-data';
+import { createFinancialCapabilityGateway } from '../src/tools/financialCapabilities';
 import { createFinancialTools } from '../src/tools/financialTools';
 import { screenWorkflow } from '../src/workflows/screenWorkflow';
 import type { HarnessContext } from '../src/context';
@@ -14,9 +15,12 @@ describe('Screen tool-runtime composition', () => {
     const provider = {
       screen: vi.fn(async () => rows),
     } as unknown as FinancialDataProvider;
+    const toolRuntime = new ToolRuntime();
+    const financialTools = createFinancialTools(provider);
     const context = {
-      toolRuntime: new ToolRuntime(),
-      financialTools: createFinancialTools(provider),
+      toolRuntime,
+      financialTools,
+      capabilityGateway: createFinancialCapabilityGateway(financialTools, toolRuntime),
     } as unknown as HarnessContext;
 
     await expect(screenWorkflow(context, ['profitable'])).resolves.toEqual({
