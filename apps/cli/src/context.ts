@@ -1,5 +1,6 @@
 import type { FinharnessDatabase } from '@harness/database';
 import { fileURLToPath } from 'node:url';
+import type { CapabilityPlan } from '@harness/capability';
 import { ClaimValidator } from '@harness/execution';
 import { createLLMClient, type ModelRuntimePlan } from '@harness/llm';
 import { DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS } from '@harness/context';
@@ -17,17 +18,17 @@ import { ToolRuntime } from '@harness/tool-runtime';
 import type { FinharnessConfig } from './config';
 import {
   createFinancialCapabilityGateway,
+  createJudgeCapabilityPlan,
   type FinancialCapabilityGateway,
 } from './tools/financialCapabilities';
-import { createFinancialTools, type FinancialTools } from './tools/financialTools';
+import { createFinancialTools } from './tools/financialTools';
 import { createConversationContextCoordinator, type ConversationContextCoordinator } from './runtime/conversationContextCoordinator';
 
 export interface HarnessContext {
   db: FinharnessDatabase;
   financialData: FinancialDataProvider;
-  toolRuntime: ToolRuntime;
-  financialTools: FinancialTools;
   capabilityGateway: FinancialCapabilityGateway;
+  judgeCapabilityPlan: CapabilityPlan;
   researcher: ResearcherAgent;
   bull: BullAgent;
   bear: BearAgent;
@@ -103,9 +104,8 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
     runtimePlan,
     db,
     financialData,
-    toolRuntime,
-    financialTools,
     capabilityGateway,
+    judgeCapabilityPlan: createJudgeCapabilityPlan(capabilityGateway),
     researcher: new ResearcherAgent(specialist('researcher')),
     bull: new BullAgent(specialist('bull')),
     bear: new BearAgent(specialist('bear')),

@@ -44,18 +44,18 @@ R1
 R2A
 R2B
 R2C1
+R2C2
 
 CURRENT
 
-R2C2
+S1
 
 NEXT
 
-S1
+S2
 
 FUTURE KNOWLEDGE INPUT
 
-S2
 S3
 
 FUTURE EVIDENCE INTELLIGENCE
@@ -93,7 +93,7 @@ research capability maturation. Discovery and design for later milestones may
 begin earlier, but production implementations must not bypass the dependency
 boundaries established by earlier milestones.
 
-## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1
+## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2
 
 The following milestones are complete on `master`:
 
@@ -103,7 +103,8 @@ The following milestones are complete on `master`:
 - **R1 — Typed Tool Runtime:** explicit typed `ToolDefinition` values, one-shot validation and execution, lifecycle observation, cancellation fencing, and explicit CLI financial adapters.
 - **R2A — Capability Contracts + Immutable Registry:** domain-neutral capability descriptors, registration contracts, immutable deterministic discovery, duplicate/identity validation, and trusted lookup of explicit tool bindings.
 - **R2B — Deterministic Policy + Capability Gateway:** explicit caller principals, exact-match immutable grants, deterministic policy evaluation, scoped authorized discovery, registry/policy consistency validation, and lookup-only gateway delegation to `ToolRuntime`.
-- **R2C1 — Financial Capability Composition + Screen Migration:** all eight existing financial tools registered with provider-neutral descriptors, explicit least-privilege `command.screen` authorization, and production `/screen` execution through the capability gateway while Judge remains on its transitional direct-runtime path.
+- **R2C1 — Financial Capability Composition + Screen Migration:** all eight existing financial tools registered with provider-neutral descriptors, explicit least-privilege `command.screen` authorization, and production `/screen` execution through the capability gateway.
+- **R2C2 — Judge Capability Migration + Durable Resume Semantics:** Judge financial operations execute through explicit workflow principals and the capability gateway, and Judge profiles pin a deterministic capability plan whose fingerprint participates in durable resume compatibility.
 
 The current Judge graph remains the source of truth: it has 15 stable nodes,
 `JUDGE_WORKFLOW_VERSION` remains `2`, and no obsolete historical Judge graph is
@@ -251,19 +252,19 @@ Descriptors use provider-neutral integration identity `financial-data`, and
 every registration binds the existing `ToolDefinition` created by
 `createFinancialTools(provider)` rather than recreating provider adapters. The
 registry knows all eight capabilities, while `command.screen` is granted only
-`financial.screen`. `HarnessContext` exposes `capabilityGateway`; raw
-`toolRuntime` and `financialTools` remain temporarily because Judge has not yet
-been migrated. Screen's filtering, ranking, result rendering, and ten-row limit
-are unchanged.
+`financial.screen`. `HarnessContext` exposes `capabilityGateway`; R2C2 completes
+the Judge migration so raw `toolRuntime` and `financialTools` are no longer
+part of that context. Screen's filtering, ranking, result rendering, and
+ten-row limit are unchanged.
 
 ### R2C2 — Judge Capability Migration + Durable Resume Semantics
 
-Status: **current milestone**.
+Status: **complete on `master`**.
 
-Future direction: migrate Judge's required operations through explicit
-capability principals, policy, gateway, and `ToolRuntime` without inferring
-authorization from `WorkflowNode.executor`, specialist skills, persona, model
-output, or workflow ownership. Current source establishes these requirements:
+R2C2 migrates Judge's required operations through explicit capability
+principals, policy, gateway, and `ToolRuntime` without inferring authorization
+from `WorkflowNode.executor`, specialist skills, persona, model output, or
+workflow ownership. The implemented mappings are:
 
 ```text
 identify-company
@@ -282,25 +283,27 @@ fetch-news
     -> financial.sentiment
 ```
 
-Exact Judge principal IDs and grant decomposition remain implementation design
-work. The current transitional authority boundary is explicit:
+The current production authority boundary is explicit:
 
 ```text
 /screen -> CapabilityGateway -> ToolRuntime
-/judge  -> direct ToolRuntime
+/judge  -> workflow.judge.* principal -> CapabilityGateway -> ToolRuntime
 ```
 
-R2C2 must also address capability-related execution semantic compatibility for
-durable resumability. Current execution profiles pin workflow/version,
-graph/command/ticker, reasoning and conditional settings, researcher flags,
-model/runtime plan, and related fingerprints, but do not pin capability policy,
-grant, or binding semantics. If an Execution starts under capability semantics
-A and a later process attempts to resume it under materially different policy
-or integration semantics, FinHarness must not silently resume under changed
-execution authority.
+Judge uses four explicit principals: `workflow.judge.identify-company`,
+`workflow.judge.fetch-financials`, `workflow.judge.fetch-market-data`, and
+`workflow.judge.fetch-news`. The resulting seven-capability grant set is
+scoped to the operation each principal performs; `command.screen` remains
+granted only `financial.screen`.
 
-A deterministic secret-free representation or fingerprint may be needed, but
-its exact design and any finalized `CapabilityPlan` type remain unlocked.
+`CapabilityPlan` schema version 1 is a deterministic, secret-free, data-only,
+deeply immutable projection of the authorized capability descriptors for those
+principals. Its fingerprint is stored in new Judge execution profiles. Resume
+planning rejects capability-less historical Judge profiles and rejects a
+different capability-plan fingerprint before provider acquisition or workflow
+execution. The existing generic profile schema and Judge workflow version are
+unchanged; checkpoint dependency fingerprints include the profile fingerprint
+transitively.
 
 ## Authorization boundaries
 
@@ -770,8 +773,6 @@ gateway != ToolRuntime
 
 The following remain future design work:
 
-- exact R2C2 Judge principal IDs, grant decomposition, capability-semantic
-  fingerprint type, and resume compatibility model;
 - exact U workflow node counts, package topology, specialist mapping, future artifact schemas, and public APIs;
 - exact conversation-summary schema, Research Graph database model, and Decision Journal schema;
 - exact desktop framework, web framework, and API transport;

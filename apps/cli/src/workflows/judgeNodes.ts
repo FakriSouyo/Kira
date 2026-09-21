@@ -20,9 +20,13 @@ import {
 } from '@harness/financial-data';
 import { SECTORS_SOURCES } from '@harness/sectors-api';
 import { buildEvidenceZone, normalizeJudgmentScore, stanceForScore, UserFriendlyError, ValidationError } from '@harness/shared';
-import type { ToolDefinition } from '@harness/tool-runtime';
+import type { CapabilityPrincipal } from '@harness/capability';
 import type { AgentEvent } from '../repl/events';
 import type { HarnessContext } from '../context';
+import {
+  JUDGE_CAPABILITY_PRINCIPALS,
+} from '../tools/financialCapabilities';
+import { financialToolIds } from '../tools/financialTools';
 import { projectFinancialToolEvent } from '../tools/financialToolEvents';
 
 /** Phase shown by progress renderers; the composition layer re-exports it for events.ts. */
@@ -168,16 +172,17 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
   const { ctx, ticker, runId, events, progress, decision } = deps;
   const researchers = deps.researchers ?? ctx.researchers;
 
-  const invokeFinancialTool = async <TId extends string, TInput, TOutput>(
-    definition: ToolDefinition<TId, TInput, TOutput>,
-    input: TInput,
+  const invokeFinancialTool = async <TOutput>(
+    principal: CapabilityPrincipal,
+    capabilityId: string,
+    input: unknown,
     signal: AbortSignal | undefined,
   ): Promise<TOutput> => {
-    const result = await ctx.toolRuntime.invoke(definition, input, {
+    const result = await ctx.capabilityGateway.invoke(principal, capabilityId, input, {
       signal,
       onEvent: event => projectFinancialToolEvent(event, { ticker, emit: events }),
     });
-    return result.value;
+    return result.value as TOutput;
   };
 
   const stableErrorCode = (error: unknown): string => {
@@ -266,14 +271,24 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'phase', phase: 'researcher', label: "I'm starting with Company Report and Quarterly Financials." });
       events({ type: 'agent.start', agent: 'researcher' });
       progress('researcher', `I'm starting with Company Report and Quarterly Financials for ${ticker}...`);
-      const report = await invokeFinancialTool(ctx.financialTools.companyReport, { ticker }, signal);
+      const report = await invokeFinancialTool<FinancialDataResult<CompanyReport>>(
+        JUDGE_CAPABILITY_PRINCIPALS.identifyCompany,
+        financialToolIds.companyReport,
+        { ticker },
+        signal,
+      );
       progress('researcher', '✓ Company Report retrieved');
       return report;
     },
 
     /** Quarterly Financials — required ground truth; a failed request ends the run. */
     'fetch-financials': async (_inputs, signal) => {
-      const financials = await invokeFinancialTool(ctx.financialTools.quarterlyFinancials, { ticker }, signal);
+      const financials = await invokeFinancialTool<FinancialDataResult<QuarterlyFinancials>>(
+        JUDGE_CAPABILITY_PRINCIPALS.fetchFinancials,
+        financialToolIds.quarterlyFinancials,
+        { ticker },
+        signal,
+      );
       progress('researcher', '✓ Quarterly Financials retrieved');
       return financials;
     },
@@ -285,8 +300,18 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
      */
     'fetch-market-data': async (_inputs, signal) => {
       try {
-        const daily = await invokeFinancialTool(ctx.financialTools.dailyTransaction, { ticker }, signal);
-        const foreign = await invokeFinancialTool(ctx.financialTools.foreignFlow, { ticker }, signal);
+        const daily = await invokeFinancialTool<FinancialDataResult<DailyTransaction>>(
+          JUDGE_CAPABILITY_PRINCIPALS.fetchMarketData,
+          financialToolIds.dailyTransaction,
+          { ticker },
+          signal,
+        );
+        const foreign = await invokeFinancialTool<FinancialDataResult<ForeignFlow>>(
+          JUDGE_CAPABILITY_PRINCIPALS.fetchMarketData,
+          financialToolIds.foreignFlow,
+          { ticker },
+          signal,
+        );
         return { daily, foreign };
       } catch (error) {
         assertNotAborted(signal);
@@ -301,9 +326,24 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
     /** News + Filings + Sentiment. Any failed source request degrades the whole group. */
     'fetch-news': async (_inputs, signal) => {
       try {
-        const news = await invokeFinancialTool(ctx.financialTools.news, { ticker }, signal);
-        const filings = await invokeFinancialTool(ctx.financialTools.filings, { ticker }, signal);
-        const sentiment = await invokeFinancialTool(ctx.financialTools.sentiment, { ticker }, signal);
+        const news = await invokeFinancialTool<FinancialDataResult<NewsArticle[]>>(
+          JUDGE_CAPABILITY_PRINCIPALS.fetchNews,
+          financialToolIds.news,
+          { ticker },
+          signal,
+        );
+        const filings = await invokeFinancialTool<FinancialDataResult<Filing[]>>(
+          JUDGE_CAPABILITY_PRINCIPALS.fetchNews,
+          financialToolIds.filings,
+          { ticker },
+          signal,
+        );
+        const sentiment = await invokeFinancialTool<FinancialDataResult<Sentiment>>(
+          JUDGE_CAPABILITY_PRINCIPALS.fetchNews,
+          financialToolIds.sentiment,
+          { ticker },
+          signal,
+        );
         return { news, filings, sentiment };
       } catch (error) {
         assertNotAborted(signal);

@@ -40,3 +40,15 @@ export class CapabilityAccessError extends Error {
     this.name = 'CapabilityAccessError';
   }
 }
+
+export type CapabilityPlanErrorCode = 'INVALID_CAPABILITY_PLAN';
+
+export class CapabilityPlanError extends Error {
+  constructor(
+    public readonly code: CapabilityPlanErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'CapabilityPlanError';
+  }
+}

@@ -26,6 +26,7 @@ import { verifyFinancialObservation } from '@harness/financial-data';
 import type { SubagentResultLike, RestoredSubagentResult } from '@harness/subagent-core';
 import type { LLMCallMetadata } from '@harness/llm';
 import type { FinharnessDatabase } from '@harness/database';
+import { validateCapabilityPlan, type CapabilityPlan } from '@harness/capability';
 import type { ExecutionProfile, ResearchExecution } from '@harness/session-core';
 import type { JudgeCommandContext, JudgeNodeId } from '@harness/command-judge';
 import type {
@@ -231,6 +232,8 @@ interface JudgeProfilePayload {
   researchers: { market: boolean; news: boolean };
   provider: string;
   model: string;
+  capabilityPlan?: JsonValue;
+  capabilityPlanFingerprint?: string;
   runtimePlanFingerprint?: string;
 }
 
@@ -243,6 +246,44 @@ function profilePayload(profile: ExecutionProfile): JudgeProfilePayload {
     throw new Error(`Execution profile ${profile.executionId} has an invalid Judge payload`);
   }
   return payload as JudgeProfilePayload;
+}
+
+function storedCapabilityPlan(
+  payload: JudgeProfilePayload,
+  required: boolean,
+): CapabilityPlan | undefined {
+  const hasPlan = payload.capabilityPlan !== undefined;
+  const hasFingerprint = payload.capabilityPlanFingerprint !== undefined;
+  if (!hasPlan && !hasFingerprint) {
+    if (required) {
+      throw new UserFriendlyError(
+        'INCOMPATIBLE_CHECKPOINT',
+        'This execution predates capability-aware Judge resume authority. Start a new /judge.',
+        'Historical Judge executions without capability semantics cannot be resumed; start a new /judge.',
+      );
+    }
+    return undefined;
+  }
+  if (!hasPlan || typeof payload.capabilityPlanFingerprint !== 'string') {
+    throw new UserFriendlyError(
+      'INCOMPATIBLE_CHECKPOINT',
+      'This execution has an invalid persisted capability plan. Start a new /judge.',
+      'Persisted Judge capability semantics are malformed; start a new /judge.',
+    );
+  }
+  try {
+    const validated = validateCapabilityPlan(payload.capabilityPlan);
+    if (validated.fingerprint !== payload.capabilityPlanFingerprint) {
+      throw new Error('Capability plan fingerprint disagreement');
+    }
+    return validated;
+  } catch {
+    throw new UserFriendlyError(
+      'INCOMPATIBLE_CHECKPOINT',
+      'This execution has an invalid persisted capability plan. Start a new /judge.',
+      'Persisted Judge capability semantics are malformed; start a new /judge.',
+    );
+  }
 }
 
 function nodeEnabled(nodeId: JudgeNodeId, payload: JudgeProfilePayload, extraRound: boolean): boolean {
@@ -307,7 +348,7 @@ function assertSameSemanticParts(left: unknown, right: unknown, label: string): 
 }
 
 /** Validates durable Judge outputs before acquisition and derives the restore frontier. */
-export async function planJudgeResume(params: {
+async function planJudgeCheckpoint(params: {
   db: FinharnessDatabase;
   execution: ResearchExecution;
   profile: ExecutionProfile;
@@ -316,6 +357,8 @@ export async function planJudgeResume(params: {
   provider: string;
   model: string;
   runtimePlanFingerprint?: string;
+  capabilityPlanFingerprint?: string;
+  requireCapabilityPlan: boolean;
 }): Promise<JudgeResumePlan> {
   const { db, execution, profile, definition } = params;
   if (profile.schemaVersion !== 1 || profile.command !== 'judge' || profile.workflowId !== 'judge') {
@@ -325,7 +368,15 @@ export async function planJudgeResume(params: {
     throw new UserFriendlyError('INCOMPATIBLE_CHECKPOINT', 'This execution predates true Judge checkpoint support. Start a new /judge.', 'Historical interrupted executions cannot be resumed by PR P.');
   }
   const payload = profilePayload(profile);
+  const persistedCapabilityPlan = storedCapabilityPlan(payload, params.requireCapabilityPlan);
   if (profile.ticker !== execution.ticker) throw new Error('Judge execution profile ticker does not match the Execution');
+  if (params.capabilityPlanFingerprint !== undefined && persistedCapabilityPlan?.fingerprint !== params.capabilityPlanFingerprint) {
+    throw new UserFriendlyError(
+      'CAPABILITY_MISMATCH',
+      'Judge capability authority semantics changed; resume requires the original capability composition or a new /judge.',
+      'Restore the original capability composition or start a new /judge.',
+    );
+  }
   if (payload.provider !== params.provider || payload.model !== params.model) {
     throw new UserFriendlyError('MODEL_MISMATCH', `Resume requires ${payload.provider}/${payload.model}, but the active runtime is ${params.provider}/${params.model}.`, 'Switch back to the original provider/model before resuming.');
   }
@@ -385,6 +436,21 @@ export async function planJudgeResume(params: {
     restored,
     outputs: [...accepted.values()],
   };
+}
+
+/** Validates durable Judge outputs and active capability authority before acquisition. */
+export async function planJudgeResume(params: {
+  db: FinharnessDatabase;
+  execution: ResearchExecution;
+  profile: ExecutionProfile;
+  definition: WorkflowDefinition<JudgeCommandContext>;
+  currentGraphFingerprint: string;
+  provider: string;
+  model: string;
+  runtimePlanFingerprint?: string;
+  capabilityPlanFingerprint: string;
+}): Promise<JudgeResumePlan> {
+  return planJudgeCheckpoint({ ...params, requireCapabilityPlan: true });
 }
 
 function sameIds(left: readonly string[], right: readonly string[]): boolean {
@@ -680,7 +746,7 @@ export async function ensureJudgeArtifacts(params: {
 }): Promise<ArtifactEnvelope[]> {
   const definition = createJudgeWorkflow();
   const payload = profilePayload(params.profile);
-  const plan = await planJudgeResume({
+  const plan = await planJudgeCheckpoint({
     db: params.db,
     execution: params.execution,
     profile: params.profile,
@@ -689,6 +755,7 @@ export async function ensureJudgeArtifacts(params: {
     provider: payload.provider,
     model: payload.model,
     runtimePlanFingerprint: payload.runtimePlanFingerprint,
+    requireCapabilityPlan: false,
   });
   const outputs = new Map(plan.outputs.map(output => [output.nodeId, output]));
   const collected = await decodeJudgeCheckpoint('collect-sources', requiredOutput(outputs, 'collect-sources'), params.db, params.execution) as CollectedSources;

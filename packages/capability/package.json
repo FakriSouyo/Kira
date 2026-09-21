@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@harness/shared": "workspace:*",
     "@harness/tool-runtime": "workspace:*"
   },
   "devDependencies": {

@@ -63,6 +63,7 @@ describe('PR P same-Execution Judge resume', () => {
       researchers: config.researchers,
       provider: config.llm.agent.provider,
       model: config.llm.agent.model,
+      capabilityPlan: context.judgeCapabilityPlan,
       createdAt: execution.createdAt,
     });
     await db.executionProfiles.save(profile);

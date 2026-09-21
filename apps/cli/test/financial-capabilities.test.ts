@@ -1,7 +1,12 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CapabilityRegistry } from '@harness/capability';
+import {
+  CapabilityGateway,
+  CapabilityPolicy,
+  CapabilityRegistry,
+  createCapabilityPlan,
+} from '@harness/capability';
 import { openDb } from '@harness/database';
 import type { FinancialDataProvider, ScreenerResult } from '@harness/financial-data';
 import { ToolRuntime } from '@harness/tool-runtime';
@@ -11,7 +16,9 @@ import { buildContext } from '../src/context';
 import {
   createFinancialCapabilityGateway,
   createFinancialCapabilityRegistrations,
+  createJudgeCapabilityPlan,
   FINANCIAL_CAPABILITY_INTEGRATION_ID,
+  JUDGE_CAPABILITY_PRINCIPALS,
   SCREEN_CAPABILITY_PRINCIPAL,
 } from '../src/tools/financialCapabilities';
 import { createFinancialTools, financialToolIds } from '../src/tools/financialTools';
@@ -108,6 +115,49 @@ describe('financial capability composition', () => {
     expect(data.screen).toHaveBeenCalledWith(['profitable']);
   });
 
+  it('grants Judge by explicit workflow principal and creates a scoped seven-capability plan', () => {
+    const tools = createFinancialTools(provider());
+    const gateway = createFinancialCapabilityGateway(tools, new ToolRuntime());
+
+    expect(gateway.list(JUDGE_CAPABILITY_PRINCIPALS.identifyCompany).map(({ id }) => id)).toEqual([
+      financialToolIds.companyReport,
+    ]);
+    expect(gateway.list(JUDGE_CAPABILITY_PRINCIPALS.fetchFinancials).map(({ id }) => id)).toEqual([
+      financialToolIds.quarterlyFinancials,
+    ]);
+    expect(gateway.list(JUDGE_CAPABILITY_PRINCIPALS.fetchMarketData).map(({ id }) => id)).toEqual([
+      financialToolIds.dailyTransaction,
+      financialToolIds.foreignFlow,
+    ]);
+    expect(gateway.list(JUDGE_CAPABILITY_PRINCIPALS.fetchNews).map(({ id }) => id)).toEqual([
+      financialToolIds.filings,
+      financialToolIds.news,
+      financialToolIds.sentiment,
+    ]);
+    expect(() => gateway.describe(
+      JUDGE_CAPABILITY_PRINCIPALS.identifyCompany,
+      financialToolIds.screen,
+    )).toThrowError(expect.objectContaining({ code: 'CAPABILITY_DENIED' }));
+
+    const plan = createJudgeCapabilityPlan(gateway);
+    expect(plan.principals.map(({ principalId }) => principalId)).toEqual([
+      'workflow.judge.fetch-financials',
+      'workflow.judge.fetch-market-data',
+      'workflow.judge.fetch-news',
+      'workflow.judge.identify-company',
+    ]);
+    expect(plan.principals.flatMap(({ capabilities }) => capabilities.map(({ id }) => id))).toEqual([
+      financialToolIds.quarterlyFinancials,
+      financialToolIds.dailyTransaction,
+      financialToolIds.foreignFlow,
+      financialToolIds.filings,
+      financialToolIds.news,
+      financialToolIds.sentiment,
+      financialToolIds.companyReport,
+    ]);
+    expect(plan.principals.flatMap(({ capabilities }) => capabilities.map(({ id }) => id))).not.toContain(financialToolIds.screen);
+  });
+
   it('buildContext exposes only the Gateway as the production capability boundary', () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'finharness-financial-capabilities-'));
     const db = openDb({ homeDir });
@@ -130,5 +180,24 @@ describe('financial capability composition', () => {
       db.raw.close();
       rmSync(homeDir, { recursive: true, force: true });
     }
+  });
+
+  it('keeps the Judge plan isolated from changes to the command.screen grant', () => {
+    const makePlan = (screenGrant: readonly string[]) => {
+      const tools = createFinancialTools(provider());
+      const registry = new CapabilityRegistry(createFinancialCapabilityRegistrations(tools));
+      const policy = new CapabilityPolicy([
+        { principalId: JUDGE_CAPABILITY_PRINCIPALS.identifyCompany.id, capabilityIds: [financialToolIds.companyReport] },
+        { principalId: JUDGE_CAPABILITY_PRINCIPALS.fetchFinancials.id, capabilityIds: [financialToolIds.quarterlyFinancials] },
+        { principalId: JUDGE_CAPABILITY_PRINCIPALS.fetchMarketData.id, capabilityIds: [financialToolIds.dailyTransaction, financialToolIds.foreignFlow] },
+        { principalId: JUDGE_CAPABILITY_PRINCIPALS.fetchNews.id, capabilityIds: [financialToolIds.news, financialToolIds.filings, financialToolIds.sentiment] },
+        { principalId: SCREEN_CAPABILITY_PRINCIPAL.id, capabilityIds: screenGrant },
+      ]);
+      const gateway = new CapabilityGateway({ registry, policy, toolRuntime: new ToolRuntime() });
+      return createCapabilityPlan(gateway, Object.values(JUDGE_CAPABILITY_PRINCIPALS));
+    };
+
+    expect(makePlan([financialToolIds.screen]).fingerprint)
+      .toBe(makePlan([financialToolIds.screen, financialToolIds.news]).fingerprint);
   });
 });

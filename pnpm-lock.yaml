@@ -121,6 +121,9 @@ importers:
 
   packages/capability:
     dependencies:
+      '@harness/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@harness/tool-runtime':
         specifier: workspace:*
         version: link:../tool-runtime
@@ -137,6 +140,9 @@ importers:
 
   packages/command/judge:
     dependencies:
+      '@harness/capability':
+        specifier: workspace:*
+        version: link:../../capability
       '@harness/command-core':
         specifier: workspace:*
         version: link:../core
