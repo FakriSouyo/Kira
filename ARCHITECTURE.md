@@ -121,11 +121,11 @@ Resume validation still occurs before acquisition and allows credential
 rotation when semantic runtime identity is unchanged. Q2 does not change the
 15-node Judge graph or introduce a new checkpoint/resume lifecycle.
 
-## Capability runtime — R2A and R2B
+## Capability runtime — R2A, R2B, and R2C1
 
-R2A and R2B add the domain-neutral `@harness/capability` package without
-changing production Judge or Screen wiring. Its dependency direction remains
-deliberately small:
+R2A and R2B add the domain-neutral `@harness/capability` package. R2C1 consumes
+that package in the CLI composition layer for the first production migration.
+The package dependency direction remains deliberately small:
 
 ```text
 @harness/capability
@@ -181,12 +181,68 @@ scoped discovery, and delegates an authorized explicit binding once to
 gateway code does not validate tool I/O or catch and replace downstream
 runtime/domain errors.
 
-R2A/R2B are not production financial migration, Judge/Screen migration,
-durable capability execution plans, capability-aware resume compatibility,
-persistence, MCP integration, roles, wildcards, conditional policy, or an
-autonomous tool loop. `CapabilityRegistry` is not authorization,
-`CapabilityGateway` is not `ToolRuntime`, and `resolveTool()` is not an
-authorization boundary.
+R2A/R2B alone are not production financial migration, durable capability
+execution plans, capability-aware resume compatibility, persistence, MCP
+integration, roles, wildcards, conditional policy, or an autonomous tool loop.
+`CapabilityRegistry` is not authorization, `CapabilityGateway` is not
+`ToolRuntime`, and `resolveTool()` is not an authorization boundary.
+
+### Financial capability composition and Screen migration — R2C1
+
+The CLI application layer registers the eight existing financial tools under
+their canonical IDs:
+
+```text
+financial.company-report
+financial.quarterly-financials
+financial.screen
+financial.daily-transaction
+financial.foreign-flow
+financial.news
+financial.filings
+financial.sentiment
+```
+
+Each registration binds a safe data-only descriptor with integration identity
+`financial-data` to the exact `ToolDefinition` produced by
+`createFinancialTools(provider)`. No tool or provider wrapper is recreated.
+`FinancialDataProvider` remains the provider-neutral domain seam, and Sectors
+remains its current concrete implementation.
+
+The implemented production Screen path is:
+
+```text
+/screen
+  ↓
+command.screen
+  ↓
+CapabilityGateway
+  ↓
+CapabilityPolicy + CapabilityRegistry
+  ↓
+financial.screen ToolDefinition
+  ↓
+ToolRuntime
+  ↓
+FinancialDataProvider
+```
+
+The registry contains all eight financial capabilities. The `command.screen`
+principal is granted only `financial.screen`; it cannot discover, describe, or
+invoke the other seven through the gateway. `HarnessContext` exposes the
+gateway without exposing raw Registry or Policy instances.
+
+R2C1 is an intentional transitional state:
+
+```text
+Screen = CapabilityGateway → ToolRuntime
+Judge  = direct ToolRuntime
+```
+
+Raw `toolRuntime` and `financialTools` remain in `HarnessContext` temporarily
+for Judge. R2C1 does not add Judge principals or grants, alter the 15-node Judge
+graph, change `JUDGE_WORKFLOW_VERSION`, modify execution profiles/checkpoints,
+or make resume capability-aware.
 
 ## Core boundaries and invariants
 
@@ -504,15 +560,15 @@ credentials.
 ## Current roadmap
 
 The current and future milestone order is maintained in
-[`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, R2A, and R2B are
-complete on `master`. The next milestone is:
+[`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, R2A, R2B, and R2C1 are
+complete on `master`. The current milestone is:
 
-**R2C1 — Financial Capability Composition + Screen Migration**
+**R2C2 — Judge Capability Migration + Durable Resume Semantics**
 
-**R2C2 — Judge Capability Migration + Durable Resume Semantics** remains
-future work. PR P continues to restore the same Execution's validated
-snapshot, Evidence, and typed debate outputs without changing its lifecycle or
-Judge graph. The full future order is maintained in
+R2C2 must migrate the remaining Judge direct-runtime path and address durable
+capability semantic compatibility. PR P continues to restore the same
+Execution's validated snapshot, Evidence, and typed debate outputs without
+changing its lifecycle or Judge graph. The full future order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ### R1 Typed Tool Runtime
@@ -530,5 +586,5 @@ uses the screening operation; both retain their existing business behavior and
 public event projections. The generic runtime remains domain-neutral and does
 not import CLI event types or financial packages. R2A adds immutable capability
 contracts and discovery; R2B adds deterministic policy and gateway
-composition. Existing CLI Judge and Screen production paths remain unchanged
-until future R2C1/R2C2 migration work.
+composition. R2C1 registers all eight definitions and migrates Screen through
+the gateway. Judge remains on direct `ToolRuntime` composition until R2C2.

@@ -169,7 +169,7 @@ profile and typed checkpoints, restore the same interrupted Execution's valid
 DAG prefix, and continue pending nodes without refetching accepted financial
 input. `/session <executionId>` remains the read-only session/execution viewer.
 
-### Capability runtime — R2A and R2B
+### Capability runtime — R2A, R2B, and R2C1
 
 R2A and R2B add the domain-neutral `@harness/capability` package. Its
 immutable `CapabilityRegistry` exposes safe data-only descriptors through
@@ -181,9 +181,11 @@ immutable `CapabilityRegistry` exposes safe data-only descriptors through
 bindings to `ToolRuntime`.
 
 The registry is not authorization and does not execute tools. The gateway is
-not `ToolRuntime`; `ToolRuntime` remains the sole execution authority. Judge
-and Screen production paths have not yet been migrated to the registry; that
-work is future R2C1/R2C2 scope.
+not `ToolRuntime`; `ToolRuntime` remains the sole execution authority. R2C1
+registers all eight existing `financial.*` tools with provider-neutral
+`financial-data` descriptors and routes `/screen` through the gateway using the
+explicit `command.screen` principal. That principal is granted only
+`financial.screen`. Judge remains on its direct `ToolRuntime` path until R2C2.
 
 ### Selective financial retrieval
 
@@ -414,8 +416,9 @@ External seams:
   packages/tool-runtime    explicit ToolDefinition execution authority
 ```
 
-The R2A/R2B capability package is a domain-neutral foundation; existing Judge
-and Screen production wiring remains unchanged until future R2C1/R2C2 work.
+The R2A/R2B capability package is a domain-neutral foundation. R2C1 composes it
+at the CLI boundary for Screen; Judge remains an explicit transitional bypass
+until R2C2.
 
 ### Main packages
 
@@ -527,12 +530,12 @@ L  Artifact-aware retrieval + validity + prior-context reuse
  R1 Typed Tool Runtime (complete)
  R2A Capability Contracts + Immutable Registry (complete)
  R2B Deterministic Policy + Capability Gateway (complete)
- R2C1 Financial Capability Composition + Screen Migration (next)
- R2C2 Judge Capability Migration + Durable Resume Semantics (future)
+ R2C1 Financial Capability Composition + Screen Migration (complete)
+ R2C2 Judge Capability Migration + Durable Resume Semantics (next)
 ```
 
-A-P, Q1, Q2, R1, R2A, and R2B are complete and merged into `master`. R2C1 is
-the next milestone; R2C2 remains future work. See
+A-P, Q1, Q2, R1, R2A, R2B, and R2C1 are complete. R2C2 is the next milestone.
+See
 [docs/ROADMAP.md](docs/ROADMAP.md) for the S-Z future sequence and dependency
 rationale.
 
@@ -548,22 +551,21 @@ A-L  Stateful lifecycle/context foundation         COMPLETE
 
 ## Next architecture work
 
-The next planned architecture phase starts from the R2B policy and gateway
-boundary rather than replacing the A-P foundation.
+The next planned architecture phase starts from the production R2C1 Screen
+migration rather than replacing the A-P foundation.
 
-Current direction after R2B:
+Current direction after R2C1:
 
-1. R2C1 — Financial Capability Composition + Screen Migration (next)
-2. R2C2 — Judge Capability Migration + Durable Resume Semantics
-3. S — Files & Documents
-4. T — Evidence Policy + Claim Graph
-5. U — Research Composition + Product Completion
-6. V-Y — Decision Intelligence
-7. Z — Product Platform
+1. R2C2 — Judge Capability Migration + Durable Resume Semantics (next)
+2. S — Files & Documents
+3. T — Evidence Policy + Claim Graph
+4. U — Research Composition + Product Completion
+5. V-Y — Decision Intelligence
+6. Z — Product Platform
 
 This product overview points to the canonical roadmap for the detailed future
-sequence, including U1-U8. No future R2C1/R2C2 or U implementation is claimed
-here. Q2 and R1 do not change PR P same-Execution resume semantics or add a second
+sequence, including U1-U8. No future R2C2 or U implementation is claimed here.
+R2C1 does not change PR P same-Execution resume semantics or add a second
 `/resume` architecture.
 
 ## Documentation

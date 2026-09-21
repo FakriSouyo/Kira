@@ -5,17 +5,46 @@ Last updated: 2026-09-21
 ## Current state
 
 The stateful architecture milestones **A-P** are complete on `master`. **Q1**,
-**Q2**, **R1**, **R2A**, and **R2B** are also complete on `master`.
+**Q2**, **R1**, **R2A**, **R2B**, and **R2C1** are also complete on `master`.
 
-The current next milestone is **R2C1 — Financial Capability Composition +
-Screen Migration**. **R2C2 — Judge Capability Migration + Durable Resume
-Semantics** is future work.
+The current milestone is **R2C2 — Judge Capability Migration + Durable Resume
+Semantics**. **S1 — Durable File / Attachment Layer** follows it in the
+canonical sequence.
 
 The canonical future sequence and dependency rationale live in
 [`docs/ROADMAP.md`](ROADMAP.md). This document is the mutable current-status
 view, not a second detailed roadmap.
 
 ## Recently completed
+
+### R2C1 — Financial Capability Composition + Screen Migration
+
+Status: **complete on master**.
+
+R2C1 registers all eight existing financial `ToolDefinition` values with
+provider-neutral `financial-data` descriptors. The registrations preserve the
+existing `createFinancialTools(provider)` bindings, so `FinancialDataProvider`
+remains the domain authority seam and Sectors remains only its current concrete
+provider implementation.
+
+`buildContext()` now composes and exposes `capabilityGateway`. `/screen` supplies
+the explicit `command.screen` principal and invokes `financial.screen` through
+that gateway. Its policy grant contains only `financial.screen`; the other
+seven registered financial capabilities remain unavailable to the Screen
+principal. `ToolRuntime` still validates and executes the selected explicit
+tool, and Screen filtering, ranking, rendering, and the ten-row limit remain
+unchanged.
+
+The production transition is intentionally incomplete:
+
+```text
+/screen -> CapabilityGateway -> ToolRuntime
+/judge  -> direct ToolRuntime
+```
+
+Raw `toolRuntime` and `financialTools` remain in `HarnessContext` for Judge.
+Judge principals/grants and capability-aware resume semantics do not exist yet;
+R2C2 owns that work.
 
 ### R2B — Deterministic Policy + Capability Gateway
 
@@ -35,8 +64,9 @@ or provide workflow scheduling. Unknown capability errors remain distinct from
 denials, and downstream runtime/domain error identity and cancellation
 semantics are preserved.
 
-R2B does not migrate production Judge or Screen paths and does not add
-capability-aware durable resume semantics. Those remain R2C1/R2C2 work.
+R2B itself did not migrate production paths or add capability-aware durable
+resume semantics. R2C1 now migrates Screen; Judge and durable capability
+semantics remain R2C2 work.
 
 ### R2A — Capability Contracts + Immutable Registry
 
@@ -157,23 +187,22 @@ an explicit command boundary.
 
 ## Next milestone
 
-### R2C1 — Financial Capability Composition + Screen Migration
-
-Status: **next**.
-
-R2C1 will compose the existing provider-neutral financial tools through the
-registered capability boundary and migrate `/screen` first, while preserving
-`FinancialDataProvider` as the authority seam. It is not implemented yet.
-
 ### R2C2 — Judge Capability Migration + Durable Resume Semantics
 
-Status: **future**.
+Status: **current / next implementation milestone**.
 
 R2C2 will migrate Judge through explicit caller identity, policy, gateway, and
 `ToolRuntime` composition and will address capability-related execution
-semantic compatibility for durable resume. Current execution profiles do not
-yet pin capability policy, grants, or binding semantics. No finalized
-capability plan or fingerprint contract exists yet.
+semantic compatibility for durable resume. Current source requires
+`financial.company-report` for `identify-company`,
+`financial.quarterly-financials` for `fetch-financials`, daily transaction plus
+foreign flow for `fetch-market-data`, and news, filings, plus sentiment for
+`fetch-news`.
+
+Exact Judge principal IDs and grant decomposition remain unlocked.
+`WorkflowNode.executor` is not a principal and skills are not grants. Current
+execution profiles do not pin capability policy, grants, or binding semantics;
+no finalized capability plan or fingerprint contract exists yet.
 
 ## Maintenance policy
 

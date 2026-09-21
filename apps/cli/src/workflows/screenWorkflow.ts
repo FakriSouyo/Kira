@@ -1,5 +1,7 @@
 import type { ScreenerResult } from '@harness/financial-data';
 import type { HarnessContext } from '../context';
+import { SCREEN_CAPABILITY_PRINCIPAL } from '../tools/financialCapabilities';
+import { financialToolIds } from '../tools/financialTools';
 
 /** Hasil /screen (addendum Task 15) — pola historis, bukan prediksi. */
 export interface ScreenArtifacts {
@@ -14,7 +16,11 @@ export async function screenWorkflow(
   ctx: HarnessContext,
   criteria: string[],
 ): Promise<ScreenArtifacts> {
-  const results = (await ctx.toolRuntime.invoke(ctx.financialTools.screen, { criteria })).value;
+  const results = (await ctx.capabilityGateway.invoke(
+    SCREEN_CAPABILITY_PRINCIPAL,
+    financialToolIds.screen,
+    { criteria },
+  )).value;
   return {
     criteria,
     results: results.filter((r) => r.matchScore > 0).slice(0, MAX_ROWS),

@@ -15,6 +15,10 @@ import { JudgeAgent } from '@harness/subagent-judge';
 import { ResearcherAgent } from '@harness/subagent-researcher';
 import { ToolRuntime } from '@harness/tool-runtime';
 import type { FinharnessConfig } from './config';
+import {
+  createFinancialCapabilityGateway,
+  type FinancialCapabilityGateway,
+} from './tools/financialCapabilities';
 import { createFinancialTools, type FinancialTools } from './tools/financialTools';
 import { createConversationContextCoordinator, type ConversationContextCoordinator } from './runtime/conversationContextCoordinator';
 
@@ -23,6 +27,7 @@ export interface HarnessContext {
   financialData: FinancialDataProvider;
   toolRuntime: ToolRuntime;
   financialTools: FinancialTools;
+  capabilityGateway: FinancialCapabilityGateway;
   researcher: ResearcherAgent;
   bull: BullAgent;
   bear: BearAgent;
@@ -75,6 +80,7 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
   });
   const toolRuntime = new ToolRuntime();
   const financialTools = createFinancialTools(financialData);
+  const capabilityGateway = createFinancialCapabilityGateway(financialTools, toolRuntime);
   const runtimePlan = agentLlm.describeRuntimePlan();
   const runtimeBudget = runtimeBudgetForPlan(runtimePlan);
   const modelCapabilities = runtimeBudget.modelCapabilities;
@@ -99,6 +105,7 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
     financialData,
     toolRuntime,
     financialTools,
+    capabilityGateway,
     researcher: new ResearcherAgent(specialist('researcher')),
     bull: new BullAgent(specialist('bull')),
     bear: new BearAgent(specialist('bear')),
