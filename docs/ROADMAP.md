@@ -26,6 +26,12 @@ Every statement in this roadmap is one of:
 The roadmap locks sequencing and intent. Future implementation details remain
 subject to source-driven design review.
 
+When a milestone completes, this document keeps its durable architectural
+summary and moves mutable implementation status to `docs/PROGRESS.md`. Detailed
+future sections are expanded only as their dependencies become actionable;
+completed milestones are not used to imply that later production migrations
+already exist.
+
 ## Canonical high-level sequence
 
 ```text
@@ -36,14 +42,15 @@ Q1
 Q2
 R1
 R2A
+R2B
 
 CURRENT
 
-R2B
+R2C1
 
 NEXT
 
-R2C
+R2C2
 
 FUTURE KNOWLEDGE INPUT
 
@@ -86,7 +93,7 @@ research capability maturation. Discovery and design for later milestones may
 begin earlier, but production implementations must not bypass the dependency
 boundaries established by earlier milestones.
 
-## Completed foundation — A-P, Q1, Q2, R1, R2A
+## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B
 
 The following milestones are complete on `master`:
 
@@ -95,6 +102,7 @@ The following milestones are complete on `master`:
 - **Q2 — Durable Model Selection + Production Integration:** append-only Session model intent, immutable runtime-plan composition, plan-aware context budgeting, actual model provenance, and runtime-plan-compatible Judge resume.
 - **R1 — Typed Tool Runtime:** explicit typed `ToolDefinition` values, one-shot validation and execution, lifecycle observation, cancellation fencing, and explicit CLI financial adapters.
 - **R2A — Capability Contracts + Immutable Registry:** domain-neutral capability descriptors, registration contracts, immutable deterministic discovery, duplicate/identity validation, and trusted lookup of explicit tool bindings.
+- **R2B — Deterministic Policy + Capability Gateway:** explicit caller principals, exact-match immutable grants, deterministic policy evaluation, scoped authorized discovery, registry/policy consistency validation, and lookup-only gateway delegation to `ToolRuntime`.
 
 The current Judge graph remains the source of truth: it has 15 stable nodes,
 `JUDGE_WORKFLOW_VERSION` remains `2`, and no obsolete historical Judge graph is
@@ -151,13 +159,13 @@ production paths have not been migrated.
 
 ### R2B — Deterministic Policy + Capability Gateway
 
-Status: **current next milestone**.
+Status: **complete on `master`**.
 
 R2B answers:
 
 > Who may use which registered capability?
 
-The conceptual direction is:
+The implemented boundary is:
 
 ```text
 Caller
@@ -179,17 +187,42 @@ explicit ToolDefinition
 ToolRuntime
 ```
 
-This is future direction only. The exact `CapabilityPrincipal` shape,
-`CapabilityGrant` schema, policy representation, package layout, error names,
-and gateway method signatures are **not yet locked**. R2B must not treat
-`resolveTool()` as an authorization boundary or allow production execution to
-bypass the future gateway.
+R2B provides `CapabilityPrincipal`, immutable `CapabilityGrant` allowlists,
+`CapabilityPolicy`, focused policy/access errors, and `CapabilityGateway` in
+`@harness/capability`. Policy configuration rejects empty IDs, duplicate
+principal grants, and duplicate capability IDs. Policy evaluation allows only
+exact principal/capability matches; unknown principals and ungranted
+capabilities deny by default. Policy listings are detached, frozen, and sorted
+by principal ID and capability ID.
 
-### R2C — Production Capability Integration + Resume Semantics
+The gateway validates every policy capability against its supplied registry at
+construction. Its public `list(principal)` and `describe(principal, id)`
+methods expose only authorized data-only descriptors. Its `invoke(...)` path
+validates the explicit principal, preserves unknown-versus-denied errors,
+looks up the registered explicit `ToolDefinition`, and delegates exactly once
+to `ToolRuntime`. The gateway does not expose `resolveTool()`, validate tool
+I/O, execute tools directly, schedule workflows, or replace runtime events.
+`ToolRuntime` remains the sole execution authority and downstream runtime or
+domain errors retain their identity.
 
-Status: **future**.
+R2B is not production financial migration, Judge/Screen migration, durable
+capability execution plans, capability-aware resume semantics, persistence,
+MCP integration, roles, wildcards, conditional policy, or an autonomous tool
+loop. `CapabilityRegistry` is not authorization, `CapabilityGateway` is not
+`ToolRuntime`, and `resolveTool()` is not an authorization boundary.
 
-R2C is the production integration phase. The intended path is:
+### R2C1 — Financial Capability Composition + Screen Migration
+
+Status: **current next milestone**.
+
+Future direction: register the existing financial operations as explicit,
+provider-neutral capabilities and route the first production migration through
+the R2 policy and gateway boundary. The current financial tool IDs are
+`financial.company-report`, `financial.quarterly-financials`,
+`financial.screen`, `financial.daily-transaction`, `financial.foreign-flow`,
+`financial.news`, `financial.filings`, and `financial.sentiment`.
+
+The future composition remains:
 
 ```text
 Workflow / Command
@@ -216,18 +249,33 @@ FinancialDataProvider
 provider implementation
 ```
 
-Existing financial tools should eventually travel through this boundary without
-bypassing `FinancialDataProvider`.
+The future registration remains provider-neutral and must preserve the
+`FinancialDataProvider` seam; Sectors is the current concrete provider. `/screen`
+is intended to be the first production migration candidate, but R2C1 is not
+implemented by this roadmap update.
 
-R2C must also address capability-related execution semantic compatibility for
-durable resumability. If an Execution starts under capability semantics A and a
-later process attempts to resume it under materially different policy or
-integration semantics, FinHarness must not silently resume under the changed
+### R2C2 — Judge Capability Migration + Durable Resume Semantics
+
+Status: **future**.
+
+Future direction: migrate Judge's required operations through explicit
+capability principals, policy, gateway, and `ToolRuntime` without inferring
+authorization from `WorkflowNode.executor`, specialist skills, persona, model
+output, or workflow ownership. The current Judge and Screen production paths
+remain direct `ToolRuntime` compositions until their respective migration
+work is reviewed.
+
+R2C2 must also address capability-related execution semantic compatibility for
+durable resumability. Current execution profiles pin workflow/version,
+graph/command/ticker, reasoning and conditional settings, researcher flags,
+model/runtime plan, and related fingerprints, but do not pin capability policy,
+grant, or binding semantics. If an Execution starts under capability semantics
+A and a later process attempts to resume it under materially different policy
+or integration semantics, FinHarness must not silently resume under changed
 execution authority.
 
-A deterministic secret-free representation or fingerprint may be needed, but a
-finalized `CapabilityPlan` type and its compatibility rules are **not yet
-locked**.
+A deterministic secret-free representation or fingerprint may be needed, but
+its exact design and any finalized `CapabilityPlan` type remain unlocked.
 
 ## Authorization boundaries
 
@@ -697,8 +745,8 @@ gateway != ToolRuntime
 
 The following remain future design work:
 
-- exact R2B class names, policy schema, principal representation, and gateway signatures;
-- exact R2C capability-semantic fingerprint type and resume compatibility model;
+- exact R2C1 registration composition and migration wiring;
+- exact R2C2 capability-semantic fingerprint type and resume compatibility model;
 - exact U workflow node counts, package topology, specialist mapping, future artifact schemas, and public APIs;
 - exact conversation-summary schema, Research Graph database model, and Decision Journal schema;
 - exact desktop framework, web framework, and API transport;

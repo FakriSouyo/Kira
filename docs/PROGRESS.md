@@ -1,21 +1,42 @@
 # FinHarness Progress
 
-Last updated: 2026-09-20
+Last updated: 2026-09-21
 
 ## Current state
 
 The stateful architecture milestones **A-P** are complete on `master`. **Q1**,
-**Q2**, **R1**, and **R2A** are also complete on `master`.
+**Q2**, **R1**, **R2A**, and **R2B** are also complete on `master`.
 
-The current next milestone is **R2B — Deterministic Policy + Capability
-Gateway**. **R2C — Production Capability Integration + Resume Semantics** is
-future work.
+The current next milestone is **R2C1 — Financial Capability Composition +
+Screen Migration**. **R2C2 — Judge Capability Migration + Durable Resume
+Semantics** is future work.
 
 The canonical future sequence and dependency rationale live in
 [`docs/ROADMAP.md`](ROADMAP.md). This document is the mutable current-status
 view, not a second detailed roadmap.
 
 ## Recently completed
+
+### R2B — Deterministic Policy + Capability Gateway
+
+Status: **complete on master**.
+
+R2B adds explicit caller principals, immutable exact-match capability grants,
+deterministic `CapabilityPolicy` evaluation, and `CapabilityGateway` composition
+over the R2A registry and `ToolRuntime`. Policy configuration validates IDs and
+duplicates, policy discovery is detached/frozen/deterministically ordered, and
+the gateway fails fast when policy grants reference capabilities absent from its
+registry.
+
+Gateway discovery is scoped to authorized data-only descriptors. Gateway
+invocation validates the explicit principal and delegates the registered
+`ToolDefinition` to `ToolRuntime`; it does not execute tools, validate tool I/O,
+or provide workflow scheduling. Unknown capability errors remain distinct from
+denials, and downstream runtime/domain error identity and cancellation
+semantics are preserved.
+
+R2B does not migrate production Judge or Screen paths and does not add
+capability-aware durable resume semantics. Those remain R2C1/R2C2 work.
 
 ### R2A — Capability Contracts + Immutable Registry
 
@@ -77,10 +98,10 @@ execution-scoped `VerifiedFinancialSnapshot` before reasoning.
 implemented, mature research workflow
 
 /screen
-implemented
+implemented, future maturation
 
 /search
-implemented
+implemented, future maturation
 
 /research
 stub
@@ -120,29 +141,39 @@ injection, bounded recent-turn selection, conversation-summary composition, and
 robust cross-turn reference resolution are not yet implemented as a general
 conversation system.
 
+`ConversationJournal`, `ConversationSummary`, `SessionWorkingContext`,
+`ContextPacket`, and `Evidence` remain distinct authorities. In particular:
+
+```text
+ConversationSummary != Evidence
+```
+
+Conversation-derived claims remain conversational/user context until they are
+independently verified by an evidence-producing research workflow.
+
 Natural-language conversation does not silently execute `/judge`, `/research`,
 `/compare`, `/challenge`, `/investigate`, or `/screen`. Fresh research remains
 an explicit command boundary.
 
 ## Next milestone
 
-### R2B — Deterministic Policy + Capability Gateway
+### R2C1 — Financial Capability Composition + Screen Migration
 
 Status: **next**.
 
-R2B is future authorization work: explicit caller identity, deterministic
-policy, and a gateway that mediates access to registered capabilities before a
-trusted `ToolDefinition` reaches `ToolRuntime`. Exact principals, grants,
-policy representation, and gateway APIs are not yet locked.
+R2C1 will compose the existing provider-neutral financial tools through the
+registered capability boundary and migrate `/screen` first, while preserving
+`FinancialDataProvider` as the authority seam. It is not implemented yet.
 
-### R2C — Production Capability Integration + Resume Semantics
+### R2C2 — Judge Capability Migration + Durable Resume Semantics
 
 Status: **future**.
 
-R2C will move production capabilities through the future gateway while
-preserving `FinancialDataProvider` as the financial seam and will address
-capability-related execution semantic compatibility for durable resume. No
-finalized capability plan or fingerprint contract exists yet.
+R2C2 will migrate Judge through explicit caller identity, policy, gateway, and
+`ToolRuntime` composition and will address capability-related execution
+semantic compatibility for durable resume. Current execution profiles do not
+yet pin capability policy, grants, or binding semantics. No finalized
+capability plan or fingerprint contract exists yet.
 
 ## Maintenance policy
 

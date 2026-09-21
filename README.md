@@ -43,10 +43,11 @@ Normal conversation does **not** silently auto-run `/judge`, `/research`, `/comp
 
 ### Stateful harness runtime
 
-The A-P stateful lifecycle/context foundation, Q1, Q2, R1, and R2A are complete
-on `master`. They provide the canonical lifecycle, model runtime, typed tool
-runtime, immutable capability discovery, provider seam, verified financial input
-boundary, and durable resumability foundation:
+The A-P stateful lifecycle/context foundation, Q1, Q2, R1, R2A, and R2B are
+complete on `master`. They provide the canonical lifecycle, model runtime,
+typed tool runtime, immutable capability discovery, deterministic capability
+policy/gateway composition, provider seam, verified financial input boundary,
+and durable resumability foundation:
 
 ```text
 Session
@@ -168,17 +169,21 @@ profile and typed checkpoints, restore the same interrupted Execution's valid
 DAG prefix, and continue pending nodes without refetching accepted financial
 input. `/session <executionId>` remains the read-only session/execution viewer.
 
-### Capability foundation — R2A
+### Capability runtime — R2A and R2B
 
-R2A adds the domain-neutral `@harness/capability` package. Its immutable
-`CapabilityRegistry` exposes safe data-only descriptors through `list()` and
-`describe(id)`, while trusted composition code may use lookup-only
+R2A and R2B add the domain-neutral `@harness/capability` package. Its
+immutable `CapabilityRegistry` exposes safe data-only descriptors through
+`list()` and `describe(id)`, while trusted composition code may use lookup-only
 `resolveTool(id)` to obtain the registered explicit `ToolDefinition`.
 
-The registry is not authorization and does not execute tools. `ToolRuntime`
-remains the sole execution authority. R2B — Deterministic Policy + Capability
-Gateway — is next; Judge and Screen production paths have not been migrated to
-the registry.
+`CapabilityPolicy` evaluates explicit principal-to-capability grants, and
+`CapabilityGateway` exposes authorized discovery and delegates authorized
+bindings to `ToolRuntime`.
+
+The registry is not authorization and does not execute tools. The gateway is
+not `ToolRuntime`; `ToolRuntime` remains the sole execution authority. Judge
+and Screen production paths have not yet been migrated to the registry; that
+work is future R2C1/R2C2 scope.
 
 ### Selective financial retrieval
 
@@ -405,12 +410,12 @@ External seams:
   packages/llm
   packages/financial-data  FinancialDataProvider contract
   packages/sectors-api
-  packages/capability      immutable capability discovery (R2A)
+  packages/capability      immutable discovery + policy/gateway (R2A/R2B)
   packages/tool-runtime    explicit ToolDefinition execution authority
 ```
 
-The R2A capability package is currently a domain-neutral foundation; existing
-Judge and Screen production wiring remains unchanged until future R2B/R2C work.
+The R2A/R2B capability package is a domain-neutral foundation; existing Judge
+and Screen production wiring remains unchanged until future R2C1/R2C2 work.
 
 ### Main packages
 
@@ -521,13 +526,15 @@ L  Artifact-aware retrieval + validity + prior-context reuse
  Q2 Durable Model Selection + Production Integration (complete)
  R1 Typed Tool Runtime (complete)
  R2A Capability Contracts + Immutable Registry (complete)
- R2B Deterministic Policy + Capability Gateway (next)
- R2C Production Capability Integration + Resume Semantics (future)
+ R2B Deterministic Policy + Capability Gateway (complete)
+ R2C1 Financial Capability Composition + Screen Migration (next)
+ R2C2 Judge Capability Migration + Durable Resume Semantics (future)
 ```
 
-A-P, Q1, Q2, R1, and R2A are complete and merged into `master`. R2B is the
-next milestone; R2C remains future work. See [docs/ROADMAP.md](docs/ROADMAP.md)
-for the S-Z future sequence and dependency rationale.
+A-P, Q1, Q2, R1, R2A, and R2B are complete and merged into `master`. R2C1 is
+the next milestone; R2C2 remains future work. See
+[docs/ROADMAP.md](docs/ROADMAP.md) for the S-Z future sequence and dependency
+rationale.
 
 PR M adds the Financial Data Provider Seam; PR N adds the verified input boundary:
 
@@ -541,13 +548,13 @@ A-L  Stateful lifecycle/context foundation         COMPLETE
 
 ## Next architecture work
 
-The next planned architecture phase starts from the R2A immutable capability
+The next planned architecture phase starts from the R2B policy and gateway
 boundary rather than replacing the A-P foundation.
 
-Current direction after R2A:
+Current direction after R2B:
 
-1. R2B — Deterministic Policy + Capability Gateway (next)
-2. R2C — Production Capability Integration + Resume Semantics
+1. R2C1 — Financial Capability Composition + Screen Migration (next)
+2. R2C2 — Judge Capability Migration + Durable Resume Semantics
 3. S — Files & Documents
 4. T — Evidence Policy + Claim Graph
 5. U — Research Composition + Product Completion
@@ -555,7 +562,7 @@ Current direction after R2A:
 7. Z — Product Platform
 
 This product overview points to the canonical roadmap for the detailed future
-sequence, including U1-U8. No future R2B/R2C or U implementation is claimed
+sequence, including U1-U8. No future R2C1/R2C2 or U implementation is claimed
 here. Q2 and R1 do not change PR P same-Execution resume semantics or add a second
 `/resume` architecture.
 
