@@ -15,3 +15,4 @@ export { ContextSnapshotStoreSqlite } from './contextSnapshotStoreSqlite';
 export { FinancialSnapshotStoreSqlite } from './financialSnapshotStoreSqlite';
 export { ExecutionProfileStoreSqlite } from './executionProfileStoreSqlite';
 export { WorkflowNodeOutputStoreSqlite } from './workflowNodeOutputStoreSqlite';
+export { AttachmentStoreSqlite } from './attachmentStoreSqlite';

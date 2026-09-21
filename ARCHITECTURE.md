@@ -334,9 +334,10 @@ same Execution row and ID; it does not create a retry Execution.
 ## Command boundaries
 
 The implemented command surface includes `/judge`, `/screen`, `/search`,
-`/history`, `/session`, `/resume`, `/web`, `/export`, `/version`, setup/status
-commands, and local session controls. `/judge` is the current mature research
-vertical; `/screen` and `/search` are implemented. `/challenge`, `/compare`,
+`/attach`, `/history`, `/session`, `/resume`, `/web`, `/export`, `/version`,
+setup/status commands, and local session controls. `/judge` is the current
+mature research vertical; `/screen` and `/search` are implemented, and
+`/attach` is explicit user-file ingestion. `/challenge`, `/compare`,
 `/investigate`, and `/research` remain planned stubs.
 
 `/resume <executionId>` validates and continues an interrupted canonical Judge
@@ -561,6 +562,7 @@ never resumed.
 | Store | Authority |
 |---|---|
 | ConversationJournal | append-only conversation audit and projection input |
+| AttachmentStore | immutable user-provided raw-file identity, metadata, and durable bytes |
 | SessionWorkingContext | versioned durable relevance state |
 | Evidence | accepted source observations and provenance |
 | FinancialSnapshot | verified execution-scoped financial input manifest |
@@ -572,6 +574,53 @@ never resumed.
 
 These stores are intentionally not interchangeable. Checkpoint/resume is not
 provider-cache reuse, artifact reuse, context replay, or journal replay.
+
+## Durable file attachments — S1
+
+S1 adds a separate raw-file authority:
+
+```text
+AttachmentStore
+  = immutable user-provided raw-file identity + metadata + durable bytes
+
+ArtifactStore
+  = semantic research output
+
+Evidence
+  = accepted source observation/provenance
+
+Document
+  = not implemented yet
+
+Context
+  = selected model input
+```
+
+The explicit `/attach <path>` command creates one canonical Turn and no
+Execution. It snapshots exact raw bytes into FinHarness-owned content-addressed
+storage below the configured data directory:
+
+```text
+<homeDir>/attachments/sha256/<first-two-hash-chars>/<full-content-hash>
+```
+
+The database stores immutable Attachment metadata and the filesystem stores
+the immutable raw blob. `attachmentId != contentHash`; the former identifies
+one metadata record and the latter identifies the exact SHA-256 byte content.
+The source path is transient ingestion input, not a durable identity or
+locator. `/attach` persists `/attach [file]` as safe Turn/journal input and
+does not place attachment bytes into `ConversationJournal`, Context,
+Evidence, Artifacts, Judge, Screen, or model prompts.
+
+The existing `FilesystemSkillProvider` remains a package-owned `SKILL.md`
+loader whose paths stay inside specialist package roots. It is not user-file
+storage and does not read Attachment blobs. S1 adds no file, workspace,
+attachment, or document Capability; controlled file capabilities belong to
+future S2, and document parsing/retrieval belongs to future S3.
+
+```text
+Attachment != Document != Evidence != Artifact != Context
+```
 
 ## Failure and restart semantics
 
@@ -590,10 +639,10 @@ credentials.
 ## Current roadmap
 
 The current and future milestone order is maintained in
-[`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, R2A, R2B, R2C1, and R2C2
-are complete on `master`. The current milestone is:
+[`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2,
+and S1 are complete on `master`. The current milestone is:
 
-**S1 — Durable File / Attachment Layer**
+**S2 — Workspace + File Capability**
 
 R2C2 migrated the remaining Judge direct-runtime path and added durable
 capability semantic compatibility. PR P continues to restore the same

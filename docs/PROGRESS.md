@@ -1,15 +1,15 @@
 # FinHarness Progress
 
-Last updated: 2026-09-21
+Last updated: 2026-09-22
 
 ## Current state
 
 The stateful architecture milestones **A-P** are complete on `master`. **Q1**,
-**Q2**, **R1**, **R2A**, **R2B**, **R2C1**, and **R2C2** are also complete on
-`master`.
+**Q2**, **R1**, **R2A**, **R2B**, **R2C1**, **R2C2**, and **S1** are also
+complete on `master`.
 
-The current milestone is **S1 — Durable File / Attachment Layer**. **S2 —
-Workspace + File Capability** follows it in the canonical sequence.
+The current milestone is **S2 — Workspace + File Capability**. **S3 —
+Document Understanding / Retrieval** follows it in the canonical sequence.
 
 The canonical future sequence and dependency rationale live in
 [`docs/ROADMAP.md`](ROADMAP.md). This document is the mutable current-status
@@ -66,6 +66,19 @@ capability semantics and rejects capability-plan drift before provider
 acquisition or workflow execution. Existing profile schema/version and Judge
 workflow version remain unchanged; checkpoint dependency fingerprints include
 the profile fingerprint transitively.
+
+### S1 — Durable File / Attachment Layer
+
+Status: **complete on master**.
+
+`/attach <path>` is an explicit user-initiated import. It creates one
+canonical Turn and no Execution, snapshots exact raw bytes into
+FinHarness-owned content-addressed storage, and persists immutable Attachment
+metadata linked to the Session and Turn. `attachmentId` is distinct from the
+SHA-256 `contentHash`; repeated identical bytes reuse one blob but create
+distinct Attachment identities. Source paths are redacted to `/attach [file]`
+before Turn and journal persistence, and attachment bytes do not enter model
+context, Evidence, Artifacts, or any financial workflow.
 
 ### R2B — Deterministic Policy + Capability Gateway
 
@@ -154,6 +167,9 @@ implemented, future maturation
 /search
 implemented, future maturation
 
+/attach
+implemented, explicit user file import; not a capability or document parser
+
 /research
 stub
 
@@ -208,14 +224,15 @@ an explicit command boundary.
 
 ## Next milestone
 
-### S1 — Durable File / Attachment Layer
+### S2 — Workspace + File Capability
 
-Status: **next implementation milestone**.
+Status: **current milestone; implementation not started**.
 
-S1 is future work for durable user file and attachment identity, metadata,
-content hashes, and Session/Turn association. Its exact persistence and
-document schemas remain subject to future design review. `WorkflowNode.executor`
-is not a principal and skills are not grants.
+S2 may add controlled capabilities over FinHarness-owned resources. It must not
+turn `/attach` into agent-selected file access, arbitrary shell access,
+directory traversal, or unrestricted host filesystem access. Exact capability
+IDs and policy details remain future design work. `WorkflowNode.executor` is not
+a principal and skills are not grants.
 
 ## Maintenance policy
 

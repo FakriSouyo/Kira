@@ -45,16 +45,13 @@ R2A
 R2B
 R2C1
 R2C2
+S1
 
 CURRENT
 
-S1
-
-NEXT
-
 S2
 
-FUTURE KNOWLEDGE INPUT
+NEXT
 
 S3
 
@@ -93,7 +90,7 @@ research capability maturation. Discovery and design for later milestones may
 begin earlier, but production implementations must not bypass the dependency
 boundaries established by earlier milestones.
 
-## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2
+## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1
 
 The following milestones are complete on `master`:
 
@@ -105,6 +102,7 @@ The following milestones are complete on `master`:
 - **R2B — Deterministic Policy + Capability Gateway:** explicit caller principals, exact-match immutable grants, deterministic policy evaluation, scoped authorized discovery, registry/policy consistency validation, and lookup-only gateway delegation to `ToolRuntime`.
 - **R2C1 — Financial Capability Composition + Screen Migration:** all eight existing financial tools registered with provider-neutral descriptors, explicit least-privilege `command.screen` authorization, and production `/screen` execution through the capability gateway.
 - **R2C2 — Judge Capability Migration + Durable Resume Semantics:** Judge financial operations execute through explicit workflow principals and the capability gateway, and Judge profiles pin a deterministic capability plan whose fingerprint participates in durable resume compatibility.
+- **S1 — Durable File / Attachment Layer:** explicit `/attach` imports one user-selected local file into immutable FinHarness-owned content-addressed storage, associates safe metadata with the canonical Session/Turn lifecycle, and keeps raw bytes outside SQLite without creating an Execution or entering model context.
 
 The current Judge graph remains the source of truth: it has 15 stable nodes,
 `JUDGE_WORKFLOW_VERSION` remains `2`, and no obsolete historical Judge graph is
@@ -354,12 +352,19 @@ finally cross-surface product delivery.
 
 ## S — Files & Documents
 
-S is future knowledge-input work. It is deliberately distinct from Evidence,
-Artifacts, Context, and Memory.
+S is knowledge-input work. It is deliberately distinct from Evidence, Artifacts,
+Context, and Memory. S1 is complete; S2 and S3 remain future work.
 
 ### S1 — Durable File / Attachment Layer
 
-Future direction:
+Status: **complete on master**.
+
+The implemented `/attach <path>` command is explicit user ingestion, not a
+Capability, ToolDefinition, agent-selected file read, workspace browser, or
+document parser. It creates one canonical Turn and no Execution. The source
+file is copied into FinHarness-owned content-addressed storage and the durable
+metadata records only the safe basename, media type, byte size, SHA-256 hash,
+attachment identity, and Session/Turn association.
 
 ```text
 user file
@@ -372,14 +377,24 @@ durable attachment identity
    +--> Session/Turn association
 ```
 
-Possible inputs include annual reports, filings, CSV files, financial
-spreadsheets, text documents, PDFs, and research notes.
+Attachment metadata and raw bytes are immutable in S1. `attachmentId` is a
+durable record identity and is distinct from `contentHash`; identical bytes
+may back multiple Attachment records while sharing one durable blob. Content
+is integrity-checked on read. The original source path is transient ingestion
+input and is not persisted in attachment metadata, the journal, or Turn input.
 
 ```text
 Attachment != Document != Evidence != Artifact != Context
 ```
 
+`AttachmentStore` is raw-file identity, metadata, and durable-byte authority.
+`ArtifactStore` remains semantic research-output authority. `Document` is not
+implemented yet, and attachment bytes do not automatically enter Context,
+Evidence, Artifacts, or any model prompt.
+
 ### S2 — Workspace + File Capability
+
+Status: **current milestone; implementation not started**.
 
 Future direction: controlled file/workspace capabilities built on the R2
 capability system. Possible examples include `workspace.list`,

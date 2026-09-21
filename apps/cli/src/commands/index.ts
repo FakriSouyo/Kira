@@ -21,6 +21,8 @@ import { makeVersionCommand } from './version';
 import { UserFriendlyError } from '@harness/shared';
 import { FinancialDataError } from '@harness/financial-data';
 import { PROVIDERS } from '../setup/providers';
+import { readFile, stat } from 'node:fs/promises';
+import { basename, resolve } from 'node:path';
 
 const TICKER_RE = /^[A-Z]{2,6}$/;
 
@@ -71,6 +73,43 @@ function makeScreenCommand(ctx: HarnessContext): CommandHandler {
     const criteria = args.map((a) => a.toLowerCase());
     const artifacts = await screenWorkflow(ctx, criteria);
     process.stdout.write(`${renderScreenResult(artifacts)}\n\n`);
+  };
+}
+
+function makeAttachCommand(ctx: HarnessContext, write: (text: string) => void): CommandHandler {
+  return async (args, execution) => {
+    if (args.length === 0) {
+      throw new UserFriendlyError('MISSING_ARG', 'No file path provided', 'Usage: /attach "path with spaces/report.pdf"');
+    }
+    if (args.length !== 1) {
+      throw new UserFriendlyError('INVALID_ARG', 'Expected exactly one file path', 'Quote paths that contain spaces: /attach "path with spaces/report.pdf"');
+    }
+    const lifecycle = execution?.lifecycle;
+    if (!lifecycle) {
+      throw new UserFriendlyError('MISSING_LIFECYCLE', 'Attachment import requires an active Session Turn', 'Retry the import from the FinHarness command prompt.');
+    }
+    const sourcePath = resolve(args[0]!);
+    let sourceStat;
+    try {
+      sourceStat = await stat(sourcePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new UserFriendlyError('ATTACHMENT_NOT_FOUND', 'The selected file was not found', 'Check the path and try /attach again.');
+      }
+      throw error;
+    }
+    if (!sourceStat.isFile()) {
+      throw new UserFriendlyError('ATTACHMENT_NOT_FILE', 'The selected path is not a file', 'Choose one local file, not a directory.');
+    }
+    const content = await readFile(sourcePath);
+    const attachment = await ctx.db.attachments.save({
+      sessionId: lifecycle.sessionId,
+      turnId: lifecycle.turnId,
+      filename: basename(sourcePath),
+      mediaType: null,
+      content,
+    });
+    write(`Attached ${attachment.filename}\nAttachment: ${attachment.attachmentId}\nSize: ${attachment.sizeBytes} bytes\nSHA-256: ${attachment.contentHash}\n`);
   };
 }
 
@@ -240,6 +279,7 @@ export function buildCommands(ctx: HarnessContext, options: {
   const commands: Map<string, CommandHandler> = new Map([
     ['judge', makeJudgeCommand(ctx, options)],
     ['screen', makeScreenCommand(ctx)],
+    ['attach', makeAttachCommand(ctx, write)],
     ['export', makeExportCommand(ctx)],
     ['history', makeHistoryCommand(ctx)],
     ['session', makeSessionCommand(ctx)],
