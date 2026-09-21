@@ -31,6 +31,9 @@ User
 ├─ /search
 │   └─ evidence search
 │
+├─ /attach <path>
+│   └─ explicit durable user-file import
+│
 └─ /judge
     └─ Research → Verify → Accepted Evidence → Finalize Snapshot → Bull → Bear → Rebuttal → Judge → Verdict
 ```
@@ -44,7 +47,7 @@ Normal conversation does **not** silently auto-run `/judge`, `/research`, `/comp
 ### Stateful harness runtime
 
 The A-P stateful lifecycle/context foundation, Q1, Q2, R1, R2A, R2B, R2C1,
-and R2C2 are complete on `master`. S1 is the next milestone. They provide the
+R2C2, and S1 are complete on `master`. S2 is the current milestone. They provide the
 canonical lifecycle, model runtime, typed tool runtime, immutable capability
 discovery, deterministic capability policy/gateway composition, provider seam,
 verified financial input boundary, and durable resumability foundation:
@@ -188,6 +191,19 @@ explicit `command.screen` principal. That principal is granted only
 `financial.screen`. R2C2 routes Judge's seven financial operations through
 explicit `workflow.judge.*` principals and the same gateway. Judge profiles pin
 a deterministic capability plan and fingerprint for resume compatibility.
+
+### Durable user attachments — S1
+
+`/attach <path>` explicitly imports one user-selected local file. FinHarness
+creates one canonical Turn and no Execution, copies the exact raw bytes into
+FinHarness-owned content-addressed storage, and persists immutable Attachment
+metadata linked to the Session and Turn. The durable `attachmentId` is
+separate from the SHA-256 `contentHash`; identical bytes may reuse one blob
+while producing distinct Attachment records. The original source path is
+redacted before Turn and journal persistence. Attachment bytes are not
+Documents, Evidence, Artifacts, Context, or model input; S2 is the future
+boundary for controlled file capabilities and S3 is the future boundary for
+document understanding.
 
 ### Selective financial retrieval
 
@@ -338,6 +354,7 @@ Local OpenAI-compatible endpoints such as Ollama or LM Studio can be configured 
 |---|---|
 | `/judge TICKER [--conditional]` | Full evidence-backed debate and deterministic verdict |
 | `/screen [CRITERIA]` | Screen stocks using supported criteria |
+| `/attach <path>` | Import one user-selected file into durable FinHarness storage |
 | `/history [--limit N]` | List recent runs |
 | `/session <runId>` | Show persisted run artifacts |
 | `/resume <executionId>` | Resume an interrupted Judge Execution in the same Turn and Execution |
@@ -534,10 +551,11 @@ L  Artifact-aware retrieval + validity + prior-context reuse
  R2B Deterministic Policy + Capability Gateway (complete)
  R2C1 Financial Capability Composition + Screen Migration (complete)
  R2C2 Judge Capability Migration + Durable Resume Semantics (complete)
+ S1 Durable File / Attachment Layer (complete)
 ```
 
-A-P, Q1, Q2, R1, R2A, R2B, R2C1, and R2C2 are complete. S1 is the next
-milestone.
+A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, and S1 are complete. S2 is the current
+milestone and S3 is next.
 See
 [docs/ROADMAP.md](docs/ROADMAP.md) for the S-Z future sequence and dependency
 rationale.
@@ -557,17 +575,17 @@ A-L  Stateful lifecycle/context foundation         COMPLETE
 The next planned architecture phase starts from durable user file and attachment
 identity rather than replacing the A-P foundation.
 
-Current direction after R2C2:
+Current direction after S1:
 
-1. S1 — Durable File / Attachment Layer (next)
-2. S2/S3 — Workspace, File Capability, and Document Understanding
+1. S2 — Workspace + File Capability (current)
+2. S3 — Document Understanding / Retrieval (next)
 3. T — Evidence Policy + Claim Graph
 4. U — Research Composition + Product Completion
 5. V-Y — Decision Intelligence
 6. Z — Product Platform
 
 This product overview points to the canonical roadmap for the detailed future
-sequence, including U1-U8. No S1 or U implementation is claimed here. R2C2
+sequence, including U1-U8. No S2, S3, or U implementation is claimed here. R2C2
 adds capability-semantic resume compatibility to the existing same-Execution
 resume architecture; it does not add a second `/resume` lifecycle.
 

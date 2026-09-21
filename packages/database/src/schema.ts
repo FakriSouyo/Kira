@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { integer, real, sqliteTable, text, primaryKey, unique, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { integer, index, real, sqliteTable, text, primaryKey, unique, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /**
  * Mirror Drizzle dari DDL di migrations/0001_initial.sql (source of truth).
@@ -271,3 +271,20 @@ export const sessionContextVersions = sqliteTable('session_context_versions', {
   updatedByTurnId: text('updated_by_turn_id').references(() => researchTurns.id, { onDelete: 'set null' }),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 }, table => [primaryKey({ columns: [table.sessionId, table.version] })]);
+
+/** S1: immutable user-provided raw file identity and metadata. Bytes live in content-addressed storage. */
+export const attachments = sqliteTable('attachments', {
+  attachmentId: text('attachment_id').primaryKey(),
+  schemaVersion: integer('schema_version').notNull(),
+  sessionId: text('session_id').notNull().references(() => researchSessions.id, { onDelete: 'cascade' }),
+  turnId: text('turn_id').notNull().references(() => researchTurns.id, { onDelete: 'cascade' }),
+  filename: text('filename').notNull(),
+  mediaType: text('media_type'),
+  sizeBytes: integer('size_bytes').notNull(),
+  contentHash: text('content_hash').notNull(),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  index('attachments_session_idx').on(table.sessionId, table.createdAt, table.attachmentId),
+  index('attachments_turn_idx').on(table.turnId, table.createdAt, table.attachmentId),
+  index('attachments_content_hash_idx').on(table.contentHash),
+]);

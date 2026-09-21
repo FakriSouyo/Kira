@@ -167,7 +167,9 @@ export class ConversationController {
     await this.restore(session.id); this.publish();
   }
   safeInput(content: string): string {
-    return /^\s*\/auth-set\b/i.test(content) ? '/auth-set [credentials hidden]' : content;
+    if (/^\s*\/auth-set\b/i.test(content)) return '/auth-set [credentials hidden]';
+    if (/^\s*\/attach(?:\s|$)/i.test(content)) return '/attach [file]';
+    return content;
   }
   user(content: string): void {
     const safe = this.safeInput(content);

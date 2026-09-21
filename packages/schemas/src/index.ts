@@ -4,3 +4,4 @@ export * from './evidence';
 export * from './intent';
 export * from './debate';
 export * from "./artifact";
+export * from './attachment';

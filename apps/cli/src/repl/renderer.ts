@@ -48,6 +48,7 @@ export function renderHelp(): string {
     color.bold('Core:'),
     `  ${color.green('/judge [TICKER]')}           Full analysis + Debate ronde (Researcher → Bull → Bear → Bull → Judge)`,
     `  ${color.green('/screen [CRITERIA]')}        Screen stocks (profitable, growing)`,
+    `  ${color.green('/attach <path>')}           Import one user-selected file into FinHarness`,
     `  ${color.green('/history [--limit N]')}      List recent runs`,
     `  ${color.green('/session <runId>')}          Show run artifacts (markdown)`,
     `  ${color.green('/resume <executionId>')}    Resume an interrupted Judge Execution`,

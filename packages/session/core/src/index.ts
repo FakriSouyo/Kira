@@ -2,6 +2,7 @@ export * from './conversation';
 export * from './workingContext';
 export * from './artifact';
 export * from './resumability';
+export * from './attachment';
 export type TurnStatus = 'running' | 'completed' | 'failed' | 'stopped';
 export type ExecutionStatus = 'running' | 'interrupted' | 'completed' | 'failed' | 'cancelled';
 
