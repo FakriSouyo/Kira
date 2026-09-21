@@ -121,11 +121,11 @@ Resume validation still occurs before acquisition and allows credential
 rotation when semantic runtime identity is unchanged. Q2 does not change the
 15-node Judge graph or introduce a new checkpoint/resume lifecycle.
 
-## Capability runtime — R2A
+## Capability runtime — R2A and R2B
 
-R2A adds the domain-neutral `@harness/capability` package without changing
-production Judge or Screen wiring. Its dependency direction is deliberately
-small:
+R2A and R2B add the domain-neutral `@harness/capability` package without
+changing production Judge or Screen wiring. Its dependency direction remains
+deliberately small:
 
 ```text
 @harness/capability
@@ -149,6 +149,18 @@ CapabilityRegistry
 resolveTool(id)
     = trusted lookup-only access to the registered ToolDefinition
 
+CapabilityPrincipal
+    = explicit caller identity with a stable non-empty ID
+
+CapabilityGrant
+    = immutable exact-match principal-to-capability allowlist
+
+CapabilityPolicy
+    = deterministic policy evaluation and safe grant discovery
+
+CapabilityGateway
+    = authorized discovery and lookup-only delegation boundary
+
 ToolRuntime
     = execution authority
 ```
@@ -160,10 +172,21 @@ descriptor/tool ID agreement. `resolveTool()` returns the registered explicit
 `ToolDefinition`; it does not execute, invoke, wrap, schedule, authorize, or
 otherwise become another runtime.
 
-R2A is not authorization. It provides no policy, principals, grants, gateway,
-durable capability execution plan, capability-aware resume compatibility,
-financial production migration, or MCP integration. `resolveTool()` is a
-trusted composition hook, not an authorization boundary.
+R2B adds immutable policy grants with exact matching, default denial for
+unknown principals or ungranted capabilities, duplicate/empty-ID validation,
+and deterministic frozen listings. `CapabilityGateway` validates policy IDs
+against the registry at construction, exposes only authorized descriptors via
+scoped discovery, and delegates an authorized explicit binding once to
+`ToolRuntime`. Unknown capability failures remain distinct from access denial;
+gateway code does not validate tool I/O or catch and replace downstream
+runtime/domain errors.
+
+R2A/R2B are not production financial migration, Judge/Screen migration,
+durable capability execution plans, capability-aware resume compatibility,
+persistence, MCP integration, roles, wildcards, conditional policy, or an
+autonomous tool loop. `CapabilityRegistry` is not authorization,
+`CapabilityGateway` is not `ToolRuntime`, and `resolveTool()` is not an
+authorization boundary.
 
 ## Core boundaries and invariants
 
@@ -185,6 +208,12 @@ trusted composition hook, not an authorization boundary.
   do not memoize a new `/judge` or become authoritative current-run evidence.
 - Persistence is owned by workflow/composition boundaries, not by model output.
 - `CapabilityRegistry` is discovery truth, not policy or execution authority.
+- `CapabilityPolicy` is deterministic policy data/evaluation, not execution,
+  workflow scheduling, persistence, or an authorization principal inference
+  mechanism.
+- `CapabilityGateway` is the R2B authorization composition boundary, not a
+  tool runtime; it accepts only explicit caller identity and delegates to
+  `ToolRuntime`.
 - `ToolRuntime` remains the sole authority for executing an explicit `ToolDefinition`.
 - `WorkflowNode.executor` remains audit ownership metadata, not authorization.
 - Skills and skill content are instructions, not capability grants.
@@ -287,6 +316,19 @@ The current conversation preparation path explicitly passes
 follow-up is implemented, but general retained multi-turn transcript injection,
 summary composition, and robust cross-turn reference resolution are not yet a
 general model-context feature.
+
+The authorities remain distinct:
+
+```text
+ConversationJournal != ConversationSummary
+ConversationSummary != SessionWorkingContext
+ConversationSummary != Evidence
+SessionWorkingContext != ContextPacket
+ContextPacket != Evidence
+```
+
+Conversation-derived claims remain conversational/user context until an
+explicit evidence-producing research workflow independently verifies them.
 
 ## Workflow runtime
 
@@ -462,15 +504,15 @@ credentials.
 ## Current roadmap
 
 The current and future milestone order is maintained in
-[`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, and R2A are complete on
-`master`. The next milestone is:
+[`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, R2A, and R2B are
+complete on `master`. The next milestone is:
 
-**R2B — Deterministic Policy + Capability Gateway**
+**R2C1 — Financial Capability Composition + Screen Migration**
 
-R2C — Production Capability Integration + Resume Semantics — remains future
-work. PR P continues to restore the same Execution's validated snapshot,
-Evidence, and typed debate outputs without changing its lifecycle or Judge
-graph. The full future order is maintained in
+**R2C2 — Judge Capability Migration + Durable Resume Semantics** remains
+future work. PR P continues to restore the same Execution's validated
+snapshot, Evidence, and typed debate outputs without changing its lifecycle or
+Judge graph. The full future order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ### R1 Typed Tool Runtime
@@ -487,5 +529,6 @@ The CLI composes eight explicit financial definitions over the authoritative
 uses the screening operation; both retain their existing business behavior and
 public event projections. The generic runtime remains domain-neutral and does
 not import CLI event types or financial packages. R2A adds immutable capability
-contracts and discovery; R2B and R2C remain future policy and production
-integration work.
+contracts and discovery; R2B adds deterministic policy and gateway
+composition. Existing CLI Judge and Screen production paths remain unchanged
+until future R2C1/R2C2 migration work.
