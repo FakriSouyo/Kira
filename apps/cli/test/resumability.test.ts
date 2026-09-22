@@ -26,7 +26,7 @@ describe('PR O durable resumability foundation', () => {
 
   it('captures the canonical judge profile before the first provider operation', async () => {
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
-    const context = buildContext(db, config);
+    const context = buildContext(db, config, { sessionId: 'resumability-test-session' });
     const session = await db.sessions.createSession({
       title: 'Profile capture', provider: config.llm.agent.provider, model: config.llm.agent.model, reasoningMode: 'usual',
     });
@@ -59,7 +59,7 @@ describe('PR O durable resumability foundation', () => {
 
   it('fails before provider work when lifecycle profile persistence fails', async () => {
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
-    const context = buildContext(db, config);
+    const context = buildContext(db, config, { sessionId: 'resumability-test-session-2' });
     const session = await db.sessions.createSession({
       title: 'Profile failure', provider: config.llm.agent.provider, model: config.llm.agent.model, reasoningMode: 'usual',
     });

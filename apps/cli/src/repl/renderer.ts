@@ -2,6 +2,7 @@ import type { JudgeArtifacts } from '../workflows/judgeWorkflow';
 import type { ScreenArtifacts } from '../workflows/screenWorkflow';
 import type { ExecutionArtifacts } from '@harness/execution';
 import type { UserFriendlyError } from '@harness/shared';
+import type { Attachment } from '@harness/schemas';
 
 /**
  * Output conversational (addendum §19) — icon per agent + warna.
@@ -49,6 +50,7 @@ export function renderHelp(): string {
     `  ${color.green('/judge [TICKER]')}           Full analysis + Debate ronde (Researcher → Bull → Bear → Bull → Judge)`,
     `  ${color.green('/screen [CRITERIA]')}        Screen stocks (profitable, growing)`,
     `  ${color.green('/attach <path>')}           Import one user-selected file into FinHarness`,
+    `  ${color.green('/files')}                   List files owned by the current Session`,
     `  ${color.green('/history [--limit N]')}      List recent runs`,
     `  ${color.green('/session <runId>')}          Show run artifacts (markdown)`,
     `  ${color.green('/resume <executionId>')}    Resume an interrupted Judge Execution`,
@@ -230,6 +232,18 @@ export function renderScreenResult(artifacts: ScreenArtifacts): string {
     ),
     '',
     color.gray('[View details: /judge TICKER] · Historical patterns, not predictions'),
+  ].join('\n');
+}
+
+/** Output /files — deterministic metadata for the active Session's raw attachments. */
+export function renderFilesResult(attachments: readonly Attachment[]): string {
+  if (attachments.length === 0) return 'No attachments in the current Session.';
+  return [
+    'Attachments in the current Session:',
+    ...attachments.map((attachment) =>
+      `  ${attachment.filename} · ${attachment.attachmentId} · ${attachment.sizeBytes} bytes` +
+      (attachment.mediaType ? ` · ${attachment.mediaType}` : ''),
+    ),
   ].join('\n');
 }
 

@@ -34,6 +34,9 @@ User
 ├─ /attach <path>
 │   └─ explicit durable user-file import
 │
+├─ /files
+│   └─ Session-scoped Attachment metadata listing
+│
 └─ /judge
     └─ Research → Verify → Accepted Evidence → Finalize Snapshot → Bull → Bear → Rebuttal → Judge → Verdict
 ```
@@ -47,7 +50,7 @@ Normal conversation does **not** silently auto-run `/judge`, `/research`, `/comp
 ### Stateful harness runtime
 
 The A-P stateful lifecycle/context foundation, Q1, Q2, R1, R2A, R2B, R2C1,
-R2C2, and S1 are complete on `master`. S2 is the current milestone. They provide the
+R2C2, S1, and S2 are complete on this branch. S3 is the current milestone. They provide the
 canonical lifecycle, model runtime, typed tool runtime, immutable capability
 discovery, deterministic capability policy/gateway composition, provider seam,
 verified financial input boundary, and durable resumability foundation:
@@ -190,9 +193,12 @@ registers all eight existing `financial.*` tools with provider-neutral
 explicit `command.screen` principal. That principal is granted only
 `financial.screen`. R2C2 routes Judge's seven financial operations through
 explicit `workflow.judge.*` principals and the same gateway. Judge profiles pin
-a deterministic capability plan and fingerprint for resume compatibility.
+a deterministic capability plan and fingerprint for resume compatibility. S2
+composes the financial registrations with `workspace.list-attachments`,
+`attachment.describe`, and `attachment.read` in the same application-wide
+registry, policy, gateway, and ToolRuntime.
 
-### Durable user attachments — S1
+### Durable user attachments and controlled file access — S1 + S2
 
 `/attach <path>` explicitly imports one user-selected local file. FinHarness
 creates one canonical Turn and no Execution, copies the exact raw bytes into
@@ -201,9 +207,26 @@ metadata linked to the Session and Turn. The durable `attachmentId` is
 separate from the SHA-256 `contentHash`; identical bytes may reuse one blob
 while producing distinct Attachment records. The original source path is
 redacted before Turn and journal persistence. Attachment bytes are not
-Documents, Evidence, Artifacts, Context, or model input; S2 is the future
-boundary for controlled file capabilities and S3 is the future boundary for
-document understanding.
+Documents, Evidence, Artifacts, Context, or model input. S2 adds the
+Session-scoped raw-resource capability surface without adding a durable
+Workspace model or another file identity:
+
+```text
+/files
+  -> command.files
+  -> CapabilityGateway
+  -> workspace.list-attachments
+  -> ToolRuntime
+  -> Session-scoped Attachment tool
+  -> AttachmentStore
+```
+
+Production grants `command.files` only `workspace.list-attachments`.
+`attachment.describe` and `attachment.read` are registered but have no
+invented production consumer/principal yet. `/files` creates one Turn, zero
+Executions, zero ModelCalls, and no financial provider calls. `/attach` remains
+explicit user-controlled host filesystem ingestion outside the capability path.
+S3 remains the future boundary for Document understanding and retrieval.
 
 ### Selective financial retrieval
 
@@ -258,6 +281,7 @@ Then try:
 /judge BBCA
 Apakah BBRI layak dibeli?
 /screen profitable growing
+/files
 /history
 /session <runId>
 /search ROE
@@ -355,6 +379,7 @@ Local OpenAI-compatible endpoints such as Ollama or LM Studio can be configured 
 | `/judge TICKER [--conditional]` | Full evidence-backed debate and deterministic verdict |
 | `/screen [CRITERIA]` | Screen stocks using supported criteria |
 | `/attach <path>` | Import one user-selected file into durable FinHarness storage |
+| `/files` | List raw Attachments owned by the current Session |
 | `/history [--limit N]` | List recent runs |
 | `/session <runId>` | Show persisted run artifacts |
 | `/resume <executionId>` | Resume an interrupted Judge Execution in the same Turn and Execution |
@@ -552,10 +577,11 @@ L  Artifact-aware retrieval + validity + prior-context reuse
  R2C1 Financial Capability Composition + Screen Migration (complete)
  R2C2 Judge Capability Migration + Durable Resume Semantics (complete)
  S1 Durable File / Attachment Layer (complete)
+ S2 Workspace + File Capability (complete)
 ```
 
-A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, and S1 are complete. S2 is the current
-milestone and S3 is next.
+A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, and S2 are complete. S3 is the
+current milestone and T follows S3.
 See
 [docs/ROADMAP.md](docs/ROADMAP.md) for the S-Z future sequence and dependency
 rationale.
@@ -575,17 +601,16 @@ A-L  Stateful lifecycle/context foundation         COMPLETE
 The next planned architecture phase starts from durable user file and attachment
 identity rather than replacing the A-P foundation.
 
-Current direction after S1:
+Current direction after S2:
 
-1. S2 — Workspace + File Capability (current)
-2. S3 — Document Understanding / Retrieval (next)
-3. T — Evidence Policy + Claim Graph
-4. U — Research Composition + Product Completion
-5. V-Y — Decision Intelligence
-6. Z — Product Platform
+1. S3 — Document Understanding / Retrieval (current)
+2. T — Evidence Policy + Claim Graph
+3. U — Research Composition + Product Completion
+4. V-Y — Decision Intelligence
+5. Z — Product Platform
 
 This product overview points to the canonical roadmap for the detailed future
-sequence, including U1-U8. No S2, S3, or U implementation is claimed here. R2C2
+sequence, including U1-U8. No S3 or U implementation is claimed here. R2C2
 adds capability-semantic resume compatibility to the existing same-Execution
 resume architecture; it does not add a second `/resume` lifecycle.
 

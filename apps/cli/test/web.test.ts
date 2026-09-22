@@ -34,7 +34,7 @@ describe('Web preview (Phase 4 Task 2)', () => {
 
   it('GET /api/history 200 JSON', async () => {
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
-    const ctx = buildContext(db, config);
+    const ctx = buildContext(db, config, { sessionId: 'web-test-session' });
     await judgeWorkflow(ctx, 'BBCA', () => {}, () => {});
     const { server } = createWebServer(db, { port: 0 });
     await new Promise<void>((r) => server.listen(0, r));
@@ -48,7 +48,7 @@ describe('Web preview (Phase 4 Task 2)', () => {
 
   it('GET /api/run/:id 200/404', async () => {
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
-    const ctx = buildContext(db, config);
+    const ctx = buildContext(db, config, { sessionId: 'web-test-session' });
     const art = await judgeWorkflow(ctx, 'BBCA', () => {}, () => {});
     const { server } = createWebServer(db, { port: 0 });
     await new Promise<void>((r) => server.listen(0, r));

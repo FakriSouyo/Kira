@@ -68,7 +68,7 @@ async function createFixture(
   const execution = await db.sessions.createExecution({
     executionId, sessionId: session.id, turnId: turn.id, ticker: 'BBCA', command: 'judge',
   });
-  const composition = buildContext(db, config);
+  const composition = buildContext(db, config, { sessionId });
   const runtimePlan = options.runtimePlan ? composition.runtimePlan : undefined;
   const profile = createJudgeExecutionProfile({
     executionId: execution.id, ticker: 'BBCA',
@@ -105,7 +105,7 @@ async function runPrefix(fixture: Fixture, boundary: JudgeNodeId): Promise<void>
   const execution = (await fixture.db.sessions.getSessionArtifacts(fixture.sessionId)).executions[0]!;
   const profile = await fixture.db.executionProfiles.getByExecutionId(execution.id);
   if (!profile) throw new Error(`Profile missing for ${execution.id}`);
-  const context = buildContext(fixture.db, fixture.config);
+  const context = buildContext(fixture.db, fixture.config, { sessionId: fixture.sessionId });
   const recorder = new WorkflowTraceRecorder({ runId: execution.id, definition, store: fixture.db.sessions });
   const writer = new JudgeCheckpointWriter({ db: fixture.db, execution, profile, definition });
   const decision = {};
@@ -292,7 +292,7 @@ describe('PR P final acceptance hardening', () => {
     const secondProfile = createJudgeExecutionProfile({
       executionId: secondExecution.id, ticker: 'BBCA', reasoningMode: 'usual', conditional: false,
       researchers: config.researchers, provider: config.llm.agent.provider, model: config.llm.agent.model,
-      capabilityPlan: buildContext(db, config).judgeCapabilityPlan, createdAt: secondExecution.createdAt,
+      capabilityPlan: buildContext(db, config, { sessionId: ambiguous.sessionId }).judgeCapabilityPlan, createdAt: secondExecution.createdAt,
     });
     await db.executionProfiles.save(secondProfile);
     await db.sessions.interruptExecution(secondExecution.id, 'second interruption');
@@ -592,7 +592,7 @@ describe('PR P final acceptance hardening', () => {
     const runtime = await openRuntime(fixture);
     const controller = new AbortController();
     const rebuttal = vi.spyOn(runtime.context.bull, 'rebuttal').mockImplementation(async args => {
-      const result = await (await buildContext(fixture.db, config)).bull.rebuttal(args);
+      const result = await (await buildContext(fixture.db, config, { sessionId: fixture.sessionId })).bull.rebuttal(args);
       controller.abort(new DOMException('cancel resumed run', 'AbortError'));
       return result;
     });
@@ -620,7 +620,7 @@ describe('PR P final acceptance hardening', () => {
       currentGraphFingerprint: judgeWorkflowGraphFingerprint(), provider: config.llm.agent.provider, model: config.llm.agent.model,
       capabilityPlanFingerprint: (profile!.payload as { capabilityPlanFingerprint: string }).capabilityPlanFingerprint,
     });
-    const context = buildContext(fixture.db, config);
+    const context = buildContext(fixture.db, config, { sessionId: fixture.sessionId });
     const recorder = new WorkflowTraceRecorder({ runId: fixture.executionId, definition, store: fixture.db.sessions });
     const writer = new JudgeCheckpointWriter({ db: fixture.db, execution: acquired, profile: profile!, definition, initialOutputs: plan.outputs });
     const decision = {};

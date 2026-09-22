@@ -46,16 +46,13 @@ R2B
 R2C1
 R2C2
 S1
+S2
 
 CURRENT
 
-S2
-
-NEXT
-
 S3
 
-FUTURE EVIDENCE INTELLIGENCE
+NEXT
 
 T
 
@@ -90,9 +87,9 @@ research capability maturation. Discovery and design for later milestones may
 begin earlier, but production implementations must not bypass the dependency
 boundaries established by earlier milestones.
 
-## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1
+## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2
 
-The following milestones are complete on `master`:
+The following milestones are complete in the current implementation:
 
 - **A-P — Canonical lifecycle, context, evidence, artifacts, financial snapshots, and resumability:** Session → Turn → Execution, journal linkage, SessionWorkingContext, bounded context assembly, evidence and artifact authority, the provider-neutral financial seam, VerifiedFinancialSnapshot, durable profiles and checkpoints, and same-Execution `/judge` resume.
 - **Q1 — Model Runtime + Provider Directory:** provider-neutral model runtime contracts, immutable provider/model directory snapshots, adapter boundaries, safe fingerprints, prepared calls, invocation metadata, and mock parity.
@@ -103,6 +100,7 @@ The following milestones are complete on `master`:
 - **R2C1 — Financial Capability Composition + Screen Migration:** all eight existing financial tools registered with provider-neutral descriptors, explicit least-privilege `command.screen` authorization, and production `/screen` execution through the capability gateway.
 - **R2C2 — Judge Capability Migration + Durable Resume Semantics:** Judge financial operations execute through explicit workflow principals and the capability gateway, and Judge profiles pin a deterministic capability plan whose fingerprint participates in durable resume compatibility.
 - **S1 — Durable File / Attachment Layer:** explicit `/attach` imports one user-selected local file into immutable FinHarness-owned content-addressed storage, associates safe metadata with the canonical Session/Turn lifecycle, and keeps raw bytes outside SQLite without creating an Execution or entering model context.
+- **S2 — Workspace + File Capability:** one application-wide capability registry/policy/gateway/runtime composes financial and raw Attachment tools; strict Session-scoped `workspace.list-attachments`, `attachment.describe`, and `attachment.read` tools are registered, while production grants only `command.files -> workspace.list-attachments` and `/files` lists current-Session metadata with one Turn and no Execution or ModelCall.
 
 The current Judge graph remains the source of truth: it has 15 stable nodes,
 `JUDGE_WORKFLOW_VERSION` remains `2`, and no obsolete historical Judge graph is
@@ -353,7 +351,7 @@ finally cross-surface product delivery.
 ## S — Files & Documents
 
 S is knowledge-input work. It is deliberately distinct from Evidence, Artifacts,
-Context, and Memory. S1 is complete; S2 and S3 remain future work.
+Context, and Memory. S1 and S2 are complete; S3 is the current milestone.
 
 ### S1 — Durable File / Attachment Layer
 
@@ -394,15 +392,38 @@ Evidence, Artifacts, or any model prompt.
 
 ### S2 — Workspace + File Capability
 
-Status: **current milestone; implementation not started**.
+Status: **complete on this branch**.
 
-Future direction: controlled file/workspace capabilities built on the R2
-capability system. Possible examples include `workspace.list`,
-`workspace.read`, `workspace.search`, `file.describe`, and `file.read`.
-These are examples only; exact IDs are not locked. FinHarness must not gain
-arbitrary shell access or become an unrestricted machine-operation harness.
+S2 is the controlled raw-resource slice built on the R2 capability system.
+“Workspace” is only the active Session-scoped view of existing Attachments;
+there is no durable Workspace model, workspace table, migration, or second
+file identity. The registered IDs are:
+
+```text
+workspace.list-attachments
+attachment.describe
+attachment.read
+```
+
+The application has one combined financial/attachment registry, policy,
+CapabilityGateway, and ToolRuntime. The only production file grant is:
+
+```text
+command.files -> workspace.list-attachments
+```
+
+`attachment.describe` and `attachment.read` are registered raw-resource
+capabilities with no invented production consumer/principal yet. `/files`
+lists safe metadata for the active Session and creates one Turn, zero
+Executions, zero ModelCalls, and no financial provider calls. `/attach` remains
+explicit host-file ingestion outside the capability path. Cross-Session
+metadata and byte access fail closed as not-found, and AttachmentStore
+integrity errors retain their identity. S2 does not add parsing, retrieval,
+Document objects, or model context injection.
 
 ### S3 — Document Understanding / Retrieval
+
+Status: **current milestone; implementation not started**.
 
 Future direction:
 

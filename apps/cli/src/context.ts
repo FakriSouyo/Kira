@@ -17,17 +17,20 @@ import { ResearcherAgent } from '@harness/subagent-researcher';
 import { ToolRuntime } from '@harness/tool-runtime';
 import type { FinharnessConfig } from './config';
 import {
-  createFinancialCapabilityGateway,
   createJudgeCapabilityPlan,
-  type FinancialCapabilityGateway,
 } from './tools/financialCapabilities';
+import {
+  createApplicationCapabilityGateway,
+  type ApplicationCapabilityGateway,
+} from './tools/applicationCapabilities';
+import { createAttachmentTools } from './tools/attachmentTools';
 import { createFinancialTools } from './tools/financialTools';
 import { createConversationContextCoordinator, type ConversationContextCoordinator } from './runtime/conversationContextCoordinator';
 
 export interface HarnessContext {
   db: FinharnessDatabase;
   financialData: FinancialDataProvider;
-  capabilityGateway: FinancialCapabilityGateway;
+  capabilityGateway: ApplicationCapabilityGateway;
   judgeCapabilityPlan: CapabilityPlan;
   researcher: ResearcherAgent;
   bull: BullAgent;
@@ -68,7 +71,15 @@ export function runtimeBudgetForPlan(plan: ModelRuntimePlan): RuntimeBudget {
   };
 }
 
-export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): HarnessContext {
+export interface BuildContextOptions {
+  readonly sessionId: string;
+}
+
+export function buildContext(
+  db: FinharnessDatabase,
+  config: FinharnessConfig,
+  { sessionId }: BuildContextOptions,
+): HarnessContext {
   const agentLlm = createLLMClient(config.llm.agent, { mock: config.mockLlm });
   const routerLlm = createLLMClient(config.llm.router, { mock: config.mockLlm });
   const financialData = createSectorsFinancialDataProvider({
@@ -81,7 +92,12 @@ export function buildContext(db: FinharnessDatabase, config: FinharnessConfig): 
   });
   const toolRuntime = new ToolRuntime();
   const financialTools = createFinancialTools(financialData);
-  const capabilityGateway = createFinancialCapabilityGateway(financialTools, toolRuntime);
+  const attachmentTools = createAttachmentTools({ attachmentStore: db.attachments, sessionId });
+  const capabilityGateway = createApplicationCapabilityGateway({
+    financialTools,
+    attachmentTools,
+    toolRuntime,
+  });
   const runtimePlan = agentLlm.describeRuntimePlan();
   const runtimeBudget = runtimeBudgetForPlan(runtimePlan);
   const modelCapabilities = runtimeBudget.modelCapabilities;

@@ -22,7 +22,7 @@ describe('Abort + getEmbedding (Phase 9A)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'finharness-abort-'));
     const db = openDb({ homeDir: dir });
     const config = loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true });
-    const ctx = buildContext(db, config);
+    const ctx = buildContext(db, config, { sessionId: 'abort-test-session' });
     const controller = new AbortController();
     controller.abort();
     await expect(judgeWorkflow(ctx, 'BBCA', () => {}, () => {}, { signal: controller.signal })).rejects.toMatchObject({ code: 'ABORTED' });

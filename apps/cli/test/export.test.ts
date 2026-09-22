@@ -16,7 +16,7 @@ describe('/export (Phase 2 Task 3)', () => {
     homeDir = mkdtempSync(join(tmpdir(), 'finharness-export-test-'));
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
     db = openDb({ homeDir });
-    (globalThis as { _exportCtx?: ReturnType<typeof buildContext> })._exportCtx = buildContext(db, config);
+    (globalThis as { _exportCtx?: ReturnType<typeof buildContext> })._exportCtx = buildContext(db, config, { sessionId: 'export-test-session' });
   });
 
   afterEach(() => {

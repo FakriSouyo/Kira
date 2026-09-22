@@ -16,7 +16,7 @@ describe('/judge specialist migration', () => {
     homes.push(homeDir);
     const db = openDb({ homeDir });
     try {
-      const context = buildContext(db, loadConfig({ homeDir, mockSectors: true, mockLlm: true }));
+      const context = buildContext(db, loadConfig({ homeDir, mockSectors: true, mockLlm: true }), { sessionId: 'specialist-migration-test-session' });
       const result = await judgeWorkflow(context, 'BBCA');
       expect(result.subagentAudit.bull.map((skill) => skill.name)).toEqual(['evidence-backed-thesis']);
       expect(result.subagentAudit.bear.map((skill) => skill.name)).toEqual(['adversarial-challenge']);

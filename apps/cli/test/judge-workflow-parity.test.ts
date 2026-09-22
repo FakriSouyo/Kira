@@ -34,7 +34,7 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
     rmSync(homeDir, { recursive: true, force: true });
   });
 
-  const ctx = () => buildContext(db, loadConfig({ homeDir, mockSectors: true, mockLlm: true }));
+  const ctx = () => buildContext(db, loadConfig({ homeDir, mockSectors: true, mockLlm: true }), { sessionId: 'judge-parity-test-session' });
   const steps = (events: AgentEvent[]): StepEvent[] => events.filter((event): event is StepEvent => event.type === 'workflow.step');
   const runIdOf = (events: AgentEvent[]): string => {
     const start = events.find((event): event is Extract<AgentEvent, { type: 'session.start' }> => event.type === 'session.start');
