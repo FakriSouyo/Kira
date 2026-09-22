@@ -24,6 +24,7 @@ import {
   type ApplicationCapabilityGateway,
 } from './tools/applicationCapabilities';
 import { createAttachmentTools } from './tools/attachmentTools';
+import { createDocumentTools } from './tools/documentTools';
 import { createFinancialTools } from './tools/financialTools';
 import { createConversationContextCoordinator, type ConversationContextCoordinator } from './runtime/conversationContextCoordinator';
 
@@ -93,9 +94,11 @@ export function buildContext(
   const toolRuntime = new ToolRuntime();
   const financialTools = createFinancialTools(financialData);
   const attachmentTools = createAttachmentTools({ attachmentStore: db.attachments, sessionId });
+  const documentTools = createDocumentTools({ documentStore: db.documents, sessionId });
   const capabilityGateway = createApplicationCapabilityGateway({
     financialTools,
     attachmentTools,
+    documentTools,
     toolRuntime,
   });
   const runtimePlan = agentLlm.describeRuntimePlan();

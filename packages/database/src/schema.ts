@@ -288,3 +288,42 @@ export const attachments = sqliteTable('attachments', {
   index('attachments_turn_idx').on(table.turnId, table.createdAt, table.attachmentId),
   index('attachments_content_hash_idx').on(table.contentHash),
 ]);
+
+/** S3: deterministic extracted Documents and immutable ordered chunks. */
+export const documents = sqliteTable('documents', {
+  documentId: text('document_id').primaryKey(),
+  schemaVersion: integer('schema_version').notNull(),
+  sessionId: text('session_id').notNull().references(() => researchSessions.id, { onDelete: 'cascade' }),
+  attachmentId: text('attachment_id').notNull().references(() => attachments.attachmentId, { onDelete: 'cascade' }),
+  sourceContentHash: text('source_content_hash').notNull(),
+  filename: text('filename').notNull(),
+  detectedMediaType: text('detected_media_type').notNull(),
+  extractorId: text('extractor_id').notNull(),
+  extractorVersion: text('extractor_version').notNull(),
+  textHash: text('text_hash').notNull(),
+  pageCount: integer('page_count'),
+  chunkCount: integer('chunk_count').notNull(),
+  createdByTurnId: text('created_by_turn_id').notNull().references(() => researchTurns.id, { onDelete: 'restrict' }),
+  createdAt: text('created_at').notNull(),
+}, table => [
+  unique('documents_attachment_extractor_uniq').on(table.attachmentId, table.extractorId, table.extractorVersion),
+  index('documents_session_idx').on(table.sessionId, table.createdAt, table.documentId),
+  index('documents_attachment_idx').on(table.attachmentId),
+]);
+
+export const documentChunks = sqliteTable('document_chunks', {
+  chunkId: text('chunk_id').primaryKey(),
+  schemaVersion: integer('schema_version').notNull(),
+  documentId: text('document_id').notNull().references(() => documents.documentId, { onDelete: 'cascade' }),
+  ordinal: integer('ordinal').notNull(),
+  text: text('text').notNull(),
+  contentHash: text('content_hash').notNull(),
+  pageStart: integer('page_start'),
+  pageEnd: integer('page_end'),
+  lineStart: integer('line_start'),
+  lineEnd: integer('line_end'),
+  section: text('section'),
+}, table => [
+  unique('document_chunks_document_ordinal_uniq').on(table.documentId, table.ordinal),
+  index('document_chunks_document_idx').on(table.documentId, table.ordinal),
+]);

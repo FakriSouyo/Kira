@@ -50,7 +50,8 @@ Normal conversation does **not** silently auto-run `/judge`, `/research`, `/comp
 ### Stateful harness runtime
 
 The A-P stateful lifecycle/context foundation, Q1, Q2, R1, R2A, R2B, R2C1,
-R2C2, S1, and S2 are complete on this branch. S3 is the current milestone. They provide the
+R2C2, S1, and S2 are complete on master. S3 is complete in the current
+implementation; T is the next milestone after S3 merges. They provide the
 canonical lifecycle, model runtime, typed tool runtime, immutable capability
 discovery, deterministic capability policy/gateway composition, provider seam,
 verified financial input boundary, and durable resumability foundation:
@@ -221,12 +222,29 @@ Workspace model or another file identity:
   -> AttachmentStore
 ```
 
-Production grants `command.files` only `workspace.list-attachments`.
-`attachment.describe` and `attachment.read` are registered but have no
-invented production consumer/principal yet. `/files` creates one Turn, zero
-Executions, zero ModelCalls, and no financial provider calls. `/attach` remains
-explicit user-controlled host filesystem ingestion outside the capability path.
-S3 remains the future boundary for Document understanding and retrieval.
+Production grants `command.files` only `workspace.list-attachments` and grants
+`command.doc-index` only `attachment.read`; `command.doc-search` receives only
+`document.search`. `/files`, `/doc-index`, and `/doc-search` each create one
+Turn and no Execution or ModelCall. `/attach` remains explicit user-controlled
+host filesystem ingestion outside the capability path. S3 keeps Document,
+Evidence, Artifact, and Context as separate authorities.
+
+### Deterministic Document understanding and retrieval — S3
+
+S3 adds `@harness/document`, strict versioned Document/DocumentChunk/Citation
+schemas, SQLite persistence, and two explicit commands. Indexing supports local
+PDF, UTF-8 text, Markdown, JSON, CSV, and TSV only. Verified PDF magic takes
+precedence over advisory filename and media type. Extraction is bounded and
+deterministic; PDF pages never cross chunk boundaries, text keeps line ranges,
+and Markdown keeps the active heading section. Retrieval is local lexical
+search with stable ranking, Session scope captured by context construction, and
+citations back to Attachment, Document, and Chunk hashes. The exact pinned
+PDF.js parser version and FinHarness pipeline version define Document identity;
+the same Attachment can have distinct versioned derivations. `textHash` is
+provenance over normalized extracted text before chunking, while persisted
+chunk hashes and identities are validated on read. It performs no OCR,
+network fetch, embedding, vector search, Evidence write, Context injection, or
+model call.
 
 ### Selective financial retrieval
 
@@ -578,10 +596,11 @@ L  Artifact-aware retrieval + validity + prior-context reuse
  R2C2 Judge Capability Migration + Durable Resume Semantics (complete)
  S1 Durable File / Attachment Layer (complete)
  S2 Workspace + File Capability (complete)
+ S3 Document Understanding / Retrieval (complete)
 ```
 
-A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, and S2 are complete. S3 is the
-current milestone and T follows S3.
+A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, and S2 are complete on master.
+S3 is complete in the current implementation; T follows its merge.
 See
 [docs/ROADMAP.md](docs/ROADMAP.md) for the S-Z future sequence and dependency
 rationale.
@@ -601,16 +620,15 @@ A-L  Stateful lifecycle/context foundation         COMPLETE
 The next planned architecture phase starts from durable user file and attachment
 identity rather than replacing the A-P foundation.
 
-Current direction after S2:
+Direction after S3 merges:
 
-1. S3 — Document Understanding / Retrieval (current)
-2. T — Evidence Policy + Claim Graph
-3. U — Research Composition + Product Completion
-4. V-Y — Decision Intelligence
-5. Z — Product Platform
+1. T — Evidence Policy + Claim Graph (next)
+2. U — Research Composition + Product Completion
+3. V-Y — Decision Intelligence
+4. Z — Product Platform
 
 This product overview points to the canonical roadmap for the detailed future
-sequence, including U1-U8. No S3 or U implementation is claimed here. R2C2
+sequence, including U1-U8. No U implementation is claimed here. R2C2
 adds capability-semantic resume compatibility to the existing same-Execution
 resume architecture; it does not add a second `/resume` lifecycle.
 

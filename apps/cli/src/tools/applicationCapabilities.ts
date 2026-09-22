@@ -10,6 +10,8 @@ import {
   createAttachmentCapabilityRegistrations,
 } from './attachmentCapabilities';
 import { type AttachmentTools } from './attachmentTools';
+import { createDocumentCapabilityGrants, createDocumentCapabilityRegistrations } from './documentCapabilities';
+import { type DocumentTools } from './documentTools';
 import {
   createFinancialCapabilityGrants,
   createFinancialCapabilityRegistrations,
@@ -19,16 +21,19 @@ import { type FinancialTools } from './financialTools';
 export interface ApplicationCapabilityOptions {
   readonly financialTools: FinancialTools;
   readonly attachmentTools: AttachmentTools;
+  readonly documentTools: DocumentTools;
   readonly toolRuntime: ToolRuntime;
 }
 
 export function createApplicationCapabilityRegistrations({
   financialTools,
   attachmentTools,
-}: Pick<ApplicationCapabilityOptions, 'financialTools' | 'attachmentTools'>) {
+  documentTools,
+}: Pick<ApplicationCapabilityOptions, 'financialTools' | 'attachmentTools' | 'documentTools'>) {
   return Object.freeze([
     ...createFinancialCapabilityRegistrations(financialTools),
     ...createAttachmentCapabilityRegistrations(attachmentTools),
+    ...createDocumentCapabilityRegistrations(documentTools),
   ] as const);
 }
 
@@ -36,16 +41,18 @@ export function createApplicationCapabilityGrants(): readonly CapabilityGrant[] 
   return Object.freeze([
     ...createFinancialCapabilityGrants(),
     ...createAttachmentCapabilityGrants(),
+    ...createDocumentCapabilityGrants(),
   ]);
 }
 
 export function createApplicationCapabilityGateway({
   financialTools,
   attachmentTools,
+  documentTools,
   toolRuntime,
 }: ApplicationCapabilityOptions) {
   const registry = new CapabilityRegistry(
-    createApplicationCapabilityRegistrations({ financialTools, attachmentTools }),
+    createApplicationCapabilityRegistrations({ financialTools, attachmentTools, documentTools }),
   );
   const policy = new CapabilityPolicy(createApplicationCapabilityGrants());
   return new CapabilityGateway({ registry, policy, toolRuntime });

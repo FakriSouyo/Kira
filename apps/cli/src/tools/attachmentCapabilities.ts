@@ -7,6 +7,10 @@ export const COMMAND_FILES_CAPABILITY_PRINCIPAL = Object.freeze({
   id: 'command.files',
 } as const);
 
+export const COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL = Object.freeze({
+  id: 'command.doc-index',
+} as const);
+
 function registration<TTool extends AttachmentTools[keyof AttachmentTools]>(
   tool: TTool,
   displayName: string,
@@ -45,8 +49,14 @@ export function createAttachmentCapabilityRegistrations(tools: AttachmentTools) 
 }
 
 export function createAttachmentCapabilityGrants(): readonly CapabilityGrant[] {
-  return Object.freeze([{
-    principalId: COMMAND_FILES_CAPABILITY_PRINCIPAL.id,
-    capabilityIds: [attachmentToolIds.list],
-  }]);
+  return Object.freeze([
+    {
+      principalId: COMMAND_FILES_CAPABILITY_PRINCIPAL.id,
+      capabilityIds: [attachmentToolIds.list],
+    },
+    {
+      principalId: COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL.id,
+      capabilityIds: [attachmentToolIds.read],
+    },
+  ]);
 }

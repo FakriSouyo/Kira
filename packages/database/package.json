@@ -8,6 +8,7 @@
   "dependencies": {
     "@harness/context": "workspace:*",
     "@harness/conversation": "workspace:*",
+    "@harness/document": "workspace:*",
     "@harness/evidence": "workspace:*",
     "@harness/execution": "workspace:*",
     "@harness/financial-data": "workspace:*",

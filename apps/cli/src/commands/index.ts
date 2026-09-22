@@ -7,6 +7,8 @@ import {
   renderError,
   renderHelp,
   renderFilesResult,
+  renderDocumentIndexResult,
+  renderDocumentSearchResult,
   renderJudgeResult,
   renderScreenResult,
   renderStub,
@@ -21,11 +23,15 @@ import { createWebServer } from '../repl/web';
 import { makeVersionCommand } from './version';
 import { UserFriendlyError } from '@harness/shared';
 import { FinancialDataError } from '@harness/financial-data';
+import { DocumentError, buildDocumentBundle } from '@harness/document';
 import { PROVIDERS } from '../setup/providers';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { attachmentToolIds } from '../tools/attachmentTools';
 import { COMMAND_FILES_CAPABILITY_PRINCIPAL } from '../tools/attachmentCapabilities';
+import { COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL } from '../tools/attachmentCapabilities';
+import { COMMAND_DOC_SEARCH_CAPABILITY_PRINCIPAL } from '../tools/documentCapabilities';
+import { documentToolIds } from '../tools/documentTools';
 
 const TICKER_RE = /^[A-Z]{2,6}$/;
 
@@ -45,6 +51,9 @@ function failToUserFriendly(error: unknown): UserFriendlyError {
   if (error instanceof UserFriendlyError) return error;
   if (error instanceof FinancialDataError) {
     return new UserFriendlyError(error.code, error.message, error.suggestion);
+  }
+  if (error instanceof DocumentError) {
+    return new UserFriendlyError(error.code, error.message, 'Check the attachment type and integrity, then retry the document command.');
   }
   const message = error instanceof Error ? error.message : String(error);
   return new UserFriendlyError('UNKNOWN_ERROR', message, 'Check the output above, or retry.');
@@ -128,6 +137,69 @@ function makeAttachCommand(ctx: HarnessContext, write: (text: string) => void): 
       content,
     });
     write(`Attached ${attachment.filename}\nAttachment: ${attachment.attachmentId}\nSize: ${attachment.sizeBytes} bytes\nSHA-256: ${attachment.contentHash}\n`);
+  };
+}
+
+function makeDocumentIndexCommand(ctx: HarnessContext, write: (text: string) => void): CommandHandler {
+  return async (args, execution) => {
+    if (args.length !== 1) {
+      throw new UserFriendlyError('INVALID_ARG', '/doc-index expects exactly one attachment ID', 'Usage: /doc-index <attachmentId>');
+    }
+    const lifecycle = execution?.lifecycle;
+    if (!lifecycle) {
+      throw new UserFriendlyError('MISSING_LIFECYCLE', 'Document indexing requires an active Session Turn', 'Retry the command from the FinHarness command prompt.');
+    }
+    const result = await ctx.capabilityGateway.invoke(
+      COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL,
+      attachmentToolIds.read,
+      { attachmentId: args[0] },
+      { signal: execution?.signal },
+    );
+    const bundle = await buildDocumentBundle({
+      attachment: result.value.attachment,
+      content: result.value.content,
+      createdByTurnId: lifecycle.turnId,
+    });
+    const saved = await ctx.db.documents.save(bundle);
+    write(`${renderDocumentIndexResult(saved.document)}\n\n`);
+  };
+}
+
+function makeDocumentSearchCommand(ctx: HarnessContext, write: (text: string) => void): CommandHandler {
+  return async (args, execution) => {
+    if (args.length === 0) {
+      throw new UserFriendlyError('MISSING_ARG', 'No document query provided', 'Usage: /doc-search <query> [--document <id>] [--limit N]');
+    }
+    let documentId: string | undefined;
+    let limit: number | undefined;
+    const queryTokens: string[] = [];
+    for (let index = 0; index < args.length; index += 1) {
+      const arg = args[index]!;
+      if (arg === '--document') {
+        documentId = args[++index];
+        if (!documentId) throw new UserFriendlyError('INVALID_ARG', 'Missing document ID', 'Usage: /doc-search <query> [--document <id>] [--limit N]');
+      } else if (arg === '--limit') {
+        const raw = args[++index];
+        const parsed = raw === undefined ? Number.NaN : Number(raw);
+        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 20) {
+          throw new UserFriendlyError('INVALID_ARG', 'Document search limit must be between 1 and 20', 'Usage: /doc-search <query> [--document <id>] [--limit N]');
+        }
+        limit = parsed;
+      } else if (arg.startsWith('--')) {
+        throw new UserFriendlyError('INVALID_ARG', `Unknown /doc-search argument ${arg}`, 'Usage: /doc-search <query> [--document <id>] [--limit N]');
+      } else {
+        queryTokens.push(arg);
+      }
+    }
+    const query = queryTokens.join(' ').trim();
+    if (!query) throw new UserFriendlyError('MISSING_ARG', 'No document query provided', 'Usage: /doc-search <query> [--document <id>] [--limit N]');
+    const result = await ctx.capabilityGateway.invoke(
+      COMMAND_DOC_SEARCH_CAPABILITY_PRINCIPAL,
+      documentToolIds.search,
+      { query, ...(documentId ? { documentId } : {}), ...(limit ? { limit } : {}) },
+      { signal: execution?.signal },
+    );
+    write(`${renderDocumentSearchResult(query, result.value)}\n\n`);
   };
 }
 
@@ -299,6 +371,8 @@ export function buildCommands(ctx: HarnessContext, options: {
     ['screen', makeScreenCommand(ctx)],
     ['files', makeFilesCommand(ctx, write)],
     ['attach', makeAttachCommand(ctx, write)],
+    ['doc-index', makeDocumentIndexCommand(ctx, write)],
+    ['doc-search', makeDocumentSearchCommand(ctx, write)],
     ['export', makeExportCommand(ctx)],
     ['history', makeHistoryCommand(ctx)],
     ['session', makeSessionCommand(ctx)],

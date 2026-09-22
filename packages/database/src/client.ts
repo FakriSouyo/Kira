@@ -20,6 +20,7 @@ import { FinancialSnapshotStoreSqlite } from './financialSnapshotStoreSqlite';
 import { ExecutionProfileStoreSqlite } from './executionProfileStoreSqlite';
 import { WorkflowNodeOutputStoreSqlite } from './workflowNodeOutputStoreSqlite';
 import { AttachmentStoreSqlite } from './attachmentStoreSqlite';
+import { DocumentStoreSqlite } from './documentStoreSqlite';
 
 export type Orm = BetterSQLite3Database<Record<string, never>>;
 
@@ -54,6 +55,7 @@ export interface FinharnessDatabase {
   executionProfiles: ExecutionProfileStoreSqlite;
   workflowNodeOutputs: WorkflowNodeOutputStoreSqlite;
   attachments: AttachmentStoreSqlite;
+  documents: DocumentStoreSqlite;
 }
 
 export function openDb(options: { homeDir?: string; verbose?: boolean } = {}): FinharnessDatabase {
@@ -91,5 +93,6 @@ export function openDb(options: { homeDir?: string; verbose?: boolean } = {}): F
     executionProfiles: new ExecutionProfileStoreSqlite(orm),
     workflowNodeOutputs: new WorkflowNodeOutputStoreSqlite(orm),
     attachments: new AttachmentStoreSqlite(orm, dir),
+    documents: new DocumentStoreSqlite(orm),
   };
 }

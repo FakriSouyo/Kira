@@ -19,7 +19,8 @@ boundaries.
 
 Every statement in this roadmap is one of:
 
-- **Current fact** — supported by the current source tree on `master`.
+- **Current fact** — supported by the current implementation; master status is
+  identified explicitly where relevant.
 - **Future direction** — intended product or architecture direction, not yet implemented.
 - **Not yet locked design** — a future decision whose exact types, schemas, APIs, or package layout remain open.
 
@@ -48,11 +49,11 @@ R2C2
 S1
 S2
 
-CURRENT
+COMPLETE IN CURRENT IMPLEMENTATION
 
 S3
 
-NEXT
+NEXT AFTER S3 MERGE
 
 T
 
@@ -87,7 +88,7 @@ research capability maturation. Discovery and design for later milestones may
 begin earlier, but production implementations must not bypass the dependency
 boundaries established by earlier milestones.
 
-## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2
+## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2; S3 in current implementation
 
 The following milestones are complete in the current implementation:
 
@@ -100,7 +101,8 @@ The following milestones are complete in the current implementation:
 - **R2C1 — Financial Capability Composition + Screen Migration:** all eight existing financial tools registered with provider-neutral descriptors, explicit least-privilege `command.screen` authorization, and production `/screen` execution through the capability gateway.
 - **R2C2 — Judge Capability Migration + Durable Resume Semantics:** Judge financial operations execute through explicit workflow principals and the capability gateway, and Judge profiles pin a deterministic capability plan whose fingerprint participates in durable resume compatibility.
 - **S1 — Durable File / Attachment Layer:** explicit `/attach` imports one user-selected local file into immutable FinHarness-owned content-addressed storage, associates safe metadata with the canonical Session/Turn lifecycle, and keeps raw bytes outside SQLite without creating an Execution or entering model context.
-- **S2 — Workspace + File Capability:** one application-wide capability registry/policy/gateway/runtime composes financial and raw Attachment tools; strict Session-scoped `workspace.list-attachments`, `attachment.describe`, and `attachment.read` tools are registered, while production grants only `command.files -> workspace.list-attachments` and `/files` lists current-Session metadata with one Turn and no Execution or ModelCall.
+- **S2 — Workspace + File Capability:** one application-wide capability registry/policy/gateway/runtime composes financial and raw Attachment tools; strict Session-scoped `workspace.list-attachments`, `attachment.describe`, and `attachment.read` tools are registered. S2 introduced `command.files -> workspace.list-attachments`; `/files` lists current-Session metadata with one Turn and no Execution or ModelCall.
+- **S3 — Document Understanding / Retrieval:** explicit `/doc-index` derives versioned Documents from verified Attachment bytes, and `/doc-search` returns bounded local lexical hits with citations. S3 is complete in the current implementation and has not yet merged into master.
 
 The current Judge graph remains the source of truth: it has 15 stable nodes,
 `JUDGE_WORKFLOW_VERSION` remains `2`, and no obsolete historical Judge graph is
@@ -351,7 +353,8 @@ finally cross-surface product delivery.
 ## S — Files & Documents
 
 S is knowledge-input work. It is deliberately distinct from Evidence, Artifacts,
-Context, and Memory. S1 and S2 are complete; S3 is the current milestone.
+Context, and Memory. S1 and S2 are complete on master; S3 is complete in the
+current implementation. T follows after S3 merges.
 
 ### S1 — Durable File / Attachment Layer
 
@@ -386,13 +389,13 @@ Attachment != Document != Evidence != Artifact != Context
 ```
 
 `AttachmentStore` is raw-file identity, metadata, and durable-byte authority.
-`ArtifactStore` remains semantic research-output authority. `Document` is not
-implemented yet, and attachment bytes do not automatically enter Context,
+`ArtifactStore` remains semantic research-output authority. S3 adds a separate
+Document authority, and attachment bytes do not automatically enter Context,
 Evidence, Artifacts, or any model prompt.
 
 ### S2 — Workspace + File Capability
 
-Status: **complete on this branch**.
+Status: **complete on master**.
 
 S2 is the controlled raw-resource slice built on the R2 capability system.
 “Workspace” is only the active Session-scoped view of existing Attachments;
@@ -412,20 +415,55 @@ CapabilityGateway, and ToolRuntime. The only production file grant is:
 command.files -> workspace.list-attachments
 ```
 
-`attachment.describe` and `attachment.read` are registered raw-resource
-capabilities with no invented production consumer/principal yet. `/files`
+`attachment.describe` remains registered and `attachment.read` is granted only
+to the explicit document-index principal. `/files`
 lists safe metadata for the active Session and creates one Turn, zero
 Executions, zero ModelCalls, and no financial provider calls. `/attach` remains
 explicit host-file ingestion outside the capability path. Cross-Session
 metadata and byte access fail closed as not-found, and AttachmentStore
-integrity errors retain their identity. S2 does not add parsing, retrieval,
-Document objects, or model context injection.
+integrity errors retain their identity. S2 itself does not add parsing,
+retrieval, Document objects, or model context injection.
 
 ### S3 — Document Understanding / Retrieval
 
-Status: **current milestone; implementation not started**.
+Status: **complete in the current implementation**.
 
-Future direction:
+S3 is the explicit Attachment-to-Document boundary. The new
+`@harness/document` package detects and extracts only local PDF, UTF-8 text,
+Markdown, JSON, CSV, and TSV; rejects unsupported, binary, malformed, empty,
+and over-limit content; normalizes text; and chunks it deterministically.
+Verified PDF magic takes precedence over advisory filename and media type. PDF
+chunks never cross pages, text chunks retain line ranges, Markdown chunks retain
+the active heading section, and every Document/Chunk has stable SHA-256
+identity and content hashes.
+
+The exact pinned PDF.js parser and FinHarness extraction/chunking pipeline
+version participate in Document identity. One Attachment can have distinct
+derivations across versions. `textHash` records the normalized text before
+chunking; that stream is not stored separately, so read-time validation checks
+the persisted Document/chunk identities, hashes, ordinals, and counts while
+re-indexing detects a changed `textHash` as an immutable conflict.
+
+`documents` and `document_chunks` are durable SQLite authorities with strict
+schema versions, Session/Attachment/Turn ownership validation, ordered chunk
+constraints, immutable conflict detection, idempotent re-indexing, and restart
+coverage. `document.search` performs local case-insensitive exact-phrase and
+token-coverage retrieval with stable ties and a twenty-result cap. The CLI
+surfaces are:
+
+```text
+/doc-index <attachmentId>
+  -> command.doc-index -> attachment.read -> extract/chunk -> DocumentStore
+
+/doc-search <query> [--document <id>] [--limit N]
+  -> command.doc-search -> document.search -> citations
+```
+
+S3 has no OCR, DOCX/XLSX/PPTX/HTML parsing, remote fetch, embeddings, vector
+database, Evidence persistence, Context injection, or model call. Documents
+remain distinct from Attachments, Evidence, Artifacts, and Context.
+
+Implemented direction:
 
 ```text
 Attachment
@@ -443,11 +481,8 @@ retrieval
 citation/provenance
    |
    v
-Evidence candidate
+citation/provenance candidate
 ```
-
-Potential provenance includes file identity, document identity, page, section,
-chunk, content hash, and extraction metadata. Exact schemas are not locked.
 
 ## T — Evidence Policy + Claim Graph
 

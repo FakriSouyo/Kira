@@ -5,3 +5,4 @@ export * from './intent';
 export * from './debate';
 export * from "./artifact";
 export * from './attachment';
+export * from './document';

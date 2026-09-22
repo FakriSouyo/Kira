@@ -8,9 +8,9 @@ The stateful architecture milestones **A-P** are complete on `master`. **Q1**,
 **Q2**, **R1**, **R2A**, **R2B**, **R2C1**, **R2C2**, and **S1** are also
 complete on `master`.
 
-**S2 — Workspace + File Capability** is complete. The current milestone is
-**S3 — Document Understanding / Retrieval**; **T — Evidence Policy + Claim
-Graph** follows S3 in the canonical sequence.
+**S2 — Workspace + File Capability** is complete on master. **S3 — Document
+Understanding / Retrieval** is complete in the current implementation. **T —
+Evidence Policy + Claim Graph** is next after S3 merges.
 
 The canonical future sequence and dependency rationale live in
 [`docs/ROADMAP.md`](ROADMAP.md). This document is the mutable current-status
@@ -83,7 +83,7 @@ context, Evidence, Artifacts, or any financial workflow.
 
 ### S2 — Workspace + File Capability
 
-Status: **complete on this branch**.
+Status: **complete on master**.
 
 S2 treats “workspace” as the active Session-scoped view of existing
 FinHarness-owned Attachments. It adds no durable Workspace model, workspace
@@ -103,8 +103,8 @@ The exact production grant is:
 command.files -> workspace.list-attachments
 ```
 
-`attachment.describe` and `attachment.read` are registered but have no
-invented production consumer/principal yet. The session-scoped adapter captures
+`attachment.describe` remains registered and `attachment.read` is granted only
+to the explicit document-index principal. The session-scoped adapter captures
 the trusted active `sessionId` in `buildContext(db, config, { sessionId })` and
 rejects caller-supplied scope, paths, and content-hash locators through strict
 tool schemas. It checks Session ownership before `AttachmentStore.readContent()`;
@@ -121,7 +121,29 @@ The `/files` vertical slice lists safe metadata through the full authority path:
 It creates one Turn, zero Executions, zero ModelCalls, and zero financial
 provider calls. `/attach <path>` remains explicit user-controlled host
 filesystem ingestion and does not use the capability gateway. Document
-understanding, parsing, retrieval, and context injection remain S3 work.
+understanding, parsing, retrieval, and context injection are outside S2.
+
+### S3 — Document Understanding / Retrieval
+
+Status: **complete in the current implementation**.
+
+S3 adds a domain-independent `@harness/document` package and durable
+versioned `documents` and `document_chunks` tables. `/doc-index <attachmentId>`
+uses only the active Session's `attachment.read` capability, extracts supported
+local PDF/UTF-8 text/Markdown/JSON/CSV/TSV content, chunks it deterministically,
+and persists immutable provenance. `/doc-search <query>` uses only the active
+Session's `document.search` capability and returns bounded lexical candidates
+with Attachment/Document/Chunk citations.
+
+Document identity is deterministic and idempotent over the source Attachment,
+content hash, exact parser version, and FinHarness pipeline version. One
+Attachment may retain different derivations across pipeline versions.
+Persistence validates source and Turn ownership, source hashes, chunk hashes
+and IDs, ordinals, counts, conflicts, and restart behavior. `textHash` is
+provenance over the normalized pre-chunk extraction stream, which is not stored
+separately; re-indexing under the same pipeline still detects changes to it as
+an immutable conflict. S3 does not add OCR, Office parsing, HTML, network fetch,
+embeddings, vector search, Evidence writes, Context injection, or model calls.
 
 ### R2B — Deterministic Policy + Capability Gateway
 
@@ -270,14 +292,10 @@ an explicit command boundary.
 
 ## Next milestone
 
-### S3 — Document Understanding / Retrieval
+### T — Evidence Policy + Claim Graph
 
-Status: **current milestone; implementation not started**.
-
-S3 may add Document understanding and retrieval over controlled raw Attachments.
-It must not be described as implemented until parsing, extraction, retrieval,
-provenance, and context boundaries are source-backed. `WorkflowNode.executor`
-is not a principal and skills are not grants.
+Status: **next after S3 merges**. `WorkflowNode.executor` is not a principal
+and skills are not grants.
 
 ## Maintenance policy
 

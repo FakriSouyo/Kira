@@ -3,6 +3,7 @@ import type { ScreenArtifacts } from '../workflows/screenWorkflow';
 import type { ExecutionArtifacts } from '@harness/execution';
 import type { UserFriendlyError } from '@harness/shared';
 import type { Attachment } from '@harness/schemas';
+import type { Document, DocumentSearchHit } from '@harness/schemas';
 
 /**
  * Output conversational (addendum §19) — icon per agent + warna.
@@ -51,6 +52,8 @@ export function renderHelp(): string {
     `  ${color.green('/screen [CRITERIA]')}        Screen stocks (profitable, growing)`,
     `  ${color.green('/attach <path>')}           Import one user-selected file into FinHarness`,
     `  ${color.green('/files')}                   List files owned by the current Session`,
+    `  ${color.green('/doc-index <attachmentId>')} Index one owned attachment into deterministic document chunks`,
+    `  ${color.green('/doc-search <query>')}       Search indexed document chunks with citations`,
     `  ${color.green('/history [--limit N]')}      List recent runs`,
     `  ${color.green('/session <runId>')}          Show run artifacts (markdown)`,
     `  ${color.green('/resume <executionId>')}    Resume an interrupted Judge Execution`,
@@ -244,6 +247,36 @@ export function renderFilesResult(attachments: readonly Attachment[]): string {
       `  ${attachment.filename} · ${attachment.attachmentId} · ${attachment.sizeBytes} bytes` +
       (attachment.mediaType ? ` · ${attachment.mediaType}` : ''),
     ),
+  ].join('\n');
+}
+
+/** Output /doc-index — metadata only; extracted text remains in the document store. */
+export function renderDocumentIndexResult(document: Document): string {
+  return [
+    `Indexed ${document.filename}`,
+    `Document: ${document.documentId}`,
+    `Chunks: ${document.chunkCount}`,
+    `Type: ${document.detectedMediaType}`,
+    ...(document.pageCount === null ? [] : [`Pages: ${document.pageCount}`]),
+  ].join('\n');
+}
+
+/** Output /doc-search — compact deterministic text with durable citation coordinates. */
+export function renderDocumentSearchResult(query: string, hits: readonly DocumentSearchHit[]): string {
+  if (hits.length === 0) return `No document chunks matched: "${query}"`;
+  return [
+    `Document search: "${query}"`,
+    ...hits.map((hit, index) => {
+      const location = hit.citation.pageStart !== null
+        ? `page ${hit.citation.pageStart}${hit.citation.pageEnd !== hit.citation.pageStart ? `-${hit.citation.pageEnd}` : ''}`
+        : hit.citation.lineStart !== null
+          ? `lines ${hit.citation.lineStart}-${hit.citation.lineEnd}`
+          : 'location unavailable';
+      const section = hit.citation.section ? ` · ${hit.citation.section}` : '';
+      const normalized = hit.text.replace(/\s+/g, ' ').trim();
+      const preview = normalized.slice(0, 240) + (normalized.length > 240 ? '…' : '');
+      return `  ${index + 1}. ${hit.citation.filename} · ${hit.citation.chunkId} · ${location}${section} · score=${hit.score}\n     ${preview}`;
+    }),
   ].join('\n');
 }
 
