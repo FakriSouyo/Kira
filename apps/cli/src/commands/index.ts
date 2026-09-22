@@ -6,6 +6,7 @@ import {
   color,
   renderError,
   renderHelp,
+  renderFilesResult,
   renderJudgeResult,
   renderScreenResult,
   renderStub,
@@ -23,6 +24,8 @@ import { FinancialDataError } from '@harness/financial-data';
 import { PROVIDERS } from '../setup/providers';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
+import { attachmentToolIds } from '../tools/attachmentTools';
+import { COMMAND_FILES_CAPABILITY_PRINCIPAL } from '../tools/attachmentCapabilities';
 
 const TICKER_RE = /^[A-Z]{2,6}$/;
 
@@ -73,6 +76,21 @@ function makeScreenCommand(ctx: HarnessContext): CommandHandler {
     const criteria = args.map((a) => a.toLowerCase());
     const artifacts = await screenWorkflow(ctx, criteria);
     process.stdout.write(`${renderScreenResult(artifacts)}\n\n`);
+  };
+}
+
+function makeFilesCommand(ctx: HarnessContext, write: (text: string) => void): CommandHandler {
+  return async (args, execution) => {
+    if (args.length !== 0) {
+      throw new UserFriendlyError('INVALID_ARG', '/files does not take arguments', 'Usage: /files');
+    }
+    const result = await ctx.capabilityGateway.invoke(
+      COMMAND_FILES_CAPABILITY_PRINCIPAL,
+      attachmentToolIds.list,
+      {},
+      { signal: execution?.signal },
+    );
+    write(`${renderFilesResult(result.value)}\n\n`);
   };
 }
 
@@ -279,6 +297,7 @@ export function buildCommands(ctx: HarnessContext, options: {
   const commands: Map<string, CommandHandler> = new Map([
     ['judge', makeJudgeCommand(ctx, options)],
     ['screen', makeScreenCommand(ctx)],
+    ['files', makeFilesCommand(ctx, write)],
     ['attach', makeAttachCommand(ctx, write)],
     ['export', makeExportCommand(ctx)],
     ['history', makeHistoryCommand(ctx)],

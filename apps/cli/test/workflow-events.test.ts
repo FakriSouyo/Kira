@@ -23,7 +23,7 @@ describe('judgeWorkflow → Agent-Events (Phase 2 Task 2)', () => {
     homeDir = mkdtempSync(join(tmpdir(), 'finharness-events-test-'));
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
     db = openDb({ homeDir });
-    (globalThis as { _eventsCtx?: unknown })._eventsCtx = buildContext(db, config);
+    (globalThis as { _eventsCtx?: unknown })._eventsCtx = buildContext(db, config, { sessionId: 'workflow-events-test-session' });
   });
 
   afterEach(() => {

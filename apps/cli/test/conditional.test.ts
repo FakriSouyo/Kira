@@ -23,7 +23,7 @@ describe('judgeWorkflow conditional debate (Phase 3 Task 2)', () => {
 
   function baseCtx() {
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
-    return buildContext(db, config);
+    return buildContext(db, config, { sessionId: 'conditional-test-session' });
   }
 
   it('tanpa --conditional tetap 5 messages (0–4) meski score neutral', async () => {

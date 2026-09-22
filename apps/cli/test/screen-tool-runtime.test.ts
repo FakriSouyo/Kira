@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ToolRuntime } from '@harness/tool-runtime';
 import type { FinancialDataProvider, ScreenerResult } from '@harness/financial-data';
-import { createFinancialCapabilityGateway } from '../src/tools/financialCapabilities';
+import { createApplicationCapabilityGateway } from '../src/tools/applicationCapabilities';
+import { createAttachmentTools } from '../src/tools/attachmentTools';
 import { createFinancialTools } from '../src/tools/financialTools';
 import { screenWorkflow } from '../src/workflows/screenWorkflow';
 import type { HarnessContext } from '../src/context';
@@ -18,7 +19,11 @@ describe('Screen tool-runtime composition', () => {
     const toolRuntime = new ToolRuntime();
     const financialTools = createFinancialTools(provider);
     const context = {
-      capabilityGateway: createFinancialCapabilityGateway(financialTools, toolRuntime),
+      capabilityGateway: createApplicationCapabilityGateway({
+        financialTools,
+        attachmentTools: createAttachmentTools({ attachmentStore: {} as never, sessionId: 'test-session' }),
+        toolRuntime,
+      }),
     } as unknown as HarnessContext;
 
     await expect(screenWorkflow(context, ['profitable'])).resolves.toEqual({

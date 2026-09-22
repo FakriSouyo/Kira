@@ -33,7 +33,7 @@ describe('PR P same-Execution Judge resume', () => {
 
   it('continues a checkpointed prefix in the same Execution without refetching completed sources', async () => {
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
-    const context = buildContext(db, config);
+    const context = buildContext(db, config, { sessionId: 'judge-resume-test-session' });
     const session = await db.sessions.createSession({
       sessionId: 'conversation_same_execution',
       title: 'Same execution resume',

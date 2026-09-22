@@ -31,7 +31,7 @@ describe('/judge VerifiedFinancialSnapshot boundary', () => {
   }
 
   function context() {
-    return buildContext(db, loadConfig({ homeDir, mockSectors: true, mockLlm: true }));
+    return buildContext(db, loadConfig({ homeDir, mockSectors: true, mockLlm: true }), { sessionId: 'financial-snapshot-test-session' });
   }
 
   it('finalizes exactly one snapshot before the first Bull call and links accepted Evidence', async () => {

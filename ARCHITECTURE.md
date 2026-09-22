@@ -334,7 +334,7 @@ same Execution row and ID; it does not create a retry Execution.
 ## Command boundaries
 
 The implemented command surface includes `/judge`, `/screen`, `/search`,
-`/attach`, `/history`, `/session`, `/resume`, `/web`, `/export`, `/version`,
+`/attach`, `/files`, `/history`, `/session`, `/resume`, `/web`, `/export`, `/version`,
 setup/status commands, and local session controls. `/judge` is the current
 mature research vertical; `/screen` and `/search` are implemented, and
 `/attach` is explicit user-file ingestion. `/challenge`, `/compare`,
@@ -614,13 +614,76 @@ Evidence, Artifacts, Judge, Screen, or model prompts.
 
 The existing `FilesystemSkillProvider` remains a package-owned `SKILL.md`
 loader whose paths stay inside specialist package roots. It is not user-file
-storage and does not read Attachment blobs. S1 adds no file, workspace,
-attachment, or document Capability; controlled file capabilities belong to
-future S2, and document parsing/retrieval belongs to future S3.
+storage and does not read Attachment blobs. S2 adds controlled raw Attachment
+capabilities without changing `/attach`; document parsing/retrieval belongs to
+future S3.
 
 ```text
 Attachment != Document != Evidence != Artifact != Context
 ```
+
+## Session-scoped raw file capabilities — S2
+
+S2 adds controlled access to existing FinHarness-owned Attachments. It does not
+introduce a durable `Workspace`, a second file identity, a new migration, a
+Document model, parsing, retrieval, context injection, or host filesystem
+access. In S2, “workspace” is only the active Session-scoped view:
+
+```text
+Session
+  |
+  +-- Attachment A
+  +-- Attachment B
+  +-- Attachment C
+```
+
+The application composes one capability registry, policy, gateway, and
+ToolRuntime for both financial and attachment tools:
+
+```text
+explicit caller
+    |
+    v
+CapabilityPrincipal -> CapabilityPolicy -> CapabilityGateway
+                                              |
+                                              v
+                                         ToolRuntime
+                                              |
+                                              v
+                              Session-scoped Attachment tools
+                                              |
+                                              v
+                                       AttachmentStore
+```
+
+The registered raw-resource capability IDs are:
+
+```text
+workspace.list-attachments
+attachment.describe
+attachment.read
+```
+
+The production grant is intentionally minimal:
+
+```text
+command.files -> workspace.list-attachments
+```
+
+`attachment.describe` and `attachment.read` are registered controlled raw-file
+capabilities but have no invented production consumer or principal yet. The
+attachment tool adapter captures the trusted active `sessionId` from
+application composition; tool input cannot override it. Metadata is resolved
+and Session ownership is checked before raw bytes are read. Unknown and
+cross-Session attachments fail with the same not-found boundary, while
+`AttachmentStore` blob-missing and integrity failures retain their error
+identity.
+
+`/files` creates one completed Turn, zero Executions, zero ModelCalls, and no
+financial provider calls. `/attach <path>` remains explicit host-file
+ingestion and does not use the capability gateway. `FilesystemSkillProvider`
+remains only the package-owned specialist `SKILL.md` loader. S3 remains the
+future Document understanding/retrieval milestone.
 
 ## Failure and restart semantics
 
@@ -640,9 +703,9 @@ credentials.
 
 The current and future milestone order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2,
-and S1 are complete on `master`. The current milestone is:
+S1, and S2 are complete on this branch. The current milestone is:
 
-**S2 — Workspace + File Capability**
+**S3 — Document Understanding / Retrieval**
 
 R2C2 migrated the remaining Judge direct-runtime path and added durable
 capability semantic compatibility. PR P continues to restore the same

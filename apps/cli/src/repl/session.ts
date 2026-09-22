@@ -40,11 +40,24 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
   const emit = (event: AgentEvent) => { controller.accept(event); options.events?.(event); };
   let config = configForSelection(initialConfig, initialSelection);
   let reasoningMode: 'usual' | 'reasoning' = 'usual';
-  const context = buildContext(db, config);
+  const context = buildContext(db, config, { sessionId: controller.snapshot.id });
   const cleanup: Array<() => Promise<void>> = [];
-  const applyConfig = (next: FinharnessConfig) => {
-    config = next;
-    Object.assign(context, buildContext(db, config));
+  type PreparedContext = { config: FinharnessConfig; context: ReturnType<typeof buildContext> };
+  const prepareContext = (next: FinharnessConfig, sessionId: string): PreparedContext => ({
+    config: next,
+    context: buildContext(db, next, { sessionId }),
+  });
+  const commitContext = (prepared: PreparedContext) => {
+    config = prepared.config;
+    Object.assign(context, prepared.context);
+  };
+  const applyConfig = (next: FinharnessConfig, sessionId = controller.snapshot.id) => {
+    commitContext(prepareContext(next, sessionId));
+  };
+  const prepareSession = async (sessionId: string): Promise<PreparedContext> => {
+    const loaded = loadConfig({ homeDir: initialConfig.homeDir, mockSectors: initialConfig.sectors.mock, mockLlm: initialConfig.mockLlm });
+    const next = configForSelection(loaded, await db.sessions.getCurrentModelSelection(sessionId));
+    return prepareContext(next, sessionId);
   };
   const reload = async () => {
     const loaded = loadConfig({ homeDir: initialConfig.homeDir, mockSectors: initialConfig.sectors.mock, mockLlm: initialConfig.mockLlm });
@@ -87,6 +100,17 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
   const publishAfterSettledTurn = async (turnId: string) => {
     const artifacts = await db.sessions.getSessionArtifacts(controller.snapshot.id);
     return await publisher.publishAfterSettledTurn({ sessionId: controller.snapshot.id, turnId, artifacts });
+  };
+  const switchToPreparedSession = async (sessionId: string, prepared: PreparedContext) => {
+    const previousSessionId = controller.snapshot.id;
+    try {
+      await controller.open(sessionId);
+      await publisher.reconcileJournal(sessionId);
+    } catch (error) {
+      if (controller.snapshot.id !== previousSessionId) await controller.open(previousSessionId);
+      throw error;
+    }
+    commitContext(prepared);
   };
   await publisher.reconcileJournal(controller.snapshot.id);
   const resolveControlExecution = async (name: string, args: string[]) => {
@@ -153,8 +177,8 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
           await db.sessions.settleTurn(turn.id, 'completed');
           turnSettled = true;
           controller.settleTurn(turn.id, 'completed');
-          await controller.newConversation();
-          await reload();
+          const target = await controller.createNewConversation();
+          await switchToPreparedSession(target.id, await prepareSession(target.id));
           return;
         }
         controller.user(input);
@@ -185,10 +209,7 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
     context, commands,
     get conversation() { return controller.snapshot; },
     async openConversation(id: string) {
-      await controller.open(id);
-      const loaded = loadConfig({ homeDir: initialConfig.homeDir, mockSectors: initialConfig.sectors.mock, mockLlm: initialConfig.mockLlm });
-      applyConfig(configForSelection(loaded, await db.sessions.getCurrentModelSelection(id)));
-      await publisher.reconcileJournal(id);
+      await switchToPreparedSession(id, await prepareSession(id));
     },
     get config() { return config; },
     /** Session-local model selection; durable per Session and never writes config.json. */

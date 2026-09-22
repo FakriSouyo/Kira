@@ -1,12 +1,4 @@
-import {
-  CapabilityGateway,
-  CapabilityPolicy,
-  CapabilityRegistry,
-  createCapabilityPlan,
-  type CapabilityPlan,
-  type CapabilityRegistration,
-} from '@harness/capability';
-import type { ToolRuntime } from '@harness/tool-runtime';
+import { createCapabilityPlan, type CapabilityPlan, type CapabilityGateway, type CapabilityRegistration, type CapabilityGrant } from '@harness/capability';
 import { financialToolIds, type FinancialTools } from './financialTools';
 
 export const FINANCIAL_CAPABILITY_INTEGRATION_ID = 'financial-data' as const;
@@ -84,13 +76,8 @@ export function createFinancialCapabilityRegistrations(tools: FinancialTools) {
   ] as const);
 }
 
-export function createFinancialCapabilityGateway(
-  tools: FinancialTools,
-  toolRuntime: ToolRuntime,
-) {
-  const registrations = createFinancialCapabilityRegistrations(tools);
-  const registry = new CapabilityRegistry(registrations);
-  const policy = new CapabilityPolicy([
+export function createFinancialCapabilityGrants(): readonly CapabilityGrant[] {
+  return Object.freeze([
     {
       principalId: SCREEN_CAPABILITY_PRINCIPAL.id,
       capabilityIds: [financialToolIds.screen],
@@ -112,16 +99,10 @@ export function createFinancialCapabilityGateway(
       capabilityIds: [financialToolIds.news, financialToolIds.filings, financialToolIds.sentiment],
     },
   ]);
-
-  return new CapabilityGateway({ registry, policy, toolRuntime });
 }
 
-export type FinancialCapabilityGateway = ReturnType<
-  typeof createFinancialCapabilityGateway
->;
-
 export function createJudgeCapabilityPlan(
-  capabilityGateway: FinancialCapabilityGateway,
+  capabilityGateway: Pick<CapabilityGateway, 'list'>,
 ): CapabilityPlan {
   return createCapabilityPlan(capabilityGateway, Object.values(JUDGE_CAPABILITY_PRINCIPALS));
 }

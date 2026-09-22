@@ -155,16 +155,38 @@ export class ConversationController {
       lastByTurn.set(turn.id, settled);
     }
   }
-  async open(id: string): Promise<void> { await this.restore(id); this.publish(); }
-  async newConversation(): Promise<void> {
-    const session = await this.db.sessions.createSession({
+  async open(id: string): Promise<void> {
+    const previous = {
+      state: this.state,
+      currentRun: this.currentRun,
+      assistantId: this.assistantId,
+      activeTurn: this.activeTurn,
+      evidenceLabels: this.evidenceLabels,
+    };
+    try {
+      await this.restore(id);
+      this.publish();
+    } catch (error) {
+      this.state = previous.state;
+      this.currentRun = previous.currentRun;
+      this.assistantId = previous.assistantId;
+      this.activeTurn = previous.activeTurn;
+      this.evidenceLabels = previous.evidenceLabels;
+      throw error;
+    }
+  }
+  async createNewConversation(): Promise<ResearchSession> {
+    return this.db.sessions.createSession({
       sessionId: `conversation_${randomUUID().slice(0, 8)}`,
       title: 'New conversation',
       provider: this.config.llm.agent.providerId ?? this.config.llm.agent.provider,
       model: this.config.llm.agent.model,
       reasoningMode: 'usual',
     });
-    await this.restore(session.id); this.publish();
+  }
+  async newConversation(session?: ResearchSession): Promise<void> {
+    const target = session ?? await this.createNewConversation();
+    await this.open(target.id);
   }
   safeInput(content: string): string {
     if (/^\s*\/auth-set\b/i.test(content)) return '/auth-set [credentials hidden]';

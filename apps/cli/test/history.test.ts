@@ -24,7 +24,7 @@ describe('/history + /session (Phase 4 Task 1)', () => {
 
   function ctx() {
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
-    return buildContext(db, config);
+    return buildContext(db, config, { sessionId: 'history-test-session' });
   }
 
   it('history lists runs after /judge', async () => {

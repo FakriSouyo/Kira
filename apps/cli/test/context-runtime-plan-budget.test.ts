@@ -96,7 +96,7 @@ describe('production Context runtime-plan budget composition', () => {
     try {
       const config = loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true });
       config.llm.agent = { ...config.llm.agent, contextWindowTokens: 12_000, maxTokens: 7 };
-      const context = buildContext(db, config);
+      const context = buildContext(db, config, { sessionId: session.id });
       const prepared = await context.conversationContext.prepare({
         sessionId: session.id,
         turnId: turn.id,

@@ -8,8 +8,9 @@ The stateful architecture milestones **A-P** are complete on `master`. **Q1**,
 **Q2**, **R1**, **R2A**, **R2B**, **R2C1**, **R2C2**, and **S1** are also
 complete on `master`.
 
-The current milestone is **S2 — Workspace + File Capability**. **S3 —
-Document Understanding / Retrieval** follows it in the canonical sequence.
+**S2 — Workspace + File Capability** is complete. The current milestone is
+**S3 — Document Understanding / Retrieval**; **T — Evidence Policy + Claim
+Graph** follows S3 in the canonical sequence.
 
 The canonical future sequence and dependency rationale live in
 [`docs/ROADMAP.md`](ROADMAP.md). This document is the mutable current-status
@@ -79,6 +80,48 @@ SHA-256 `contentHash`; repeated identical bytes reuse one blob but create
 distinct Attachment identities. Source paths are redacted to `/attach [file]`
 before Turn and journal persistence, and attachment bytes do not enter model
 context, Evidence, Artifacts, or any financial workflow.
+
+### S2 — Workspace + File Capability
+
+Status: **complete on this branch**.
+
+S2 treats “workspace” as the active Session-scoped view of existing
+FinHarness-owned Attachments. It adds no durable Workspace model, workspace
+tables, migration, or second file identity. The single application capability
+composition contains the existing eight financial registrations plus these
+three raw-resource capability IDs:
+
+```text
+workspace.list-attachments
+attachment.describe
+attachment.read
+```
+
+The exact production grant is:
+
+```text
+command.files -> workspace.list-attachments
+```
+
+`attachment.describe` and `attachment.read` are registered but have no
+invented production consumer/principal yet. The session-scoped adapter captures
+the trusted active `sessionId` in `buildContext(db, config, { sessionId })` and
+rejects caller-supplied scope, paths, and content-hash locators through strict
+tool schemas. It checks Session ownership before `AttachmentStore.readContent()`;
+unknown and cross-Session resources fail closed at the not-found boundary, and
+blob/integrity errors retain their existing identities.
+
+The `/files` vertical slice lists safe metadata through the full authority path:
+
+```text
+/files -> command.files -> CapabilityGateway -> workspace.list-attachments
+       -> ToolRuntime -> Session-scoped Attachment tool -> AttachmentStore
+```
+
+It creates one Turn, zero Executions, zero ModelCalls, and zero financial
+provider calls. `/attach <path>` remains explicit user-controlled host
+filesystem ingestion and does not use the capability gateway. Document
+understanding, parsing, retrieval, and context injection remain S3 work.
 
 ### R2B — Deterministic Policy + Capability Gateway
 
@@ -170,6 +213,9 @@ implemented, future maturation
 /attach
 implemented, explicit user file import; not a capability or document parser
 
+/files
+implemented, current Session attachment metadata listing through capabilities
+
 /research
 stub
 
@@ -224,15 +270,14 @@ an explicit command boundary.
 
 ## Next milestone
 
-### S2 — Workspace + File Capability
+### S3 — Document Understanding / Retrieval
 
 Status: **current milestone; implementation not started**.
 
-S2 may add controlled capabilities over FinHarness-owned resources. It must not
-turn `/attach` into agent-selected file access, arbitrary shell access,
-directory traversal, or unrestricted host filesystem access. Exact capability
-IDs and policy details remain future design work. `WorkflowNode.executor` is not
-a principal and skills are not grants.
+S3 may add Document understanding and retrieval over controlled raw Attachments.
+It must not be described as implemented until parsing, extraction, retrieval,
+provenance, and context boundaries are source-backed. `WorkflowNode.executor`
+is not a principal and skills are not grants.
 
 ## Maintenance policy
 

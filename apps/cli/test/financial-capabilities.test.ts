@@ -9,19 +9,34 @@ import {
 } from '@harness/capability';
 import { openDb } from '@harness/database';
 import type { FinancialDataProvider, ScreenerResult } from '@harness/financial-data';
+import type { FinancialTools } from '../src/tools/financialTools';
 import { ToolRuntime } from '@harness/tool-runtime';
 import { describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../src/config';
 import { buildContext } from '../src/context';
 import {
-  createFinancialCapabilityGateway,
   createFinancialCapabilityRegistrations,
+  createFinancialCapabilityGrants,
   createJudgeCapabilityPlan,
   FINANCIAL_CAPABILITY_INTEGRATION_ID,
   JUDGE_CAPABILITY_PRINCIPALS,
   SCREEN_CAPABILITY_PRINCIPAL,
 } from '../src/tools/financialCapabilities';
 import { createFinancialTools, financialToolIds } from '../src/tools/financialTools';
+import { createAttachmentTools } from '../src/tools/attachmentTools';
+import {
+  createApplicationCapabilityGateway,
+  createApplicationCapabilityRegistrations,
+} from '../src/tools/applicationCapabilities';
+import { createAttachmentCapabilityGrants } from '../src/tools/attachmentCapabilities';
+
+function applicationGateway(tools: FinancialTools) {
+  return createApplicationCapabilityGateway({
+    financialTools: tools,
+    attachmentTools: createAttachmentTools({ attachmentStore: {} as never, sessionId: 'test-session' }),
+    toolRuntime: new ToolRuntime(),
+  });
+}
 
 const screened: ScreenerResult[] = [{ ticker: 'BBCA', matchScore: 100 }];
 
@@ -94,7 +109,7 @@ describe('financial capability composition', () => {
   it('grants the Screen principal only financial.screen', async () => {
     const data = provider();
     const tools = createFinancialTools(data);
-    const gateway = createFinancialCapabilityGateway(tools, new ToolRuntime());
+    const gateway = applicationGateway(tools);
 
     expect(gateway.list(SCREEN_CAPABILITY_PRINCIPAL).map(({ id }) => id)).toEqual([
       'financial.screen',
@@ -117,7 +132,7 @@ describe('financial capability composition', () => {
 
   it('grants Judge by explicit workflow principal and creates a scoped seven-capability plan', () => {
     const tools = createFinancialTools(provider());
-    const gateway = createFinancialCapabilityGateway(tools, new ToolRuntime());
+    const gateway = applicationGateway(tools);
 
     expect(gateway.list(JUDGE_CAPABILITY_PRINCIPALS.identifyCompany).map(({ id }) => id)).toEqual([
       financialToolIds.companyReport,
@@ -166,6 +181,7 @@ describe('financial capability composition', () => {
       const context = buildContext(
         db,
         loadConfig({ homeDir, mockSectors: true, mockLlm: true }),
+        { sessionId: 'test-session' },
       );
 
       expect(context.capabilityGateway.list(SCREEN_CAPABILITY_PRINCIPAL).map(({ id }) => id))
@@ -182,22 +198,26 @@ describe('financial capability composition', () => {
     }
   });
 
-  it('keeps the Judge plan isolated from changes to the command.screen grant', () => {
-    const makePlan = (screenGrant: readonly string[]) => {
+  it('keeps the Judge plan isolated from unrelated grants and registrations', () => {
+    const makePlan = (screenGrant: readonly string[], includeAttachmentGrant = false) => {
       const tools = createFinancialTools(provider());
-      const registry = new CapabilityRegistry(createFinancialCapabilityRegistrations(tools));
-      const policy = new CapabilityPolicy([
-        { principalId: JUDGE_CAPABILITY_PRINCIPALS.identifyCompany.id, capabilityIds: [financialToolIds.companyReport] },
-        { principalId: JUDGE_CAPABILITY_PRINCIPALS.fetchFinancials.id, capabilityIds: [financialToolIds.quarterlyFinancials] },
-        { principalId: JUDGE_CAPABILITY_PRINCIPALS.fetchMarketData.id, capabilityIds: [financialToolIds.dailyTransaction, financialToolIds.foreignFlow] },
-        { principalId: JUDGE_CAPABILITY_PRINCIPALS.fetchNews.id, capabilityIds: [financialToolIds.news, financialToolIds.filings, financialToolIds.sentiment] },
-        { principalId: SCREEN_CAPABILITY_PRINCIPAL.id, capabilityIds: screenGrant },
-      ]);
+      const attachments = createAttachmentTools({ attachmentStore: {} as never, sessionId: 'test-session' });
+      const registry = new CapabilityRegistry(createApplicationCapabilityRegistrations({
+        financialTools: tools,
+        attachmentTools: attachments,
+      }));
+      const grants = createFinancialCapabilityGrants()
+        .filter(grant => grant.principalId !== SCREEN_CAPABILITY_PRINCIPAL.id);
+      grants.push({ principalId: SCREEN_CAPABILITY_PRINCIPAL.id, capabilityIds: screenGrant });
+      if (includeAttachmentGrant) grants.push(...createAttachmentCapabilityGrants());
+      const policy = new CapabilityPolicy(grants);
       const gateway = new CapabilityGateway({ registry, policy, toolRuntime: new ToolRuntime() });
       return createCapabilityPlan(gateway, Object.values(JUDGE_CAPABILITY_PRINCIPALS));
     };
 
     expect(makePlan([financialToolIds.screen]).fingerprint)
       .toBe(makePlan([financialToolIds.screen, financialToolIds.news]).fingerprint);
+    expect(makePlan([financialToolIds.screen]).fingerprint)
+      .toBe(makePlan([financialToolIds.screen], true).fingerprint);
   });
 });

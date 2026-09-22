@@ -23,7 +23,7 @@ describe('Replay fixture keyless', () => {
     const db: FinharnessDatabase = openDb({ homeDir });
     try {
       const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
-      const ctx = buildContext(db, config);
+      const ctx = buildContext(db, config, { sessionId: 'replay-test-session' });
 
       const toSnapshot = async (): Promise<ReplaySnapshot> => {
         const art = await judgeWorkflow(ctx, 'BBCA', () => {}, () => {});
@@ -45,7 +45,7 @@ describe('Replay fixture keyless', () => {
       const homeDir2 = mkdtempSync(join(tmpdir(), 'finharness-replay-test2-'));
       const db2 = openDb({ homeDir: homeDir2 });
       try {
-        const ctx2 = buildContext(db2, loadConfig({ homeDir: homeDir2, mockSectors: true, mockLlm: true }));
+        const ctx2 = buildContext(db2, loadConfig({ homeDir: homeDir2, mockSectors: true, mockLlm: true }), { sessionId: 'replay-test-session-2' });
         const art2 = await judgeWorkflow(ctx2, 'BBCA', () => {}, () => {});
         const conv2 = await db2.conversation.getByRun(art2.run.id);
         const b: ReplaySnapshot = {

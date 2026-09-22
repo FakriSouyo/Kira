@@ -25,7 +25,7 @@ describe('/search (Phase 7)', () => {
 
   it('search returns ranked evidence for query ROE', async () => {
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
-    const ctx = buildContext(db, config);
+    const ctx = buildContext(db, config, { sessionId: 'search-test-session' });
     const art = await judgeWorkflow(ctx, 'BBCA', () => {}, () => {});
     const results = await searchEvidence(db, { runId: art.run.id, query: 'roe' });
     expect(results.length).toBeGreaterThan(0);
@@ -34,7 +34,7 @@ describe('/search (Phase 7)', () => {
 
   it('limit works', async () => {
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
-    const ctx = buildContext(db, config);
+    const ctx = buildContext(db, config, { sessionId: 'search-test-session' });
     const art = await judgeWorkflow(ctx, 'BBCA', () => {}, () => {});
     const results = await searchEvidence(db, { runId: art.run.id, query: 'BBCA', limit: 1 });
     expect(results.length).toBe(1);
@@ -42,7 +42,7 @@ describe('/search (Phase 7)', () => {
 
   it('renderSearchResult contains query and score', async () => {
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
-    const ctx = buildContext(db, config);
+    const ctx = buildContext(db, config, { sessionId: 'search-test-session' });
     const art = await judgeWorkflow(ctx, 'BBCA', () => {}, () => {});
     const results = await searchEvidence(db, { runId: art.run.id, query: 'roe', limit: 2 });
     const out = renderSearchResult('roe', results, art.run.id);
@@ -52,7 +52,7 @@ describe('/search (Phase 7)', () => {
 
   it('search without runId uses last run', async () => {
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
-    const ctx = buildContext(db, config);
+    const ctx = buildContext(db, config, { sessionId: 'search-test-session' });
     await judgeWorkflow(ctx, 'BBCA', () => {}, () => {});
     const results = await searchEvidence(db, { query: 'BBCA' });
     expect(results.length).toBeGreaterThan(0);
