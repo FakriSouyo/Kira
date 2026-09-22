@@ -15,6 +15,7 @@ import {
   createApplicationCapabilityRegistrations,
 } from '../src/tools/applicationCapabilities';
 import { createFinancialTools } from '../src/tools/financialTools';
+import { createDocumentTools } from '../src/tools/documentTools';
 import { JUDGE_CAPABILITY_PRINCIPALS, SCREEN_CAPABILITY_PRINCIPAL } from '../src/tools/financialCapabilities';
 import type { FinancialDataProvider } from '@harness/financial-data';
 
@@ -216,11 +217,13 @@ describe('application attachment capability composition', () => {
 
   it('combines financial and attachment registrations while granting command.files only list', async () => {
     const attachments = createAttachmentTools({ attachmentStore: {} as never, sessionId: 'trusted-session' });
+    const documents = createDocumentTools({ documentStore: {} as never, sessionId: 'trusted-session' });
     const financialTools = createFinancialTools(provider);
-    const registrations = createApplicationCapabilityRegistrations({ financialTools, attachmentTools: attachments });
+    const registrations = createApplicationCapabilityRegistrations({ financialTools, attachmentTools: attachments, documentTools: documents });
     const gateway = createApplicationCapabilityGateway({
       financialTools,
       attachmentTools: attachments,
+      documentTools: documents,
       toolRuntime: new ToolRuntime(),
     });
 
@@ -236,6 +239,7 @@ describe('application attachment capability composition', () => {
       attachmentToolIds.list,
       attachmentToolIds.describe,
       attachmentToolIds.read,
+      'document.search',
     ]);
     expect(gateway.list(COMMAND_FILES_CAPABILITY_PRINCIPAL).map(({ id }) => id)).toEqual([attachmentToolIds.list]);
     expect(() => gateway.describe(COMMAND_FILES_CAPABILITY_PRINCIPAL, attachmentToolIds.describe))

@@ -590,7 +590,7 @@ Evidence
   = accepted source observation/provenance
 
 Document
-  = not implemented yet
+  = deterministic extracted text/pages/chunks derived from one Attachment
 
 Context
   = selected model input
@@ -615,8 +615,8 @@ Evidence, Artifacts, Judge, Screen, or model prompts.
 The existing `FilesystemSkillProvider` remains a package-owned `SKILL.md`
 loader whose paths stay inside specialist package roots. It is not user-file
 storage and does not read Attachment blobs. S2 adds controlled raw Attachment
-capabilities without changing `/attach`; document parsing/retrieval belongs to
-future S3.
+capabilities without changing `/attach`. S3 adds explicit document indexing and
+retrieval without changing Attachment semantics.
 
 ```text
 Attachment != Document != Evidence != Artifact != Context
@@ -670,20 +670,56 @@ The production grant is intentionally minimal:
 command.files -> workspace.list-attachments
 ```
 
-`attachment.describe` and `attachment.read` are registered controlled raw-file
-capabilities but have no invented production consumer or principal yet. The
-attachment tool adapter captures the trusted active `sessionId` from
-application composition; tool input cannot override it. Metadata is resolved
-and Session ownership is checked before raw bytes are read. Unknown and
-cross-Session attachments fail with the same not-found boundary, while
-`AttachmentStore` blob-missing and integrity failures retain their error
-identity.
+`attachment.describe` remains a registered controlled raw-file capability, while
+`attachment.read` is granted only to the indexing principal. The attachment
+tool adapter captures the trusted active `sessionId` from application
+composition; tool input cannot override it. Metadata is resolved and Session
+ownership is checked before raw bytes are read. Unknown and cross-Session
+attachments fail with the same not-found boundary, while `AttachmentStore`
+blob-missing and integrity failures retain their error identity.
 
 `/files` creates one completed Turn, zero Executions, zero ModelCalls, and no
 financial provider calls. `/attach <path>` remains explicit host-file
 ingestion and does not use the capability gateway. `FilesystemSkillProvider`
-remains only the package-owned specialist `SKILL.md` loader. S3 remains the
-future Document understanding/retrieval milestone.
+remains only the package-owned specialist `SKILL.md` loader.
+
+## Deterministic Documents and retrieval — S3
+
+S3 derives a durable `Document` and ordered `DocumentChunk` rows only through
+the explicit `/doc-index <attachmentId>` command. The document package is
+domain-only: it detects PDF, UTF-8 text, Markdown, JSON, CSV, and TSV; rejects
+unsupported/binary content; extracts PDF pages locally; normalizes text; and
+chunks deterministically with bounded size and page/line/section provenance.
+No OCR, remote fetch, HTML, Office parsing, embeddings, vector store, or model
+call is involved.
+
+```text
+/doc-index <attachmentId>
+  -> command.doc-index
+  -> CapabilityGateway -> attachment.read
+  -> @harness/document extraction/chunking
+  -> DocumentStore
+
+/doc-search <query>
+  -> command.doc-search
+  -> CapabilityGateway -> document.search
+  -> session-scoped DocumentStore -> lexical chunks -> citations
+```
+
+Document identity is a deterministic hash of schema version, source
+Attachment, source content hash, and the exact parser plus FinHarness pipeline
+version. The same Attachment can retain distinct Document derivations across
+pipeline versions. Re-indexing under one version is idempotent; conflicting
+semantics under that version fail closed. PDF magic in verified bytes takes
+precedence over advisory media type and filename. Bundled PDF.js standard fonts
+are resolved locally. `textHash` records the normalized extracted text before
+chunking; the exact extraction stream is not stored, so read-time validation
+does not recompute `textHash`. It does validate Document and chunk identities,
+chunk text hashes, ordinals, and counts. Search
+is case-insensitive exact-phrase/token coverage with stable ties and a maximum
+of twenty results. `Document` and `DocumentChunk` are not Evidence, Artifact,
+Context, or model input. Retrieval returns candidates with citations; it does
+not persist Evidence or invoke Judge.
 
 ## Failure and restart semantics
 
@@ -703,9 +739,10 @@ credentials.
 
 The current and future milestone order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2,
-S1, and S2 are complete on this branch. The current milestone is:
+S1 and S2 are complete on master. S3 is complete in the current implementation.
+The next milestone after S3 merges is:
 
-**S3 — Document Understanding / Retrieval**
+**T — Evidence Policy + Claim Graph**
 
 R2C2 migrated the remaining Judge direct-runtime path and added durable
 capability semantic compatibility. PR P continues to restore the same

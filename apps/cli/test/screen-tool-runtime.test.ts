@@ -3,6 +3,7 @@ import { ToolRuntime } from '@harness/tool-runtime';
 import type { FinancialDataProvider, ScreenerResult } from '@harness/financial-data';
 import { createApplicationCapabilityGateway } from '../src/tools/applicationCapabilities';
 import { createAttachmentTools } from '../src/tools/attachmentTools';
+import { createDocumentTools } from '../src/tools/documentTools';
 import { createFinancialTools } from '../src/tools/financialTools';
 import { screenWorkflow } from '../src/workflows/screenWorkflow';
 import type { HarnessContext } from '../src/context';
@@ -22,6 +23,7 @@ describe('Screen tool-runtime composition', () => {
       capabilityGateway: createApplicationCapabilityGateway({
         financialTools,
         attachmentTools: createAttachmentTools({ attachmentStore: {} as never, sessionId: 'test-session' }),
+        documentTools: createDocumentTools({ documentStore: {} as never, sessionId: 'test-session' }),
         toolRuntime,
       }),
     } as unknown as HarnessContext;

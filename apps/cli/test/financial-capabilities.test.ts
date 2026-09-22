@@ -23,17 +23,24 @@ import {
   SCREEN_CAPABILITY_PRINCIPAL,
 } from '../src/tools/financialCapabilities';
 import { createFinancialTools, financialToolIds } from '../src/tools/financialTools';
-import { createAttachmentTools } from '../src/tools/attachmentTools';
+import { attachmentToolIds, createAttachmentTools } from '../src/tools/attachmentTools';
+import { createDocumentTools } from '../src/tools/documentTools';
 import {
+  createApplicationCapabilityGrants,
   createApplicationCapabilityGateway,
   createApplicationCapabilityRegistrations,
 } from '../src/tools/applicationCapabilities';
-import { createAttachmentCapabilityGrants } from '../src/tools/attachmentCapabilities';
+import {
+  COMMAND_FILES_CAPABILITY_PRINCIPAL,
+  createAttachmentCapabilityGrants,
+  createAttachmentCapabilityRegistrations,
+} from '../src/tools/attachmentCapabilities';
 
 function applicationGateway(tools: FinancialTools) {
   return createApplicationCapabilityGateway({
     financialTools: tools,
     attachmentTools: createAttachmentTools({ attachmentStore: {} as never, sessionId: 'test-session' }),
+    documentTools: createDocumentTools({ documentStore: {} as never, sessionId: 'test-session' }),
     toolRuntime: new ToolRuntime(),
   });
 }
@@ -202,9 +209,11 @@ describe('financial capability composition', () => {
     const makePlan = (screenGrant: readonly string[], includeAttachmentGrant = false) => {
       const tools = createFinancialTools(provider());
       const attachments = createAttachmentTools({ attachmentStore: {} as never, sessionId: 'test-session' });
+      const documents = createDocumentTools({ documentStore: {} as never, sessionId: 'test-session' });
       const registry = new CapabilityRegistry(createApplicationCapabilityRegistrations({
         financialTools: tools,
         attachmentTools: attachments,
+        documentTools: documents,
       }));
       const grants = createFinancialCapabilityGrants()
         .filter(grant => grant.principalId !== SCREEN_CAPABILITY_PRINCIPAL.id);
@@ -219,5 +228,39 @@ describe('financial capability composition', () => {
       .toBe(makePlan([financialToolIds.screen, financialToolIds.news]).fingerprint);
     expect(makePlan([financialToolIds.screen]).fingerprint)
       .toBe(makePlan([financialToolIds.screen], true).fingerprint);
+  });
+
+  it('keeps Judge capability IDs and fingerprint identical with and without S3 registration and grant', () => {
+    const tools = createFinancialTools(provider());
+    const attachmentTools = createAttachmentTools({ attachmentStore: {} as never, sessionId: 'test-session' });
+    const documentTools = createDocumentTools({ documentStore: {} as never, sessionId: 'test-session' });
+    const s2Registrations = [
+      ...createFinancialCapabilityRegistrations(tools),
+      ...createAttachmentCapabilityRegistrations(attachmentTools),
+    ];
+    const s2Grants = [
+      ...createFinancialCapabilityGrants(),
+      {
+        principalId: COMMAND_FILES_CAPABILITY_PRINCIPAL.id,
+        capabilityIds: [attachmentToolIds.list],
+      },
+    ];
+    const s3Registrations = createApplicationCapabilityRegistrations({
+      financialTools: tools,
+      attachmentTools,
+      documentTools,
+    });
+    const planFor = (registrations: typeof s2Registrations, grants: readonly { principalId: string; capabilityIds: readonly string[] }[]) => createCapabilityPlan(new CapabilityGateway({
+      registry: new CapabilityRegistry(registrations),
+      policy: new CapabilityPolicy(grants),
+      toolRuntime: new ToolRuntime(),
+    }), Object.values(JUDGE_CAPABILITY_PRINCIPALS));
+    const before = planFor(s2Registrations, s2Grants);
+    const after = planFor(s3Registrations, createApplicationCapabilityGrants());
+    expect(before.principals.map(principal => principal.principalId))
+      .toEqual(after.principals.map(principal => principal.principalId));
+    expect(before.principals.map(principal => principal.capabilities.map(capability => capability.id)))
+      .toEqual(after.principals.map(principal => principal.capabilities.map(capability => capability.id)));
+    expect(before.fingerprint).toBe(after.fingerprint);
   });
 });
