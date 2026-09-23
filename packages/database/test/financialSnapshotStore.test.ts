@@ -10,6 +10,7 @@ import {
   type FinancialObservation,
 } from '@harness/financial-data';
 import { openDb, type FinharnessDatabase } from '@harness/database';
+import { insertLegacyEvidenceFixture } from './helpers/legacyEvidenceFixture';
 
 const metadata = {
   providerId: 'sectors', source: 'sectors.company_report', origin: 'MOCK' as const,
@@ -129,11 +130,8 @@ describe('FinancialSnapshotStoreSqlite', () => {
       .rejects.toThrow(/Evidence.*execution/i);
 
     const other = await lifecycle(db, { sessionId: 'session-other-evidence', turnId: 'turn-other-evidence', executionId: 'run-other-evidence' });
-    const evidenceRow = await db.evidence.save({
-      runId: other.id,
-      ticker: other.ticker,
-      source: 'test.evidence',
-      data: { run: other.id },
+    const evidenceRow = insertLegacyEvidenceFixture(db.raw, {
+      runId: other.id, ticker: other.ticker, source: 'test.evidence', data: { run: other.id },
     });
     await expect(db.financialSnapshots.save(snapshot(execution, 1, undefined, [evidenceRow.id])))
       .rejects.toThrow(/Evidence.*execution/i);

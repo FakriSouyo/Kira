@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@harness/financial-data": "workspace:*",
     "@harness/shared": "workspace:*",
     "@harness/schemas": "workspace:*"
   }

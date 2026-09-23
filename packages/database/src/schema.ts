@@ -86,6 +86,14 @@ export const agentMessages = sqliteTable('agent_messages', {
 export const runEvidence = sqliteTable('run_evidence', {
   runId: text('run_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
   evidenceId: text('evidence_id').notNull().references(() => evidence.id, { onDelete: 'cascade' }),
+  policyId: text('policy_id'),
+  policyFingerprint: text('policy_fingerprint'),
+  candidateKind: text('candidate_kind'),
+  sourceOrigin: text('source_origin'),
+  retrievedAt: text('retrieved_at'),
+  acceptedAt: text('accepted_at'),
+  validAt: text('valid_at'),
+  provenanceJson: text('provenance_json'),
 }, (table) => [primaryKey({ columns: [table.runId, table.evidenceId] })]);
 
 export const claims = sqliteTable('claims', {

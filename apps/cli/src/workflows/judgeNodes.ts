@@ -18,7 +18,7 @@ import {
   type Sentiment,
   type PresentFinancialObservation,
 } from '@harness/financial-data';
-import { SECTORS_SOURCES } from '@harness/sectors-api';
+import { createFinancialEvidenceCandidate, EVIDENCE_POLICY } from '@harness/evidence';
 import { buildEvidenceZone, normalizeJudgmentScore, stanceForScore, UserFriendlyError, ValidationError } from '@harness/shared';
 import type { CapabilityPrincipal } from '@harness/capability';
 import type { AgentEvent } from '../repl/events';
@@ -191,19 +191,23 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
     return 'PROVIDER_ERROR';
   };
 
-  const saveEvidence = async (source: string, data: unknown): Promise<Evidence> => {
-    const persisted = await ctx.db.evidence.save({ runId, ticker, source, data: data as Record<string, unknown> });
-    events({ type: 'evidence.found', id: persisted.id, source });
-    // A deduplicated immutable provider row may retain its original owner run;
-    // the runEvidence membership still makes it current execution Evidence.
-    return persisted.runId === runId ? persisted : { ...persisted, runId };
+  const saveEvidence = async (observation: PresentFinancialObservation): Promise<Evidence> => {
+    const candidate = createFinancialEvidenceCandidate({ executionId: runId, ticker, observation });
+    const decision = EVIDENCE_POLICY.decide(candidate, new Date().toISOString());
+    if (!decision.accepted) {
+      throw new UserFriendlyError('EVIDENCE_REJECTED', `Evidence candidate was rejected: ${decision.reason}`, 'Verify the financial source and try again.');
+    }
+    const persisted = await ctx.db.evidence.accept({
+      runId, ticker, source: decision.source, data: decision.data, acceptance: decision,
+    });
+    events({ type: 'evidence.found', id: persisted.id, source: persisted.source });
+    return persisted;
   };
 
   const materialize = async <K extends FinancialObservation['kind']>(
     observation: PresentFinancialObservation<K>,
-    source: string,
   ): Promise<{ observation: PresentFinancialObservation<K>; evidence: Evidence }> => {
-    const evidence = await saveEvidence(source, observation.data);
+    const evidence = await saveEvidence(observation);
     return { observation: { ...observation, evidenceIds: [evidence.id] }, evidence };
   };
 
@@ -386,8 +390,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       let marketAvailable = false;
       let newsAvailable = false;
 
-      const report = await materialize(reportObservation, SECTORS_SOURCES.companyReport);
-      const financials = await materialize(financialsObservation, SECTORS_SOURCES.quarterlyFinancials);
+      const report = await materialize(reportObservation);
+      const financials = await materialize(financialsObservation);
       evidenceIds.push(report.evidence.id, financials.evidence.id);
       observations[0] = report.observation;
       observations[1] = financials.observation;
@@ -412,8 +416,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
           );
         }
         if (dailyObservation && foreignObservation) {
-          const daily = await materialize(dailyObservation, SECTORS_SOURCES.dailyTransaction);
-          const foreign = await materialize(foreignObservation, SECTORS_SOURCES.foreignFlow);
+          const daily = await materialize(dailyObservation);
+          const foreign = await materialize(foreignObservation);
           marketEvidence = [daily.evidence, foreign.evidence];
           marketAvailable = true;
           evidenceIds.push(daily.evidence.id, foreign.evidence.id);
@@ -450,9 +454,9 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
           );
         }
         if (newsObservation && filingsObservation && sentimentObservation) {
-          const item = await materialize(newsObservation, SECTORS_SOURCES.news);
-          const filings = await materialize(filingsObservation, SECTORS_SOURCES.filings);
-          const sentiment = await materialize(sentimentObservation, SECTORS_SOURCES.sentiment);
+          const item = await materialize(newsObservation);
+          const filings = await materialize(filingsObservation);
+          const sentiment = await materialize(sentimentObservation);
           newsEvidence = [item.evidence, filings.evidence, sentiment.evidence];
           newsAvailable = true;
           evidenceIds.push(item.evidence.id, filings.evidence.id, sentiment.evidence.id);
