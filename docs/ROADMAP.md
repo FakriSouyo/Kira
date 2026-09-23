@@ -109,6 +109,7 @@ The following milestones are complete in the current implementation:
 - **S3 — Document Understanding / Retrieval:** explicit `/doc-index` derives versioned Documents from verified Attachment bytes, and `/doc-search` returns bounded local lexical hits with citations. S3 is complete on master.
 - **T1 — Evidence Acceptance + Provenance:** versioned deterministic Evidence Policy accepts verified financial observations, persists per-Execution acceptance/provenance on `run_evidence`, preserves immutable content deduplication, and exposes typed Document search candidates without persisting them.
 - **T2 — Claim Grounding + Durable Claim Model:** current Bull proposals carry explicit Evidence links; deterministic Claim Policy validates scoped Evidence and literal numeric assertions, derives `singleMetric`, and persists complete canonical grounding with historical checkpoint repair.
+- **T3 — Counterpoint Grounding + Durability:** current Bear proposals carry per-Counterpoint Evidence links; deterministic Counterpoint Policy validates scope, targets, links, and numeric figures, and stores canonical Counterpoints per Execution with restart repair and historical compatibility.
 
 The current Judge graph remains the source of truth: it has 15 stable nodes,
 `JUDGE_WORKFLOW_VERSION` remains `2`, and no obsolete historical Judge graph is
@@ -360,7 +361,8 @@ finally cross-surface product delivery.
 
 S is knowledge-input work. It is deliberately distinct from Evidence, Artifacts,
 Context, and Memory. S1, S2, S3, and T1 are complete on master. T2 is complete
-in the current implementation; T3 is next.
+in the current implementation. T3 is implemented in the current worktree
+pending source review; T4 and T5 remain future work.
 
 ### S1 — Durable File / Attachment Layer
 
@@ -502,7 +504,7 @@ T4 Claim Graph Core
 T5 Judge Integration + Release Integrity
 ```
 
-Status: **T1 complete on master; T2 complete in the current implementation; T3 next**.
+Status: **T1 complete on master; T2 complete and T3 implemented in the current worktree; T4-T5 remain future work**.
 
 ### T1 — Evidence Acceptance + Provenance
 
@@ -544,9 +546,32 @@ repair restores both current and historical Claims. The 15-node Judge graph,
 workflow version, capability plan, verdict scoring, and artifact kinds are
 unchanged.
 
-### T3-T5 — Remaining relationship integrity
+### T3 — Counterpoint Grounding + Durability
 
-T3 will persist execution-scoped Counterpoints and their own Evidence links.
+Current Bear model output uses a strict proposal schema with per-Counterpoint
+Evidence IDs, explicit Evidence links, and optional CitedFigures. The model
+cannot supply Counterpoint identity or Policy metadata. Historical Bear output
+and the existing `BEAR_CASE` artifact kind remain readable. `counterpoint-policy-v1`
+checks target Claim membership, response/selected/seen Evidence scope,
+execution-scoped Evidence membership, per-point Evidence/link parity, and
+numeric assertions against linked CitedFigures. Code assigns deterministic
+source-node-scoped identities and a policy fingerprint.
+
+Migration `0019` adds the canonical `counterpoints` table with immutable
+execution identity, source node, target Claim, full Evidence/link/figure data,
+and Policy identity. The canonical execution projection and
+`CounterpointStoreSqlite` share one fail-closed row mapper. Current checkpoints
+restore proposal responses and grounded Counterpoints separately; projection
+repair is idempotent and does not call a provider. Historical checkpoints keep
+their old Counterpoint shape and are never upgraded by inventing grounding.
+Typed Bear-to-Bull and Judge contexts retain the complete grounded records.
+`BEAR_CASE` projects the round-one grounded points while the durable store also
+retains conditional re-challenge points. The 15-node Judge graph, workflow
+version, capability plan, deterministic verdict scoring, and artifact kinds
+remain unchanged. Claim Graph edges and release integration remain T4 and T5.
+
+### T4-T5 — Remaining relationship integrity
+
 T4 will add typed immutable Claim Graph edges using the domain stores as node
 authorities. T5 will integrate graph release checks and restart-repairable
 Artifact graph projection.

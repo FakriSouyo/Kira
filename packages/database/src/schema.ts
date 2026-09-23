@@ -113,6 +113,26 @@ export const claims = sqliteTable('claims', {
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 });
 
+export const counterpoints = sqliteTable('counterpoints', {
+  id: text('id').primaryKey(),
+  runId: text('run_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  messageId: text('message_id').notNull(),
+  counterpointId: text('counterpoint_id').notNull(),
+  sourceNodeId: text('source_node_id').notNull(),
+  targetClaimId: text('target_claim_id').notNull(),
+  argument: text('argument').notNull(),
+  strength: text('strength').notNull(),
+  evidenceIds: text('evidence_ids').notNull(),
+  citedFigures: text('cited_figures'),
+  evidenceLinks: text('evidence_links').notNull(),
+  policyId: text('policy_id').notNull(),
+  policyFingerprint: text('policy_fingerprint').notNull(),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+}, (table) => [
+  unique('counterpoints_run_identity_uniq').on(table.runId, table.counterpointId),
+  index('counterpoints_run_source_idx').on(table.runId, table.sourceNodeId, table.counterpointId),
+]);
+
 export const judgments = sqliteTable('judgments', {
   id: text('id').primaryKey(),
   runId: text('run_id').notNull(),

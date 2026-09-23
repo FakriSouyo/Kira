@@ -1,4 +1,4 @@
-import { ClaimSchema, BearCounterpointSchema, type BearCounterpoint, type Claim, type Evidence } from '@harness/schemas';
+import { ClaimSchema, BearCounterpointContextSchema, type BearCounterpointContext, type Claim, type Evidence } from '@harness/schemas';
 import { buildEvidenceZone } from '@harness/shared';
 import {
   SpecialistContextPayloadSchema,
@@ -26,7 +26,7 @@ export interface SpecialistContextParams {
   readonly role: SpecialistRole;
   readonly phase: SpecialistPhase;
   readonly bullClaims?: readonly Claim[];
-  readonly bearCounterpoints?: readonly BearCounterpoint[];
+  readonly bearCounterpoints?: readonly BearCounterpointContext[];
   readonly rebuttalClaims?: readonly Claim[];
   readonly discussion?: readonly { agent: string; type: string; content: string }[];
   readonly availableCategories?: { marketMomentum: boolean; risk: boolean };
@@ -53,15 +53,18 @@ function validateClaimEvidence(claims: readonly Claim[], evidenceIds: ReadonlySe
   return parsed;
 }
 
-function validateCounterpoints(counterpoints: readonly BearCounterpoint[], claims: ReadonlySet<string>): BearCounterpoint[] {
-  const parsed = BearCounterpointSchema.array().parse(counterpoints);
+function validateCounterpoints(counterpoints: readonly BearCounterpointContext[], claims: ReadonlySet<string>, evidenceIds: ReadonlySet<string>): BearCounterpointContext[] {
+  const parsed = BearCounterpointContextSchema.array().parse(counterpoints);
   for (const counterpoint of parsed) {
     if (!claims.has(counterpoint.targetClaimId)) throw new Error(`Specialist counterpoint targets an unknown claim ${counterpoint.targetClaimId}`);
+    if ('evidenceIds' in counterpoint && counterpoint.evidenceIds.some(id => !evidenceIds.has(id))) {
+      throw new Error(`Specialist counterpoint ${counterpoint.counterpointId} cites Evidence outside the selected execution`);
+    }
   }
   return parsed;
 }
 
-function validatePhase(params: SpecialistContextParams, bullClaims: Claim[] | undefined, counterpoints: BearCounterpoint[] | undefined, rebuttalClaims: Claim[] | undefined): void {
+function validatePhase(params: SpecialistContextParams, bullClaims: Claim[] | undefined, counterpoints: BearCounterpointContext[] | undefined, rebuttalClaims: Claim[] | undefined): void {
   const { role, phase } = params;
   if (role === 'BULL' && phase === 'THESIS') return;
   if (role === 'BEAR' && phase === 'CHALLENGE') { requireValue(bullClaims, 'Bull claims'); return; }
@@ -98,7 +101,7 @@ export function assembleSpecialistContext(params: SpecialistContextParams): Spec
   const bullClaims = params.bullClaims === undefined ? undefined : validateClaimEvidence(params.bullClaims, evidenceIdSet);
   const rebuttalClaims = params.rebuttalClaims === undefined ? undefined : validateClaimEvidence(params.rebuttalClaims, evidenceIdSet);
   const claimIds = new Set([...(bullClaims ?? []), ...(rebuttalClaims ?? [])].map((claim) => claim.claimId));
-  const counterpoints = params.bearCounterpoints === undefined ? undefined : validateCounterpoints(params.bearCounterpoints, claimIds);
+  const counterpoints = params.bearCounterpoints === undefined ? undefined : validateCounterpoints(params.bearCounterpoints, claimIds, evidenceIdSet);
   validatePhase(params, bullClaims, counterpoints, rebuttalClaims);
 
   const payload: SpecialistContextPayload = SpecialistContextPayloadSchema.parse({

@@ -1,5 +1,5 @@
-import type { BearCounterpoint, BearLLMOutput, BullProposalOutput, Claim, Evidence, Judgment } from '@harness/schemas';
-import { ClaimPolicy, storedClaimToClaim } from '@harness/execution';
+import type { BearCounterpointContext, BearLLMOutput, BearProposalResponse, GroundedCounterpoint, BullProposalOutput, Claim, Evidence, Judgment } from '@harness/schemas';
+import { ClaimPolicy, CounterpointPolicy, storedClaimToClaim, storedCounterpointToCounterpoint } from '@harness/execution';
 import type { JudgeNodeExecutors, JudgeNodeId, JudgeRoundDecision } from '@harness/command-judge';
 import type { SubagentResult, SubagentResultLike } from '@harness/subagent-core';
 import { assembleSpecialistContext, type SpecialistContextPacket, type SpecialistPhase, type SpecialistRole } from '@harness/context';
@@ -36,7 +36,7 @@ export type JudgeProgress = (phase: JudgeProgressPhase, line: string) => void;
 
 /** Public, renderer-ready responses. `messageId` matches the persisted conversation message. */
 export interface BullAnalysisResponse extends BullProposalOutput { messageId: string }
-export interface BearChallengeResponse extends BearLLMOutput { messageId: string }
+export type BearChallengeResponse = BearProposalResponse | (BearLLMOutput & { messageId: string });
 
 /** Durable subscriber for node results (workflow_steps/model_calls). One stream, no second truth. */
 export interface JudgeNodeTrace {
@@ -63,8 +63,8 @@ export interface JudgeRunDeps {
   checkpoint?: (nodeId: JudgeNodeId, value: unknown) => Promise<void>;
   /** Rehydrated closure state needed by later nodes when earlier model nodes are restored. */
   restored?: {
-    round1BearCounterpoints?: BearCounterpoint[];
-    conditionalBearCounterpoints?: BearCounterpoint[];
+    round1BearCounterpoints?: BearCounterpointContext[];
+    conditionalBearCounterpoints?: BearCounterpointContext[];
   };
   lifecycle?: { sessionId: string; turnId: string };
 }
@@ -95,6 +95,8 @@ export interface ThesisTurn {
 
 export interface ChallengeTurn {
   response: BearChallengeResponse;
+  /** Canonical T3 points, or the unchanged historical representation on legacy resume. */
+  counterpoints: BearCounterpointContext[];
   result: SubagentResultLike<unknown>;
 }
 
@@ -154,10 +156,10 @@ function optionalValue<T>(inputs: Readonly<Record<string, unknown>>, nodeId: Jud
 }
 
 /** Persisted challenge text — reasoning plus one line per counterpoint (audit format). */
-function challengeContent(response: BearChallengeResponse): string {
+function challengeContent(response: BearChallengeResponse, counterpoints: readonly BearCounterpointContext[]): string {
   return response.reasoning +
     '\n' +
-    response.counterpoints
+    counterpoints
       .map((counterpoint, index) => `Challenge #${index + 1} (targets claim ${counterpoint.targetClaimId}, strength ${counterpoint.strength}): ${counterpoint.argument}`)
       .join('\n');
 }
@@ -218,8 +220,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
   const checkpoint = async (nodeId: JudgeNodeId, value: unknown): Promise<void> => {
     await deps.checkpoint?.(nodeId, value);
   };
-  let round1BearCounterpoints: BearCounterpoint[] = deps.restored?.round1BearCounterpoints ?? [];
-  let conditionalBearCounterpoints: BearCounterpoint[] = deps.restored?.conditionalBearCounterpoints ?? [];
+  let round1BearCounterpoints: BearCounterpointContext[] = deps.restored?.round1BearCounterpoints ?? [];
+  let conditionalBearCounterpoints: BearCounterpointContext[] = deps.restored?.conditionalBearCounterpoints ?? [];
   let marketFailureCode: string | undefined;
   let newsFailureCode: string | undefined;
 
@@ -229,7 +231,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
     roundNumber: number;
     evidence: Evidence[];
     bullClaims?: Claim[];
-    bearCounterpoints?: BearCounterpoint[];
+    bearCounterpoints?: BearCounterpointContext[];
     rebuttalClaims?: Claim[];
     discussion?: { agent: string; type: string; content: string }[];
     availableCategories?: { marketMomentum: boolean; risk: boolean };
@@ -248,7 +250,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
     claims: Claim[];
     selection: EvidenceSelection;
     bullClaims: Claim[];
-    bearCounterpoints: BearCounterpoint[];
+    bearCounterpoints: BearCounterpointContext[];
     rebuttalClaims: Claim[];
     phase: 'EVALUATION' | 'RESOLUTION';
     roundNumber: number;
@@ -267,6 +269,25 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
         ticker, claims: params.claims, evidenceZone: params.selection.evidenceZone,
         discussion, availableCategories,
       });
+  };
+
+  const downstreamCounterpoints = async (
+    sourceNodeId: 'round-1-bear-challenge' | 'conditional-bear-rechallenge',
+    turn: ChallengeTurn,
+  ): Promise<BearCounterpointContext[]> => {
+    const current = turn.counterpoints.filter((point): point is GroundedCounterpoint => 'counterpointId' in point);
+    if (current.length === 0) return turn.counterpoints;
+    if (current.length !== turn.counterpoints.length) throw new Error('Judge challenge mixes historical and current Counterpoints');
+    const stored = (await ctx.db.counterpoints.getByRun(runId)).filter(point => point.sourceNodeId === sourceNodeId);
+    const byId = new Map(stored.map(point => [point.counterpointId, point]));
+    if (current.length !== byId.size) throw new Error(`Current Counterpoint projection is incomplete for ${sourceNodeId}`);
+    return current.map(point => {
+      const row = byId.get(point.counterpointId);
+      if (!row) throw new Error(`Current Counterpoint ${point.counterpointId} is missing from its durable projection`);
+      const durable = storedCounterpointToCounterpoint(row);
+      if (JSON.stringify(durable) !== JSON.stringify(point)) throw new Error(`Current Counterpoint ${point.counterpointId} conflicts with its durable projection`);
+      return durable;
+    });
   };
 
   return {
@@ -553,17 +574,23 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'agent.text', agent: 'bear', text: response.reasoning });
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
-      await ctx.validator.validateChallenge(response.counterpoints, response.evidenceIds, {
-        executionId: runId, claimIds: thesis.claims.map((claim) => claim.claimId), evidenceIds: selection.evidenceIds,
+      const counterpoints = await new CounterpointPolicy(ctx.db.evidence).ground({
+        executionId: runId,
+        sourceNodeId: 'round-1-bear-challenge',
+        response: result.value,
+        allowedEvidenceIds: selection.evidenceIds,
+        seenEvidenceIds: selection.evidenceIds,
+        allowedTargetClaimIds: thesis.claims.map((claim) => claim.claimId),
       });
-      round1BearCounterpoints = response.counterpoints;
-      const turn = { response, result } satisfies ChallengeTurn;
+      round1BearCounterpoints = counterpoints;
+      const turn = { response, counterpoints, result } satisfies ChallengeTurn;
       await checkpoint('round-1-bear-challenge', turn);
       await ctx.db.conversation.addMessage({
         runId, messageId: response.messageId, agent: 'bear', messageType: 'challenge',
-        content: challengeContent(response), evidenceIds: response.evidenceIds, sequenceOrder: 2,
+        content: challengeContent(response, counterpoints), evidenceIds: response.evidenceIds, sequenceOrder: 2,
         metadata: { challengeCount: response.counterpoints.length, seenEvidenceIds: selection.evidenceIds },
       });
+      for (const counterpoint of counterpoints) await ctx.db.counterpoints.save({ runId, messageId: response.messageId, counterpoint });
       events({ type: 'agent.complete', agent: 'bear' });
       progress('bear', `✓ ${response.counterpoints.length} challenge(s) validated`);
       await record('round-1-bear-challenge', result);
@@ -579,8 +606,9 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'agent.start', agent: 'bull' });
       progress('bull', 'Responding to the challenges...');
       const bullClaims: Claim[] = (await ctx.db.claims.getByRun(runId)).map(storedClaimToClaim);
-      const context = specialistContext({ role: 'BULL', phase: 'REBUTTAL', roundNumber: 1, evidence: selection.evidence, bullClaims, bearCounterpoints: challenge.response.counterpoints });
-      const result = await ctx.bull.rebuttal(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bearCounterpoints: challenge.response.counterpoints });
+      const bearCounterpoints = await downstreamCounterpoints('round-1-bear-challenge', challenge);
+      const context = specialistContext({ role: 'BULL', phase: 'REBUTTAL', roundNumber: 1, evidence: selection.evidence, bullClaims, bearCounterpoints });
+      const result = await ctx.bull.rebuttal(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bearCounterpoints });
       const response: BullAnalysisResponse = { ...result.value, messageId: `bull_rebuttal_${runId}` };
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
@@ -656,17 +684,24 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'agent.text', agent: 'bear', text: response.reasoning });
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
-      await ctx.validator.validateChallenge(response.counterpoints, response.evidenceIds, {
-        executionId: runId, claimIds: allClaims.map((claim) => claim.claimId), evidenceIds: selection.evidenceIds,
+      const counterpoints = await new CounterpointPolicy(ctx.db.evidence).ground({
+        executionId: runId,
+        sourceNodeId: 'conditional-bear-rechallenge',
+        response: result.value,
+        allowedEvidenceIds: selection.evidenceIds,
+        seenEvidenceIds: selection.evidenceIds,
+        allowedTargetClaimIds: allClaims.map((claim) => claim.claimId),
       });
-      conditionalBearCounterpoints = response.counterpoints;
-      const turn = { response, result } satisfies ChallengeTurn;
+      conditionalBearCounterpoints = counterpoints;
+      const turn = { response, counterpoints, result } satisfies ChallengeTurn;
       await checkpoint('conditional-bear-rechallenge', turn);
+      const messageId = `${response.messageId}_conditional`;
       await ctx.db.conversation.addMessage({
-        runId, messageId: `${response.messageId}_conditional`, agent: 'bear', messageType: 'challenge',
-        content: challengeContent(response), evidenceIds: response.evidenceIds, sequenceOrder: 5,
+        runId, messageId, agent: 'bear', messageType: 'challenge',
+        content: challengeContent(response, counterpoints), evidenceIds: response.evidenceIds, sequenceOrder: 5,
         metadata: { challengeCount: response.counterpoints.length, seenEvidenceIds: selection.evidenceIds, conditional: true },
       });
+      for (const counterpoint of counterpoints) await ctx.db.counterpoints.save({ runId, messageId, counterpoint });
       events({ type: 'agent.complete', agent: 'bear' });
       await record('conditional-bear-rechallenge', result);
       return turn;
@@ -683,8 +718,9 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'agent.start', agent: 'bull' });
       progress('bull', 'Conditional: responding to re-challenge...');
       const bullClaims: Claim[] = (await ctx.db.claims.getByRun(runId)).map(storedClaimToClaim);
-      const context = specialistContext({ role: 'BULL', phase: 'REBUTTAL', roundNumber: 2, evidence: selection.evidence, bullClaims, bearCounterpoints: rechallenge.response.counterpoints });
-      const result = await ctx.bull.rebuttal(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bearCounterpoints: rechallenge.response.counterpoints });
+      const bearCounterpoints = await downstreamCounterpoints('conditional-bear-rechallenge', rechallenge);
+      const context = specialistContext({ role: 'BULL', phase: 'REBUTTAL', roundNumber: 2, evidence: selection.evidence, bullClaims, bearCounterpoints });
+      const result = await ctx.bull.rebuttal(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bearCounterpoints });
       const response: BullAnalysisResponse = { ...result.value, messageId: `bull_rebuttal_${runId}_conditional` };
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
@@ -756,20 +792,34 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
         optionalValue<ThesisTurn>(inputs, 'conditional-bull-rebuttal'),
       ].filter((turn): turn is ThesisTurn => Boolean(turn));
       const challenges = [
-        nodeValue<ChallengeTurn>(inputs, 'round-1-bear-challenge'),
-        optionalValue<ChallengeTurn>(inputs, 'conditional-bear-rechallenge'),
-      ].filter((turn): turn is ChallengeTurn => Boolean(turn));
+        { sourceNodeId: 'round-1-bear-challenge' as const, turn: nodeValue<ChallengeTurn>(inputs, 'round-1-bear-challenge') },
+        { sourceNodeId: 'conditional-bear-rechallenge' as const, turn: optionalValue<ChallengeTurn>(inputs, 'conditional-bear-rechallenge') },
+      ].filter((item): item is { sourceNodeId: 'round-1-bear-challenge' | 'conditional-bear-rechallenge'; turn: ChallengeTurn } => Boolean(item.turn));
       const allClaims = thesisTurns.flatMap((turn) => turn.claims);
       ctx.validator.assertSeenEvidence(allClaims.flatMap((claim) => claim.evidenceIds), selection.evidenceIds);
       await ctx.validator.validate(allClaims, selection.evidenceIds, runId);
+      let challengeCount = 0;
       for (const challenge of challenges) {
-        await ctx.validator.validateChallenge(challenge.response.counterpoints, challenge.response.evidenceIds, {
+        const current = challenge.turn.counterpoints.some(point => 'counterpointId' in point);
+        const counterpoints = current
+          ? await downstreamCounterpoints(challenge.sourceNodeId, challenge.turn)
+          : challenge.turn.counterpoints;
+        await ctx.validator.validateChallenge(counterpoints, challenge.turn.response.evidenceIds, {
           executionId: runId, claimIds: allClaims.map((claim) => claim.claimId), evidenceIds: selection.evidenceIds,
         });
+        challengeCount += counterpoints.length;
+        const counterpointEvidenceIds = [...new Set(counterpoints.flatMap(point => 'evidenceIds' in point ? point.evidenceIds : []))];
+        if (counterpointEvidenceIds.length > 0) {
+          ctx.validator.assertSeenEvidence(counterpointEvidenceIds, selection.evidenceIds);
+          const scoped = await ctx.db.evidence.getManyByIdsForRun(runId, counterpointEvidenceIds);
+          if (scoped.length !== counterpointEvidenceIds.length) {
+            throw new ValidationError('Current Counterpoint Evidence is outside the seen Execution scope');
+          }
+        }
       }
       return {
         claims: allClaims.length,
-        challenges: challenges.reduce((total, turn) => total + turn.response.counterpoints.length, 0),
+        challenges: challengeCount,
         evidenceIds: selection.evidenceIds,
       } satisfies EvidenceAudit;
     },

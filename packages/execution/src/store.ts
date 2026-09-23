@@ -16,6 +16,7 @@ export interface ExecutionArtifacts {
   evidence: import('@harness/schemas').Evidence[];
   messages: import('@harness/conversation').AgentMessage[];
   claims: import('./claimStore').StoredClaim[];
+  counterpoints: import('./counterpointStore').StoredCounterpoint[];
   judgment: import('./judgmentStore').StoredJudgment | null;
 }
 

@@ -243,8 +243,8 @@ export async function judgeWorkflow(
         ? (nodeId, value) => checkpointWriter.completedValue(nodeId, value)
         : undefined,
       restored: {
-        round1BearCounterpoints: restoredRound1Bear?.response.counterpoints,
-        conditionalBearCounterpoints: restoredConditionalBear?.response.counterpoints,
+        round1BearCounterpoints: restoredRound1Bear?.counterpoints,
+        conditionalBearCounterpoints: restoredConditionalBear?.counterpoints,
       },
       trace: { recordSubagentResult: (nodeId, result) => recorder.recordSubagentResult(nodeId, result) },
     });

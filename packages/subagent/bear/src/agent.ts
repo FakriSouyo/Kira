@@ -1,4 +1,4 @@
-import { BearLLMOutputSchema, type BearLLMOutput, type Claim } from '@harness/schemas';
+import { BearProposalOutputSchema, type BearProposalOutput, type Claim } from '@harness/schemas';
 import { type SubagentResult, SubagentRuntime } from '@harness/subagent-core';
 import type { SpecialistContextPacket } from '@harness/context';
 import { BEAR_MANIFEST } from './manifest.js';
@@ -22,7 +22,7 @@ export class UnknownTargetClaimError extends Error {
 export class BearAgent {
   constructor(private readonly runtime: SubagentRuntime) {}
 
-  async challenge(request: BearChallengeRequest): Promise<SubagentResult<BearLLMOutput>> {
+  async challenge(request: BearChallengeRequest): Promise<SubagentResult<BearProposalOutput>> {
     const bullClaims = request.bullClaims ?? request.context?.specialist.bullClaims ?? [];
     const claims = bullClaims.map((claim, index) => [
       `${index + 1}. ${claim.statement} (claim: ${claim.claimId}, Confidence: ${claim.confidence})`,
@@ -37,8 +37,10 @@ export class BearAgent {
         'Bull Agent made the following claims:',
         claims,
         'Challenge the claims critically but fairly. Each counterpoint must target an existing claim ID.',
+        'For each counterpoint, provide its own evidenceIds and matching evidenceLinks using supports, contradicts, or qualifies with a brief rationale.',
+        'Include citedFigures for numeric assertions in the counterpoint argument. Do not provide counterpointId or Counterpoint Policy identity.',
       ].join('\n'),
-      schema: BearLLMOutputSchema,
+      schema: BearProposalOutputSchema,
     });
 
     const knownClaims = new Set(bullClaims.map((claim) => claim.claimId));

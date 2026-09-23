@@ -269,7 +269,7 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
 
   it('feeds the Bear counterpoints into the Bull rebuttal and persists the challenge text', async () => {
     const context = ctx();
-    const captured: Array<readonly { targetClaimId: string }[]> = [];
+    const captured: Array<readonly { targetClaimId: string; counterpointId?: string; evidenceIds?: string[]; evidenceLinks?: unknown[]; policyId?: string }[]> = [];
     const rebuttal = context.bull.rebuttal.bind(context.bull);
     vi.spyOn(context.bull, 'rebuttal').mockImplementation(async (args) => {
       captured.push(args.bearCounterpoints);
@@ -280,6 +280,13 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
 
     expect(captured).toHaveLength(1);
     expect(captured[0].length).toBe(artifacts.bear.counterpoints.length);
+    expect(captured[0][0]).toMatchObject({
+      counterpointId: 'counterpoint:round-1-bear-challenge:1',
+      evidenceIds: [expect.any(String)],
+      evidenceLinks: [expect.objectContaining({ relation: 'qualifies' })],
+      policyId: 'counterpoint-policy-v1',
+    });
+    expect((await db.counterpoints.getByRun(artifacts.run.id))).toHaveLength(artifacts.bear.counterpoints.length);
     const challengeMessage = (await db.conversation.getByRun(artifacts.run.id)).find((message) => message.messageType === 'challenge')!;
     expect(challengeMessage.content).toContain(`targets claim ${captured[0][0].targetClaimId}`);
   });
@@ -348,6 +355,22 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
       'BULL:SPECIALIST', 'BEAR:SPECIALIST', 'BULL:SPECIALIST', 'JUDGE:SPECIALIST',
     ]);
     expect(new Set(specialistContexts.map(item => item.specialist.evidenceIds.join(','))).size).toBe(1);
+    const bullRebuttal = captured.find(call => {
+      const specialist = (call.context as { specialist?: { role?: string; phase?: string } } | undefined)?.specialist;
+      return specialist?.role === 'BULL' && specialist.phase === 'REBUTTAL';
+    })?.context as { specialist: { bearCounterpoints?: Array<Record<string, unknown>> } };
+    const judgeEvaluation = captured.find(call => {
+      const specialist = (call.context as { specialist?: { role?: string; phase?: string } } | undefined)?.specialist;
+      return specialist?.role === 'JUDGE' && specialist.phase === 'EVALUATION';
+    })?.context as { specialist: { bearCounterpoints?: Array<Record<string, unknown>> } };
+    for (const points of [bullRebuttal.specialist.bearCounterpoints, judgeEvaluation.specialist.bearCounterpoints]) {
+      expect(points?.[0]).toMatchObject({
+        counterpointId: 'counterpoint:round-1-bear-challenge:1',
+        evidenceIds: [expect.any(String)],
+        evidenceLinks: [expect.objectContaining({ relation: 'qualifies' })],
+        policyId: 'counterpoint-policy-v1',
+      });
+    }
 
     const snapshots = db.raw.prepare('SELECT packet_json FROM context_snapshots WHERE session_id = ? AND turn_id = ?').all(session.id, turn.id) as Array<{ packet_json: string }>;
     expect(snapshots).toHaveLength(4);
@@ -368,7 +391,10 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
       reasoning: true, lifecycle: { sessionId: session.id, turnId: turn.id },
     });
     const snapshots = db.raw.prepare('SELECT packet_json FROM context_snapshots WHERE session_id = ? AND turn_id = ?').all(session.id, turn.id) as Array<{ packet_json: string }>;
-    const packets = snapshots.map(row => JSON.parse(row.packet_json) as { contextKind: string; specialist: { role: string; phase: string; roundNumber: number } });
+    const packets = snapshots.map(row => JSON.parse(row.packet_json) as {
+      contextKind: string;
+      specialist: { role: string; phase: string; roundNumber: number; bearCounterpoints?: Array<Record<string, unknown>> };
+    });
 
     expect(result.conditionalUsed).toBe(true);
     expect(packets).toHaveLength(7);
@@ -376,6 +402,29 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
       'BULL:THESIS:1', 'BEAR:CHALLENGE:1', 'BULL:REBUTTAL:1', 'JUDGE:EVALUATION:1',
       'BEAR:RECHALLENGE:2', 'BULL:REBUTTAL:2', 'JUDGE:RESOLUTION:2',
     ]));
+    const conditionalBullRebuttal = packets.find(packet => packet.specialist.phase === 'REBUTTAL'
+      && packet.specialist.roundNumber === 2)?.specialist.bearCounterpoints;
+    const finalJudgeCounterpoints = packets.find(packet => packet.specialist.phase === 'RESOLUTION'
+      && packet.specialist.roundNumber === 2)?.specialist.bearCounterpoints;
+    expect(conditionalBullRebuttal).toHaveLength(2);
+    expect(finalJudgeCounterpoints).toHaveLength(4);
+    for (const point of conditionalBullRebuttal ?? []) {
+      expect(point).toMatchObject({
+        counterpointId: expect.stringMatching(/^counterpoint:conditional-bear-rechallenge:[1-9]\d*$/),
+        sourceNodeId: 'conditional-bear-rechallenge',
+        evidenceIds: [expect.any(String)],
+        evidenceLinks: [expect.objectContaining({ relation: 'qualifies' })],
+        policyId: 'counterpoint-policy-v1',
+      });
+    }
+    const storedCounterpoints = await db.counterpoints.getByRun(result.run.id);
+    expect(storedCounterpoints.map(point => point.sourceNodeId).sort()).toEqual([
+      'conditional-bear-rechallenge', 'conditional-bear-rechallenge',
+      'round-1-bear-challenge', 'round-1-bear-challenge',
+    ].sort());
+    expect(finalJudgeCounterpoints?.map(point => point.counterpointId).sort()).toEqual(
+      storedCounterpoints.map(point => point.counterpointId).sort(),
+    );
     const calls = db.raw.prepare('SELECT context_snapshot_id FROM model_calls WHERE run_id = ?').all(result.run.id) as Array<{ context_snapshot_id: string | null }>;
     expect(calls).toHaveLength(7);
     expect(calls.every(call => call.context_snapshot_id)).toBe(true);

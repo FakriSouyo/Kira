@@ -418,9 +418,29 @@ and Execution membership. ClaimStore and ExecutionStore use one fail-closed row
 projection. Historical rows remain readable without fabricated T2 metadata;
 only historical Judge checkpoint repair can write a policy-less projection.
 Current checkpoints restore full canonical grounding without repeating model
-work. The Judge graph remains 15 nodes at workflow version 2. T3
-Counterpoint durability is next; Claim Graph edges and release integration
-remain T4 and T5 work.
+work. The Judge graph remains 15 nodes at workflow version 2.
+
+### T3 Counterpoint Policy + Durable Projection
+
+Current Bear proposals require per-Counterpoint Evidence IDs and explicit
+Evidence links, with optional CitedFigures. Model output cannot provide a
+Counterpoint ID or Policy identity. `counterpoint-policy-v1` checks target
+Claims, allowed/seen/response Evidence scope, Execution membership, Evidence
+link parity, CitedFigure paths and values, and literal numeric assertions. Code
+assigns source-node-scoped Counterpoint IDs and deterministic Policy
+fingerprints.
+
+Migration `0019_counterpoint_grounding.sql` adds canonical execution-scoped
+Counterpoint rows. `CounterpointStoreSqlite` and ExecutionStore share the same
+fail-closed projection. Checkpoints store model proposals separately from the
+grounded canonical records; repair restores missing rows idempotently without
+calling providers. Historical Bear checkpoints and the existing `BEAR_CASE`
+kind remain readable without invented T3 grounding. The artifact projects the
+round-one Bear challenge; conditional re-challenge points remain in the
+Execution store and are included in downstream Bull and Judge typed contexts.
+T3 leaves the 15-node graph, workflow version, capability plan, verdict
+scoring, and artifact kinds unchanged. Claim Graph edges and release
+integration remain T4 and T5 work.
 
 ## Context engine
 
@@ -788,8 +808,9 @@ credentials.
 The current and future milestone order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2,
 S1, S2, S3, and T1 Evidence Acceptance + Provenance are complete on master.
-T2 Claim Grounding + Durable Claim Model is complete in the current
-implementation; T3 Counterpoint Grounding + Durability is next.
+T2 Claim Grounding + Durable Claim Model is complete, and T3 Counterpoint
+Grounding + Durability is implemented in the current worktree pending source
+review. T4 and T5 remain future work.
 
 R2C2 migrated the remaining Judge direct-runtime path and added durable
 capability semantic compatibility. PR P continues to restore the same

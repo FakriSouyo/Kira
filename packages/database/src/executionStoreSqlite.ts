@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { asc, desc, eq } from 'drizzle-orm';
 import type { Orm } from './client';
-import { agentMessages, claims, evidence, executions, judgments, runEvidence } from './schema';
+import { agentMessages, claims, counterpoints as counterpointRows, evidence, executions, judgments, runEvidence } from './schema';
 import type { ExecutionArtifacts, ExecutionRun, ExecutionStore } from '@harness/execution';
 import { UserFriendlyError } from '@harness/shared';
 // reuse pemetaan evidence terpusat (Deviasi #19) — hindari duplikasi snake→camel
 import { type EvidenceRow, toEvidence } from './evidenceStoreSqlite';
 import { toStoredClaim } from './claimStoreSqlite';
+import { toStoredCounterpoint } from './counterpointStoreSqlite';
 
 interface ExecutionRow {
   id: string;
@@ -109,10 +110,12 @@ export class ExecutionStoreSqlite implements ExecutionStore {
     if (!run) {
       throw new UserFriendlyError('NOT_FOUND', `Run "${runId}" not found`, 'Try: /judge BBCA (or other valid ticker)');
     }
-    const [evidenceRows, messageRows, claimRows, judgmentRows] = await Promise.all([
+    const [evidenceRows, messageRows, claimRows, counterpointRowsForRun, judgmentRows] = await Promise.all([
       this.db.select({ evidence, membership: runEvidence }).from(runEvidence).innerJoin(evidence, eq(runEvidence.evidenceId, evidence.id)).where(eq(runEvidence.runId, runId)),
       this.db.select().from(agentMessages).where(eq(agentMessages.runId, runId)).orderBy(asc(agentMessages.sequenceOrder)),
       this.db.select().from(claims).where(eq(claims.runId, runId)).orderBy(asc(claims.claimId)),
+      this.db.select().from(counterpointRows).where(eq(counterpointRows.runId, runId))
+        .orderBy(asc(counterpointRows.sourceNodeId), asc(counterpointRows.counterpointId)),
       this.db.select().from(judgments).where(eq(judgments.runId, runId)).limit(1),
     ]);
 
@@ -134,6 +137,7 @@ export class ExecutionStoreSqlite implements ExecutionStore {
     })) as import('@harness/conversation').AgentMessage[];
 
     const storedClaims = claimRows.map(toStoredClaim);
+    const storedCounterpoints = counterpointRowsForRun.map(toStoredCounterpoint);
 
     const judgment =
       judgmentRows.length > 0
@@ -150,7 +154,7 @@ export class ExecutionStoreSqlite implements ExecutionStore {
           } as import('@harness/execution').StoredJudgment)
         : null;
 
-    return { run, evidence: evidenceArtifacts, messages, claims: storedClaims, judgment };
+    return { run, evidence: evidenceArtifacts, messages, claims: storedClaims, counterpoints: storedCounterpoints, judgment };
   }
 
   private async assertRunning(runId: string): Promise<void> {

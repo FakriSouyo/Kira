@@ -55,6 +55,14 @@ describe('PR F /judge typed artifacts', () => {
     expect((artifacts[2]!.payload as { judgment: unknown }).judgment).toEqual(
       expect.objectContaining({ score: (await db.judgments.getByRun(execution.id))!.score }),
     );
+    const durableCounterpoints = await db.counterpoints.getByRun(execution.id);
+    expect(new Set(durableCounterpoints.map(point => point.sourceNodeId))).toEqual(new Set(['round-1-bear-challenge']));
+    const bearCounterpoints = (artifacts[1]!.payload as { counterpoints: Array<Record<string, unknown>> }).counterpoints;
+    const roundOneCounterpoints = durableCounterpoints.filter(point => point.sourceNodeId === 'round-1-bear-challenge');
+    expect(bearCounterpoints.map(point => point.counterpointId).sort()).toEqual(roundOneCounterpoints.map(point => point.counterpointId).sort());
+    expect(bearCounterpoints.every(point => point.sourceNodeId === 'round-1-bear-challenge')).toBe(true);
+    expect(bearCounterpoints.every(point => Array.isArray(point.evidenceIds) && Array.isArray(point.evidenceLinks)
+      && point.policyId === 'counterpoint-policy-v1')).toBe(true);
     await session.close();
   });
 

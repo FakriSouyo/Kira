@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import {
-  BearCounterpointSchema,
+  BearCounterpointContextSchema,
   ClaimSchema,
   EvidenceSchema,
-  type BearCounterpoint,
+  type BearCounterpointContext,
   type Claim,
 } from '@harness/schemas';
 
@@ -46,7 +46,7 @@ export const SpecialistContextPayloadSchema = z.object({
   evidence: SpecialistEvidenceSchema.array().min(1),
   evidenceIds: z.string().uuid().array().min(1),
   bullClaims: ClaimSchema.array().optional(),
-  bearCounterpoints: BearCounterpointSchema.array().optional(),
+  bearCounterpoints: BearCounterpointContextSchema.array().optional(),
   rebuttalClaims: ClaimSchema.array().optional(),
   discussion: SpecialistDiscussionEntrySchema.array().optional(),
   availableCategories: z.object({
@@ -57,4 +57,4 @@ export const SpecialistContextPayloadSchema = z.object({
 export type SpecialistContextPayload = z.infer<typeof SpecialistContextPayloadSchema>;
 
 export type SpecialistClaim = Claim;
-export type SpecialistCounterpoint = BearCounterpoint;
+export type SpecialistCounterpoint = BearCounterpointContext;

@@ -9,6 +9,7 @@ import { EvidenceStoreSqlite } from './evidenceStoreSqlite';
 import { ConversationStoreSqlite } from './conversationStoreSqlite';
 import { ExecutionStoreSqlite } from './executionStoreSqlite';
 import { ClaimStoreSqlite } from './claimStoreSqlite';
+import { CounterpointStoreSqlite } from './counterpointStoreSqlite';
 import { JudgmentStoreSqlite } from './judgmentStoreSqlite';
 import { NormalizedStore } from './normalized';
 import { ResearchSessionStoreSqlite } from './researchSessionStoreSqlite';
@@ -44,6 +45,7 @@ export interface FinharnessDatabase {
   conversation: ConversationStoreSqlite;
   execution: ExecutionStoreSqlite;
   claims: ClaimStoreSqlite;
+  counterpoints: CounterpointStoreSqlite;
   judgments: JudgmentStoreSqlite;
   normalized: NormalizedStore;
   sessions: ResearchSessionStoreSqlite;
@@ -82,6 +84,7 @@ export function openDb(options: { homeDir?: string; verbose?: boolean } = {}): F
     conversation: new ConversationStoreSqlite(orm),
     execution: new ExecutionStoreSqlite(orm),
     claims: new ClaimStoreSqlite(orm),
+    counterpoints: new CounterpointStoreSqlite(orm),
     judgments: new JudgmentStoreSqlite(orm),
     normalized: new NormalizedStore(orm),
     sessions: new ResearchSessionStoreSqlite(orm),
