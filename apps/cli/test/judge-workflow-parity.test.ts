@@ -212,6 +212,7 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
             confidence: 'moderate' as const,
             reasoning: 'This claim cites a figure path that does not exist in the evidence payload.',
             evidenceIds: [evidenceId],
+            evidenceLinks: [{ evidenceId, relation: 'supports' as const, rationale: 'Probes numeric path validation.' }],
             citedFigures: [{ evidenceId, path: 'financials.roe_missing_path', value: 1, periodLabel: 'FY' }],
           }],
         },

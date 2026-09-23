@@ -80,7 +80,10 @@ describe('Session helpers (Phase 2 Task 1)', () => {
       evidenceIds: [ev.id],
       sequenceOrder: 1,
     });
-    await db.claims.save({ runId: run.id, messageId: 'bull_1', claim: { ...CLAIM, evidenceIds: [ev.id] } });
+    // Historical row fixture: the session projection reader must remain backward-compatible.
+    db.raw.prepare(`INSERT INTO claims (id, run_id, message_id, claim_id, statement, confidence, reasoning, evidence_ids)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(`row_${run.id}`, run.id, 'bull_1', CLAIM.claimId,
+      CLAIM.statement, CLAIM.confidence, CLAIM.reasoning, JSON.stringify([ev.id]));
     await db.judgments.save({ runId: run.id, judgment: JUDGMENT });
     await db.execution.completeRun(run.id, 1.2);
 

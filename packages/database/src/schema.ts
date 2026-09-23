@@ -105,6 +105,11 @@ export const claims = sqliteTable('claims', {
   confidence: text('confidence').notNull(),
   reasoning: text('reasoning'),
   evidenceIds: text('evidence_ids').notNull(),
+  citedFigures: text('cited_figures'),
+  singleMetric: integer('single_metric'),
+  evidenceLinks: text('evidence_links'),
+  policyId: text('policy_id'),
+  policyFingerprint: text('policy_fingerprint'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 });
 

@@ -159,9 +159,9 @@ export class ClaimValidator {
    * lanjut tanpa proof eksistensi. (Kegagalan *data* = store sukses tapi id
    * tak ada → ditangani pemanggil sebagai ValidationError.)
    */
-  private async readEvidence(ids: string[]): Promise<Evidence[]> {
+  private async readEvidence(executionId: string, ids: string[]): Promise<Evidence[]> {
     try {
-      return await this.evidenceStore.getManyByIds(ids);
+      return await this.evidenceStore.getManyByIdsForRun(executionId, ids);
     } catch (cause) {
       throw new UserFriendlyError(
         'VALIDATION_UNAVAILABLE',
@@ -182,7 +182,7 @@ export class ClaimValidator {
   async validateChallenge(
     counterpoints: Array<{ targetClaimId: string; argument: string; strength: string }>,
     bearEvidenceIds: string[],
-    allowed: { claimIds: string[]; evidenceIds: string[] },
+    allowed: { executionId: string; claimIds: string[]; evidenceIds: string[] },
   ): Promise<void> {
     const allowedClaims = new Set(allowed.claimIds);
     for (const cp of counterpoints) {
@@ -195,7 +195,7 @@ export class ClaimValidator {
     }
 
     const uniqueIds = [...new Set(bearEvidenceIds)];
-    const existing = await this.readEvidence(uniqueIds);
+    const existing = await this.readEvidence(allowed.executionId, uniqueIds);
     const existingIds = new Set(existing.map((e) => e.id));
     const allowedEvidence = new Set(allowed.evidenceIds);
     for (const id of uniqueIds) {
@@ -211,13 +211,13 @@ export class ClaimValidator {
     }
   }
 
-  async validate(claims: Claim[], allowedEvidenceIds: string[]): Promise<Claim[]> {
+  async validate(claims: Claim[], allowedEvidenceIds: string[], executionId: string): Promise<Claim[]> {
     // Layer 1: Structural validation (Zod)
     const parsed = ClaimSchema.array().parse(claims);
 
     // Layer 2: Evidence existence check (DB)
     const allEvidenceIds = [...new Set(parsed.flatMap((c) => c.evidenceIds))];
-    const evidence = await this.readEvidence(allEvidenceIds);
+    const evidence = await this.readEvidence(executionId, allEvidenceIds);
     const existingIds = new Set(evidence.map((e) => e.id));
     const evidenceById = new Map(evidence.map((e) => [e.id, e]));
 
@@ -270,7 +270,7 @@ export class ClaimValidator {
     // (sibling window yang TIDAK dikutip claim tetap terlihat) — cakupan ini
     // hanya dipakai untuk anotasi, tidak untuk layer validasi eksistensi/allowed
     // yang tetap ketat terhadap evidence yang di-cite.
-    const reconcileScope = await this.reconcileScope(parsed, evidenceById);
+    const reconcileScope = await this.reconcileScope(parsed, evidenceById, executionId);
     return detectSingleMetricFlags(parsed, reconcileScope);
   }
 
@@ -283,30 +283,14 @@ export class ClaimValidator {
   private async reconcileScope(
     claims: Claim[],
     claimedById: ReadonlyMap<string, Evidence>,
+    executionId: string,
   ): Promise<Map<string, Evidence>> {
     const scope = new Map(claimedById);
-    const tickers = [
-      ...new Set(
-        claims
-          .flatMap((c) => c.evidenceIds)
-          .map((id) => claimedById.get(id)?.ticker)
-          .filter((t): t is string => Boolean(t)),
-      ),
-    ];
-    const runIds = new Set(claims.flatMap((c) => c.evidenceIds).map((id) => claimedById.get(id)?.runId).filter(Boolean) as string[]);
-    for (const ticker of tickers) {
-      try {
-        const rows = await this.evidenceStore.getByTicker(ticker);
-        for (const row of rows) {
-          // Hanya sibling dalam run yang sama (batch run claim) — hindari
-          // kontaminasi window dari run lain pada ticker yang sama.
-          if (row.source === 'sectors.foreign_flow' && runIds.has(row.runId) && !scope.has(row.id)) {
-            scope.set(row.id, row);
-          }
-        }
-      } catch {
-        // Cakupan anotasi bersifat best-effort; kegagalan baca di sini dibiarkan
-        // (tidak mematikan validasi) — konsisten dengan sifat anotasi non-blocking.
+    const tickers = new Set(claims.flatMap(c => c.evidenceIds).map(id => claimedById.get(id)?.ticker).filter((ticker): ticker is string => Boolean(ticker)));
+    const rows = await this.evidenceStore.getByRun(executionId);
+    for (const row of rows) {
+      if (tickers.has(row.ticker) && row.source === 'sectors.foreign_flow' && !scope.has(row.id)) {
+        scope.set(row.id, row);
       }
     }
     return scope;

@@ -10,6 +10,7 @@ import { insertLegacyEvidenceFixture } from '../../database/test/helpers/legacyE
 let db: FinharnessDatabase;
 let dir: string;
 let validator: ClaimValidator;
+let currentRunId: string;
 let allowedIds: string[];
 let validClaim: Claim;
 
@@ -19,6 +20,7 @@ beforeEach(async () => {
   validator = new ClaimValidator(db.evidence);
 
   const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
+  currentRunId = run.id;
   const e1 = insertLegacyEvidenceFixture(db.raw, {
     runId: run.id, ticker: 'BBCA', source: 'sectors.company_report', data: { roe: 23.1 },
   });
@@ -42,19 +44,19 @@ afterEach(() => {
 
 describe('ClaimValidator — 3 layer (addendum §16)', () => {
   it('Layer 1: claim valid lolos', async () => {
-    const parsed = await validator.validate([validClaim], allowedIds);
+    const parsed = await validator.validate([validClaim], allowedIds, currentRunId);
     expect(parsed).toHaveLength(1);
     expect(parsed[0].claimId).toBe('claim_001');
   });
 
   it('Layer 1: evidenceIds kosong ditolak oleh Zod', async () => {
     const bad = { ...validClaim, evidenceIds: [] };
-    await expect(validator.validate([bad], allowedIds)).rejects.toThrow();
+    await expect(validator.validate([bad], allowedIds, currentRunId)).rejects.toThrow();
   });
 
   it('Layer 1: statement terlalu pendek ditolak', async () => {
     const bad = { ...validClaim, statement: 'Short' };
-    await expect(validator.validate([bad], allowedIds)).rejects.toThrow();
+    await expect(validator.validate([bad], allowedIds, currentRunId)).rejects.toThrow();
   });
 
   it('Layer 2: evidence hallucinated (tidak ada di DB) ditolak', async () => {
@@ -62,7 +64,7 @@ describe('ClaimValidator — 3 layer (addendum §16)', () => {
       ...validClaim,
       evidenceIds: ['3f2504e0-4f89-11d3-9a0c-0305e82c3301'],
     };
-    await expect(validator.validate([bad], allowedIds)).rejects.toThrow(
+    await expect(validator.validate([bad], allowedIds, currentRunId)).rejects.toThrow(
       /does not exist in database/,
     );
   });
@@ -74,8 +76,8 @@ describe('ClaimValidator — 3 layer (addendum §16)', () => {
     });
 
     const bad: Claim = { ...validClaim, evidenceIds: [outsider.id] };
-    await expect(validator.validate([bad], allowedIds)).rejects.toThrow(
-      /not in allowed set for this run/,
+    await expect(validator.validate([bad], allowedIds, currentRunId)).rejects.toThrow(
+      /does not exist in database/,
     );
   });
 });
@@ -89,7 +91,7 @@ describe('ClaimValidator.validateChallenge — run-scoped untuk Bear (Phase 1)',
           { targetClaimId: 'claim_002', argument: 'Growth rests on one quarter.', strength: 'high' },
         ],
         allowedIds,
-        { claimIds: ['claim_001', 'claim_002'], evidenceIds: allowedIds },
+        { executionId: currentRunId, claimIds: ['claim_001', 'claim_002'], evidenceIds: allowedIds },
       ),
     ).resolves.toBeUndefined();
   });
@@ -99,7 +101,7 @@ describe('ClaimValidator.validateChallenge — run-scoped untuk Bear (Phase 1)',
       validator.validateChallenge(
         [{ targetClaimId: 'claim_unknown', argument: 'This claim does not exist in the run.', strength: 'low' }],
         allowedIds,
-        { claimIds: ['claim_001'], evidenceIds: allowedIds },
+        { executionId: currentRunId, claimIds: ['claim_001'], evidenceIds: allowedIds },
       ),
     ).rejects.toThrow(/targets unknown claim claim_unknown/);
   });
@@ -109,7 +111,7 @@ describe('ClaimValidator.validateChallenge — run-scoped untuk Bear (Phase 1)',
       validator.validateChallenge(
         [{ targetClaimId: 'claim_001', argument: 'Challenge based on invented data.', strength: 'low' }],
         ['3f2504e0-4f89-11d3-9a0c-0305e82c3301'],
-        { claimIds: ['claim_001'], evidenceIds: allowedIds },
+        { executionId: currentRunId, claimIds: ['claim_001'], evidenceIds: allowedIds },
       ),
     ).rejects.toThrow(/does not exist in database \(bear challenge\)/);
   });
@@ -123,9 +125,9 @@ describe('ClaimValidator.validateChallenge — run-scoped untuk Bear (Phase 1)',
       validator.validateChallenge(
         [{ targetClaimId: 'claim_001', argument: 'Challenge based on another run data.', strength: 'low' }],
         [outsider.id],
-        { claimIds: ['claim_001'], evidenceIds: allowedIds },
+        { executionId: currentRunId, claimIds: ['claim_001'], evidenceIds: allowedIds },
       ),
-    ).rejects.toThrow(/not in allowed set for this run \(bear challenge\)/);
+    ).rejects.toThrow(/does not exist in database \(bear challenge\)/);
   });
 });
 
@@ -142,7 +144,7 @@ describe('ClaimValidator.assertSeenEvidence — invariant "yang dilihat = yang d
 
 describe('ClaimValidator — P1.1 Multi-Metric Reconciliation (singleMetric)', () => {
   it('flag undefined (backward-compat) saat pasangan metrik tak lengkap', async () => {
-    const out = await validator.validate([validClaim], allowedIds); // company_report → tanpa pasangan
+    const out = await validator.validate([validClaim], allowedIds, currentRunId); // company_report → tanpa pasangan
     expect(out[0].singleMetric).toBeUndefined();
   });
 
@@ -161,7 +163,7 @@ describe('ClaimValidator — P1.1 Multi-Metric Reconciliation (singleMetric)', (
       evidenceIds: ids,
       citedFigures: [{ evidenceId: fin.id, path: 'quarters[0].revenueGrowthYoy', value: 18.2, periodLabel: "Q4'25" }],
     };
-    const out = await validator.validate([claim], ids);
+    const out = await validator.validate([claim], ids, run.id);
     expect(out[0].singleMetric).toBe(true);
   });
 
@@ -183,7 +185,7 @@ describe('ClaimValidator — P1.1 Multi-Metric Reconciliation (singleMetric)', (
         { evidenceId: fin.id, path: 'cumulativeYtd.revenueGrowthYoy', value: 5.1, periodLabel: 'H1 2026 vs H1 2025' },
       ],
     };
-    const out = await validator.validate([claim], ids);
+    const out = await validator.validate([claim], ids, run.id);
     expect(out[0].singleMetric).toBeUndefined();
   });
 
@@ -199,7 +201,7 @@ describe('ClaimValidator — P1.1 Multi-Metric Reconciliation (singleMetric)', (
       evidenceIds: ids,
       citedFigures: [{ evidenceId: sent.id, path: 'distribution.positive', value: 0.7, periodLabel: '30d' }],
     };
-    const out = await validator.validate([claim], ids);
+    const out = await validator.validate([claim], ids, run.id);
     expect(out[0].singleMetric).toBe(true);
   });
 
@@ -219,7 +221,7 @@ describe('ClaimValidator — P1.1 Multi-Metric Reconciliation (singleMetric)', (
       evidenceIds: [short.id],
       citedFigures: [{ evidenceId: short.id, path: 'netForeignPctOfCap', value: 0.8, periodLabel: '30d' }],
     };
-    const out = await validator.validate([claim], ids);
+    const out = await validator.validate([claim], ids, run.id);
     expect(out[0].singleMetric).toBe(true);
   });
 });

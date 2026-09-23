@@ -9,9 +9,9 @@ The stateful architecture milestones **A-P** are complete on `master`. **Q1**,
 complete on `master`.
 
 **S2 — Workspace + File Capability** and **S3 — Document Understanding /
-Retrieval** are complete on master. **T1 — Evidence Acceptance + Provenance**
-is complete in the current implementation. **T2 — Claim Grounding + Durable
-Claim Model** is next.
+Retrieval** and **T1 — Evidence Acceptance + Provenance** are complete on
+master. **T2 — Claim Grounding + Durable Claim Model** is complete in the
+current implementation. **T3 — Counterpoint Grounding + Durability** is next.
 
 The canonical future sequence and dependency rationale live in
 [`docs/ROADMAP.md`](ROADMAP.md). This document is the mutable current-status
@@ -313,7 +313,21 @@ citations can be represented as typed candidates, but T1 does not persist them
 or change `/doc-search` lifecycle behavior.
 
 T1 does not add Claim policy, Counterpoint storage, Claim Graph edges, or Judge
-release checks. **T2 — Claim Grounding + Durable Claim Model** is next.
+release checks.
+
+### T2 — Claim Grounding + Durable Claim Model
+
+Status: **complete in the current implementation**.
+
+Bull model output now uses a strict Claim proposal with explicit Evidence links
+and no model-owned `singleMetric`. `claim-policy-v1` checks execution-scoped
+Evidence membership, allowed and seen scope, link parity, response coverage,
+exact CitedFigure paths and values, and literal `%`, `x`, and `bps` statement
+assertions. Code derives `singleMetric`. Migration `0018` stores full grounding
+and policy identity on canonical Claims. Historical rows and Judge checkpoints
+remain readable without fabricated links; projection repair is idempotent for
+current and historical Claims. Judge nodes, workflow version, capabilities,
+verdict scoring, and artifact kinds are unchanged. **T3 is next.**
 
 ## Maintenance policy
 

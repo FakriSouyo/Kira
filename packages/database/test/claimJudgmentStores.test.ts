@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDb, type FinharnessDatabase } from '@harness/database';
-import type { Claim, Judgment } from '@harness/schemas';
+import { ClaimPolicy } from '@harness/execution';
+import type { Judgment } from '@harness/schemas';
+import { insertLegacyEvidenceFixture } from './helpers/legacyEvidenceFixture';
 
 let db: FinharnessDatabase;
 let dir: string;
@@ -18,13 +20,22 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-const CLAIM: Claim = {
-  claimId: 'claim_1',
-  statement: 'Profitability remains strong.',
-  confidence: 'strong',
-  reasoning: 'ROE of 23.1% indicates strong and efficient profitability for the bank.',
-  evidenceIds: ['11111111-aaaa-4aaa-8aaa-111111111111'],
-};
+async function groundedClaim(runId: string, claimId = 'claim_1') {
+  const evidenceId = insertLegacyEvidenceFixture(db.raw, {
+    runId, ticker: 'BBCA', source: `sectors.company_report_${claimId}`, data: { roe: 23.1 },
+  }).id;
+  const [claim] = await new ClaimPolicy(db.evidence).ground({
+    executionId: runId, allowedEvidenceIds: [evidenceId], seenEvidenceIds: [evidenceId],
+    response: { reasoning: 'The company report supports this profitability assessment.', evidenceIds: [evidenceId],
+      claims: [{ claimId, statement: 'ROE reached 23.1%', confidence: 'strong',
+        reasoning: 'ROE of 23.1% indicates strong and efficient profitability for the bank.',
+        evidenceIds: [evidenceId], evidenceLinks: [{ evidenceId, relation: 'supports', rationale: 'Company report records ROE.' }],
+        citedFigures: [{ evidenceId, path: 'roe', value: 23.1, periodLabel: 'FY 2025' }],
+      }],
+    },
+  });
+  return claim;
+}
 
 const JUDGMENT: Judgment = {
   ticker: 'BBCA',
@@ -38,27 +49,29 @@ const JUDGMENT: Judgment = {
 describe('ClaimStoreSqlite (Task 14)', () => {
   it('save lalu getByRun mengembalikan claim dengan evidenceIds utuh', async () => {
     const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
-    const otherRun = await db.execution.createRun({ ticker: 'BBRI', command: 'judge' });
+    const otherRun = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
 
-    await db.claims.save({ runId: run.id, messageId: 'bull_1', claim: CLAIM });
-    await db.claims.save({ runId: otherRun.id, messageId: 'bull_2', claim: { ...CLAIM, claimId: 'claim_x' } });
+    const claim = await groundedClaim(run.id);
+    await db.claims.save({ runId: run.id, messageId: 'bull_1', claim });
+    await db.claims.save({ runId: otherRun.id, messageId: 'bull_2', claim: await groundedClaim(otherRun.id, 'claim_x') });
 
     const stored = await db.claims.getByRun(run.id);
     expect(stored).toHaveLength(1);
     expect(stored[0].claimId).toBe('claim_1');
     expect(stored[0].messageId).toBe('bull_1');
-    expect(stored[0].evidenceIds).toEqual(CLAIM.evidenceIds);
+    expect(stored[0].evidenceIds).toEqual(claim.evidenceIds);
     expect(stored[0].confidence).toBe('strong');
   });
 
   it('makes same claim retries idempotent and rejects a conflicting claim', async () => {
     const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
-    await db.claims.save({ runId: run.id, messageId: 'bull_1', claim: CLAIM });
-    await expect(db.claims.save({ runId: run.id, messageId: 'bull_1', claim: CLAIM })).resolves.toMatchObject({ claimId: CLAIM.claimId });
+    const claim = await groundedClaim(run.id);
+    await db.claims.save({ runId: run.id, messageId: 'bull_1', claim });
+    await expect(db.claims.save({ runId: run.id, messageId: 'bull_1', claim })).resolves.toMatchObject({ claimId: claim.claimId });
     await expect(db.claims.save({
       runId: run.id,
       messageId: 'bull_1',
-      claim: { ...CLAIM, statement: 'Conflicting semantic claim.' },
+      claim: { ...claim, statement: 'Conflicting semantic claim.' },
     })).rejects.toThrow(/immutable identity conflict/);
   });
 });

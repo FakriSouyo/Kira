@@ -21,6 +21,7 @@ import type { WorkflowDefinition, WorkflowNode, WorkflowRestoreSeed } from '@har
 import { createWorkflowNodeOutput, type JsonValue, type WorkflowNodeOutput } from '@harness/session-core';
 import type { Evidence } from '@harness/schemas';
 import { BearCounterpointSchema, BearLLMOutputSchema, BullLLMOutputSchema, ClaimSchema, JudgmentSchema } from '@harness/schemas';
+import type { GroundedClaim } from '@harness/execution';
 import type { ArtifactEnvelope } from '@harness/schemas';
 import { verifyFinancialObservation } from '@harness/financial-data';
 import type { SubagentResultLike, RestoredSubagentResult } from '@harness/subagent-core';
@@ -683,11 +684,14 @@ export async function repairJudgeProjections(params: {
     const claims = (completedPayload.claims ?? []) as Array<Record<string, unknown>>;
     if (claims.length > 0 && (nodeId === 'round-1-bull-thesis' || nodeId === 'round-2-bull-rebuttal' || nodeId === 'conditional-bull-rebuttal')) {
       const messageId = message?.messageId ?? '';
-      for (const claim of claims) await params.db.claims.save({
-        runId: params.execution.id,
-        messageId,
-        claim: claim as never,
-      });
+      for (const rawClaim of claims) {
+        const claim = ClaimSchema.parse(rawClaim);
+        if (claim.policyId === undefined && claim.policyFingerprint === undefined && claim.evidenceLinks === undefined) {
+          await params.db.claims.repairLegacyCheckpointProjection({ runId: params.execution.id, messageId, claim });
+        } else {
+          await params.db.claims.save({ runId: params.execution.id, messageId, claim: claim as GroundedClaim });
+        }
+      }
     }
     if ((nodeId === 'evaluate-arguments' || nodeId === 'resolve-conflicts') && completedPayload.judgment) {
       await params.db.judgments.save({ runId: params.execution.id, judgment: completedPayload.judgment as never });

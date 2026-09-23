@@ -11,6 +11,7 @@ import {
   type JudgeNodeId,
 } from '@harness/command-judge';
 import { openDb, type FinharnessDatabase } from '@harness/database';
+import { storedClaimToClaim } from '@harness/execution';
 import { type FinancialDataProvider } from '@harness/financial-data';
 import { createExecutionProfile, createWorkflowNodeOutput } from '@harness/session-core';
 import { buildContext } from '../src/context';
@@ -541,6 +542,11 @@ describe('PR P final acceptance hardening', () => {
       .filter(output => ['round-1-bull-thesis', 'round-2-bull-rebuttal'].includes(output.nodeId))
       .reduce((count, output) => count + ((output.payload as { claims?: unknown[] } | null)?.claims?.length ?? 0), 0);
     expect(await fixture.db.claims.getByRun(fixture.executionId)).toHaveLength(expectedClaims);
+    const checkpointClaims = outputs
+      .filter(output => ['round-1-bull-thesis', 'round-2-bull-rebuttal'].includes(output.nodeId))
+      .flatMap(output => ((output.payload as { claims?: unknown[] } | null)?.claims ?? []))
+      .sort((a, b) => String((a as { claimId: string }).claimId).localeCompare(String((b as { claimId: string }).claimId)));
+    expect((await fixture.db.claims.getByRun(fixture.executionId)).map(storedClaimToClaim)).toEqual(checkpointClaims);
     expect(await fixture.db.judgments.getByRun(fixture.executionId)).not.toBeNull();
     expect(fixture.db.raw.prepare('SELECT COUNT(*) AS count FROM model_calls WHERE run_id = ?').get(fixture.executionId)).toEqual({ count: 4 });
     const messages = await fixture.db.conversation.getByRun(fixture.executionId);
@@ -555,6 +561,44 @@ describe('PR P final acceptance hardening', () => {
     await repairJudgeProjections({ db: conditional.db, execution: (await sessionRows(conditional)).executions[0]!, outputs: conditionalOutputs });
     expect((await conditional.db.conversation.getByRun(conditional.executionId)).find(message => message.messageId.endsWith('_conditional'))?.metadata)
       .toMatchObject({ conditional: true, seenEvidenceIds: expect.any(Array) });
+  });
+
+  it('loads complete canonical Claim grounding into Bull rebuttal context', async () => {
+    const config = createConfig(dir);
+    const fixture = await createFixture(db, config, { suffix: 'claim_context' });
+    await runPrefix(fixture, 'round-2-bull-rebuttal');
+    const claims = (await fixture.db.claims.getByRun(fixture.executionId))
+      .filter(claim => claim.claimId.startsWith('claim_')).map(storedClaimToClaim);
+    expect(claims.some(claim => (claim.citedFigures?.length ?? 0) > 0)).toBe(true);
+    expect(claims.every(claim => claim.policyId === 'claim-policy-v1' && (claim.evidenceLinks?.length ?? 0) > 0)).toBe(true);
+    const packets = fixture.db.raw.prepare('SELECT packet_json FROM context_snapshots WHERE session_id = ? AND turn_id = ?')
+      .all(fixture.sessionId, fixture.turnId) as Array<{ packet_json: string }>;
+    const rebuttal = packets.map(row => JSON.parse(row.packet_json) as { specialist?: { role?: string; phase?: string; bullClaims?: unknown[] } })
+      .find(packet => packet.specialist?.role === 'BULL' && packet.specialist.phase === 'REBUTTAL');
+    expect(rebuttal?.specialist?.bullClaims).toEqual(claims);
+  });
+
+  it('repairs a pre-T2 Bull checkpoint without inventing Claim links or policy identity', async () => {
+    const config = createConfig(dir);
+    const fixture = await createFixture(db, config, { suffix: 'legacy_claim_repair' });
+    await runPrefix(fixture, 'round-1-bull-thesis');
+    const outputs = await fixture.db.workflowNodeOutputs.listNodeOutputsForExecution(fixture.executionId);
+    const historical = outputs.map(output => {
+      if (output.nodeId !== 'round-1-bull-thesis' || !output.payload) return output;
+      const payload = output.payload as { claims: Array<Record<string, unknown>> };
+      return { ...output, payload: { ...payload, claims: payload.claims.map(claim => {
+        const { evidenceLinks: _links, policyId: _policyId, policyFingerprint: _fingerprint, ...legacy } = claim;
+        return legacy;
+      }) } };
+    });
+    fixture.db.raw.prepare('DELETE FROM claims WHERE run_id = ?').run(fixture.executionId);
+    const execution = (await sessionRows(fixture)).executions[0]!;
+    await repairJudgeProjections({ db: fixture.db, execution, outputs: historical });
+    await repairJudgeProjections({ db: fixture.db, execution, outputs: historical });
+    const restored = await fixture.db.claims.getByRun(fixture.executionId);
+    expect(restored.length).toBeGreaterThan(0);
+    expect(restored.every(claim => claim.policyId === undefined && claim.evidenceLinks === undefined)).toBe(true);
+    expect(restored.some(claim => (claim.citedFigures?.length ?? 0) > 0)).toBe(true);
   });
 
   it('repairs partial artifacts after restart, retains valid rows, and fails closed on immutable conflict', async () => {
