@@ -1,3 +1,5 @@
+import type { ClaimGraph } from './claimGraph';
+
 /** Siklus hidup satu eksekusi command (addendum §11/Task 5). */
 export interface ExecutionRun {
   id: string;
@@ -17,6 +19,8 @@ export interface ExecutionArtifacts {
   messages: import('@harness/conversation').AgentMessage[];
   claims: import('./claimStore').StoredClaim[];
   counterpoints: import('./counterpointStore').StoredCounterpoint[];
+  /** Deterministic execution-local projection over canonical Claim and Counterpoint rows. */
+  claimGraph: ClaimGraph;
   judgment: import('./judgmentStore').StoredJudgment | null;
 }
 

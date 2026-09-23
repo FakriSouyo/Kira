@@ -1,6 +1,6 @@
 # FinHarness Progress
 
-Last updated: 2026-09-23
+Last updated: 2026-09-24
 
 ## Current state
 
@@ -8,11 +8,12 @@ The stateful architecture milestones **A-P** are complete on `master`. **Q1**,
 **Q2**, **R1**, **R2A**, **R2B**, **R2C1**, **R2C2**, and **S1** are also
 complete on `master`.
 
-**S2 — Workspace + File Capability** and **S3 — Document Understanding /
-Retrieval** and **T1 — Evidence Acceptance + Provenance** are complete on
-master. **T2 — Claim Grounding + Durable Claim Model** is complete in the
-current implementation. **T3 — Counterpoint Grounding + Durability** is
-implemented in the current worktree pending source review; T4 is next.
+**S2 — Workspace + File Capability**, **S3 — Document Understanding /
+Retrieval**, and **T1 — Evidence Acceptance + Provenance** are complete on
+master. **T2 — Claim Grounding + Durable Claim Model** and **T3 — Counterpoint
+Grounding + Durability** are also complete on master. **T4 — Claim Graph
+Core** is implemented in the current T4 worktree pending source review; T5 is
+next/future work.
 
 The canonical future sequence and dependency rationale live in
 [`docs/ROADMAP.md`](ROADMAP.md). This document is the mutable current-status
@@ -332,7 +333,7 @@ verdict scoring, and artifact kinds are unchanged.
 
 ### T3 — Counterpoint Grounding + Durability
 
-Status: **implemented in the current worktree pending source review**.
+Status: **complete on master**.
 
 Bear model output now uses a strict proposal schema with Evidence links and
 optional CitedFigures for each Counterpoint. `counterpoint-policy-v1` checks
@@ -349,8 +350,22 @@ grounding. Specialist contexts preserve all current Evidence, link, figure,
 identity, and policy fields. `BEAR_CASE` keeps its existing kind and includes
 the round-one grounded points; conditional re-challenge points are also
 durable. The 15-node Judge graph, workflow version, capability plan, verdict
-scoring, and artifact kinds are unchanged. T4 Claim Graph and T5 release
-integrity remain future work.
+scoring, and artifact kinds are unchanged.
+
+### T4 — Claim Graph Core
+
+Status: **implemented in the current worktree pending source review**.
+
+The execution-local Claim Graph is a deterministic projection reconstructed
+from canonical `ClaimStore` and `CounterpointStore` rows. Nodes remain owned by
+those stores, and `Counterpoint.targetClaimId` remains the current durable
+relationship authority. The graph exposes only declared
+`Counterpoint --targets--> Claim` edges; it does not persist a duplicate edge
+table. Historical Claims remain nodes without invented grounding metadata, and
+historical pre-T3 Bear Counterpoints are not fabricated. Explicit rebuttal
+relationships do not yet exist because Claim proposals do not name a target
+Counterpoint. T4 leaves Judge artifact kinds, release semantics, the 15-node
+topology, and workflow version 2 unchanged.
 
 ## Maintenance policy
 

@@ -439,8 +439,29 @@ kind remain readable without invented T3 grounding. The artifact projects the
 round-one Bear challenge; conditional re-challenge points remain in the
 Execution store and are included in downstream Bull and Judge typed contexts.
 T3 leaves the 15-node graph, workflow version, capability plan, verdict
-scoring, and artifact kinds unchanged. Claim Graph edges and release
-integration remain T4 and T5 work.
+scoring, and artifact kinds unchanged. T4 supplies the deterministic Claim
+Graph projection; release integration remains T5 work.
+
+### T4 Execution-local Claim Graph Core
+
+`@harness/execution` defines a typed Claim Graph projection over the canonical
+`ClaimStore` and current `CounterpointStore` rows. `ClaimGraphReaderSqlite`
+rebuilds that projection for one Execution, and `ExecutionArtifacts` exposes
+the same graph through the shared pure builder. Nodes remain owned by their
+existing stores; the graph has no independent persistence or repair path.
+
+`Counterpoint.targetClaimId` remains the only durable Claim/Counterpoint
+relationship authority. T4 projects it as
+`Counterpoint --targets--> Claim`. Reads are deterministic and fail closed on
+duplicate identities, cross-Execution rows, missing targets, or corrupt
+canonical rows. Historical Claims remain graph nodes without fabricated T2
+grounding; historical pre-T3 Bear Counterpoints are not fabricated. Claim
+proposals still do not declare a particular Counterpoint rebuttal target, so
+explicit Claim-to-Counterpoint rebuttal relationships do not yet exist.
+
+T4 does not change Judge artifacts, publication, release semantics, the
+15-node Judge graph, or workflow version 2. Graph release integrity remains
+future T5 work.
 
 ## Context engine
 
@@ -807,10 +828,10 @@ credentials.
 
 The current and future milestone order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2,
-S1, S2, S3, and T1 Evidence Acceptance + Provenance are complete on master.
-T2 Claim Grounding + Durable Claim Model is complete, and T3 Counterpoint
-Grounding + Durability is implemented in the current worktree pending source
-review. T4 and T5 remain future work.
+S1, S2, S3, T1 Evidence Acceptance + Provenance, T2 Claim Grounding + Durable
+Claim Model, and T3 Counterpoint Grounding + Durability are complete on
+master. T4 Claim Graph Core is implemented in the current T4 worktree pending
+source review. T5 Judge Integration + Release Integrity is next/future work.
 
 R2C2 migrated the remaining Judge direct-runtime path and added durable
 capability semantic compatibility. PR P continues to restore the same

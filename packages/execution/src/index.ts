@@ -6,3 +6,4 @@ export * from './claimPolicy';
 export * from './numericGrounding';
 export * from './counterpointPolicy';
 export * from './counterpointStore';
+export * from './claimGraph';
