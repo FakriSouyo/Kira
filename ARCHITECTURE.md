@@ -389,8 +389,38 @@ acceptance metadata per Execution. Scoped reads report the accepting Execution
 in `Evidence.runId`; pre-T1 rows are returned as explicit `legacy-v0`
 provenance. Document search hits and citations have a typed candidate adapter,
 but `/doc-search` still returns candidates without persisting Evidence or
-creating an Execution. Claim grounding and graph relationships are future T2+
-slices.
+creating an Execution. T1 is complete on master.
+
+### Claim grounding and canonical durability — T2
+
+Current Bull model output uses `ClaimProposalSchema`: each Claim has explicit
+`supports`, `contradicts`, or `qualifies` Evidence links with producer rationale.
+The model cannot provide `singleMetric` or Claim Policy identity. The
+backward-readable `ClaimSchema` remains the format for historical artifacts and
+Judge checkpoints. An explicit Evidence link records the producer's assertion;
+it is not a code verdict about semantic truth or a Claim Graph edge.
+
+`claim-policy-v1` has a deterministic fingerprint. It checks exact Claim
+evidence ID/link parity, response Evidence coverage, allowed and model-seen
+scope, and T1 execution membership through `getManyByIdsForRun`. It checks
+each CitedFigure against its linked Evidence path and value. Literal numeric
+assertions in a statement are grounded when written as a number followed by
+`%`, `x`, or `bps`; the policy matches their values to CitedFigures within the
+existing 0.5 tolerance. Period labels such as `Q2 2026` and `H1 2025` are not
+metric assertions. Currency, magnitude conversion, and arbitrary prose
+entailment are outside this deterministic contract. `singleMetric` is derived
+by code from the cited and visible execution-scoped Evidence.
+
+Migration `0018_claim_grounding.sql` adds nullable `cited_figures`,
+`single_metric`, `evidence_links`, `policy_id`, and `policy_fingerprint` columns
+to canonical `claims`. Current writes require policy identity, complete links,
+and Execution membership. ClaimStore and ExecutionStore use one fail-closed row
+projection. Historical rows remain readable without fabricated T2 metadata;
+only historical Judge checkpoint repair can write a policy-less projection.
+Current checkpoints restore full canonical grounding without repeating model
+work. The Judge graph remains 15 nodes at workflow version 2. T3
+Counterpoint durability is next; Claim Graph edges and release integration
+remain T4 and T5 work.
 
 ## Context engine
 
@@ -757,9 +787,9 @@ credentials.
 
 The current and future milestone order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2,
-S1, S2, and S3 are complete on master. T1 Evidence Acceptance + Provenance is
-complete in the current implementation; T2 Claim Grounding + Durable Claim
-Model is next.
+S1, S2, S3, and T1 Evidence Acceptance + Provenance are complete on master.
+T2 Claim Grounding + Durable Claim Model is complete in the current
+implementation; T3 Counterpoint Grounding + Durability is next.
 
 R2C2 migrated the remaining Judge direct-runtime path and added durable
 capability semantic compatibility. PR P continues to restore the same

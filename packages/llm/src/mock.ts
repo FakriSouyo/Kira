@@ -1,4 +1,4 @@
-import type { Claim, Intent } from '@harness/schemas';
+import type { ClaimProposal, Intent } from '@harness/schemas';
 import { normalizeJudgmentScore, stanceForScore } from '@harness/shared';
 import { createHash } from 'node:crypto';
 import type { GenerateObjectParams, GenerateTextParams, LLMCallMetadata, LLMClientLike, LLMResult, LLMTextStreamResult, StreamObjectParams, StreamTextParams } from './types';
@@ -118,7 +118,11 @@ interface QuarterlyRow {
   netIncomeGrowthYoy?: number;
 }
 
-function claimForEvidence(ticker: string, ev: MockEvidence, index: number, claimId: string = `claim_${index + 1}`): Claim {
+function evidenceLinks(ids: string[]): ClaimProposal['evidenceLinks'] {
+  return ids.map(evidenceId => ({ evidenceId, relation: 'supports', rationale: 'The cited source supplies the observation used in this claim.' }));
+}
+
+function claimForEvidence(ticker: string, ev: MockEvidence, index: number, claimId: string = `claim_${index + 1}`): ClaimProposal {
   const financials = (ev.data.financials ?? null) as Record<string, unknown> | null;
   const quarters = (ev.data.quarters ?? null) as QuarterlyRow[] | null;
 
@@ -137,6 +141,8 @@ function claimForEvidence(ticker: string, ev: MockEvidence, index: number, claim
             ', indicating profitable and efficient operations for the company.'
           : `Company report data for ${ticker} shows a stable financial structure supporting the business.`,
       evidenceIds: [ev.id],
+      evidenceLinks: evidenceLinks([ev.id]),
+      ...(roe !== null ? { citedFigures: [{ evidenceId: ev.id, path: 'financials.roe', value: roe, periodLabel: 'reported period' }] } : {}),
     };
   }
 
@@ -157,6 +163,8 @@ function claimForEvidence(ticker: string, ev: MockEvidence, index: number, claim
             ', a positive and consistent earnings trend.'
           : `Quarterly financials for ${ticker} show positive earnings across the reported period.`,
       evidenceIds: [ev.id],
+      evidenceLinks: evidenceLinks([ev.id]),
+      ...(revGrowth !== null ? { citedFigures: [{ evidenceId: ev.id, path: 'quarters[0].revenueGrowthYoy', value: revGrowth, periodLabel: latest.period ?? 'reported quarter' }] } : {}),
     };
   }
 
@@ -166,12 +174,13 @@ function claimForEvidence(ticker: string, ev: MockEvidence, index: number, claim
     confidence: 'moderate',
     reasoning: `The ${ev.source} payload for ${ticker} contains no adverse signals in the reviewed fields.`,
     evidenceIds: [ev.id],
+    evidenceLinks: evidenceLinks([ev.id]),
   };
 }
 
 interface BullOutput {
   reasoning: string;
-  claims: Claim[];
+  claims: ClaimProposal[];
   evidenceIds: string[];
 }
 
@@ -194,7 +203,7 @@ function generateBull(prompt: string, system: string): BullOutput {
   const market = evidence.filter((e) => e.source === 'sectors.daily_transaction' || e.source === 'sectors.foreign_flow');
   const news = evidence.filter((e) => e.source === 'sectors.sentiment');
 
-  const claims: Claim[] = [];
+  const claims: ClaimProposal[] = [];
 
   // 1) Klaim fundamental — dari company_report + quarterly_financials.
   for (const ev of fundamental.slice(0, 2)) {
@@ -222,6 +231,7 @@ function generateBull(prompt: string, system: string): BullOutput {
         (daily && daily.data?.liquidityBand ? ` with ${String(daily.data.liquidityBand)} liquidity` : '') +
         ', supporting the momentum assessment for the stock.',
       evidenceIds: marketIds,
+      evidenceLinks: evidenceLinks(marketIds),
     });
   }
 
@@ -242,10 +252,11 @@ function generateBull(prompt: string, system: string): BullOutput {
         (aggregate !== null ? `(${aggregate > 0 ? 'positive' : 'negative'} bias)` : '') +
         ` with ${negative ?? 'no'} negative coverage, informing the risk assessment.`,
       evidenceIds: [sent.id],
+      evidenceLinks: evidenceLinks([sent.id]),
     });
   }
 
-  const finalClaims = claims.length > 0 ? claims : ([] as Claim[]);
+  const finalClaims = claims.length > 0 ? claims : ([] as ClaimProposal[]);
   const highlights = claims.map((c) => c.reasoning).join(' ');
 
   const reasoning = isRebuttal
@@ -267,6 +278,7 @@ function generateBull(prompt: string, system: string): BullOutput {
             confidence: 'moderate',
             reasoning: `The evidence attached to this run does not surface material adverse indicators for ${ticker}.`,
             evidenceIds: [evidence[0]?.id ?? 'evidence_unknown'],
+            evidenceLinks: evidenceLinks([evidence[0]?.id ?? 'evidence_unknown']),
           },
         ],
     evidenceIds: evidence.map((e) => e.id),

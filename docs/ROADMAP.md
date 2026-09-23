@@ -92,7 +92,7 @@ research capability maturation. Discovery and design for later milestones may
 begin earlier, but production implementations must not bypass the dependency
 boundaries established by earlier milestones.
 
-## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3 on master; T1 in current implementation
+## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1 on master; T2 in current implementation
 
 The following milestones are complete in the current implementation:
 
@@ -108,6 +108,7 @@ The following milestones are complete in the current implementation:
 - **S2 — Workspace + File Capability:** one application-wide capability registry/policy/gateway/runtime composes financial and raw Attachment tools; strict Session-scoped `workspace.list-attachments`, `attachment.describe`, and `attachment.read` tools are registered. S2 introduced `command.files -> workspace.list-attachments`; `/files` lists current-Session metadata with one Turn and no Execution or ModelCall.
 - **S3 — Document Understanding / Retrieval:** explicit `/doc-index` derives versioned Documents from verified Attachment bytes, and `/doc-search` returns bounded local lexical hits with citations. S3 is complete on master.
 - **T1 — Evidence Acceptance + Provenance:** versioned deterministic Evidence Policy accepts verified financial observations, persists per-Execution acceptance/provenance on `run_evidence`, preserves immutable content deduplication, and exposes typed Document search candidates without persisting them.
+- **T2 — Claim Grounding + Durable Claim Model:** current Bull proposals carry explicit Evidence links; deterministic Claim Policy validates scoped Evidence and literal numeric assertions, derives `singleMetric`, and persists complete canonical grounding with historical checkpoint repair.
 
 The current Judge graph remains the source of truth: it has 15 stable nodes,
 `JUDGE_WORKFLOW_VERSION` remains `2`, and no obsolete historical Judge graph is
@@ -358,8 +359,8 @@ finally cross-surface product delivery.
 ## S — Files & Documents
 
 S is knowledge-input work. It is deliberately distinct from Evidence, Artifacts,
-Context, and Memory. S1, S2, and S3 are complete on master. T1 is complete in
-the current implementation; T2 is next.
+Context, and Memory. S1, S2, S3, and T1 are complete on master. T2 is complete
+in the current implementation; T3 is next.
 
 ### S1 — Durable File / Attachment Layer
 
@@ -501,7 +502,7 @@ T4 Claim Graph Core
 T5 Judge Integration + Release Integrity
 ```
 
-Status: **T1 complete in the current implementation; T2 next**.
+Status: **T1 complete on master; T2 complete in the current implementation; T3 next**.
 
 ### T1 — Evidence Acceptance + Provenance
 
@@ -524,14 +525,31 @@ S3 `DocumentSearchHit` / `DocumentCitation` values can be wrapped as typed
 Evidence candidates when a future research Execution supplies scope. T1 does
 not make `/doc-search` persist Evidence or create an Execution/ModelCall.
 
-### T2-T5 — Claim and graph integrity
+### T2 — Claim Grounding + Durable Claim Model
 
-These remain future work. T2 will establish explicit per-Evidence Claim links
-and durable numeric grounding. T3 will persist execution-scoped Counterpoints
-and their own Evidence links. T4 will add typed immutable Claim Graph edges
-using the domain stores as node authorities. T5 will integrate those policies
-with Judge checkpoints, verdict release, and restart-repairable Artifact graph
-projection. None of those behaviors is implemented by T1.
+`ClaimProposalSchema` is the current Bull model-write contract and requires
+explicit producer-supplied Evidence relationships. `ClaimSchema` remains
+backward-readable for stored Claims, artifacts, and Judge checkpoints. The
+model cannot author `singleMetric` or the `claim-policy-v1` identity. Claim
+Policy checks link/ID parity, response Evidence coverage, allowed and seen
+scope, execution-scoped membership, and CitedFigure paths and values. It also
+requires a matching figure for literal `%`, `x`, and `bps` statement assertions;
+period labels alone do not trigger that rule. This is deterministic grounding,
+not semantic support classification.
+
+Migration `0018` preserves `citedFigures`, code-derived `singleMetric`,
+`evidenceLinks`, and Claim Policy identity in canonical `claims`. Historical
+rows and checkpoints remain readable without invented T2 metadata; projection
+repair restores both current and historical Claims. The 15-node Judge graph,
+workflow version, capability plan, verdict scoring, and artifact kinds are
+unchanged.
+
+### T3-T5 — Remaining relationship integrity
+
+T3 will persist execution-scoped Counterpoints and their own Evidence links.
+T4 will add typed immutable Claim Graph edges using the domain stores as node
+authorities. T5 will integrate graph release checks and restart-repairable
+Artifact graph projection.
 
 T strengthens explicit relationships among Evidence, Claims, Theses,
 Counterclaims, and Artifacts:
@@ -545,8 +563,8 @@ Claim 2 --challenges--> Thesis A
 
 Later T slices may add typed `supports`, `contradicts`, `qualifies`,
 `depends_on`, and `derived_from` relationships as source explicitly supports
-them. T1's Evidence Policy is limited to deterministic candidate acceptance
-and execution-scoped provenance. The Claim Graph schema remains future work.
+them. T1's Evidence Policy accepts scoped candidates, and T2 records explicit
+Claim Evidence relationships. The Claim Graph schema remains future work.
 
 ## U — Research Composition + Product Completion
 

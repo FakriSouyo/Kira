@@ -13,6 +13,14 @@ export const CitedFigureSchema = z.object({
 
 export type CitedFigure = z.infer<typeof CitedFigureSchema>;
 
+/** Explicit producer assertion; semantic support is not inferred by code. */
+export const ClaimEvidenceLinkSchema = z.object({
+  evidenceId: z.string().uuid(),
+  relation: z.enum(['supports', 'contradicts', 'qualifies']),
+  rationale: z.string().min(1),
+}).strict();
+export type ClaimEvidenceLink = z.infer<typeof ClaimEvidenceLinkSchema>;
+
 /**
  * Struktur claim yang dihasilkan LLM (addendum §16 + P0.2).
  * Konvensi penamaan: camelCase di TS/Zod ↔ snake_case di DB (dipetakan eksplisit di Drizzle).
@@ -25,6 +33,10 @@ export const ClaimSchema = z.object({
   evidenceIds: z.array(z.string().uuid()).min(1),
   /** P0.2: angka yang dikutip — opsional untuk backward-compat, tapi LLM diminta isi bila klaim berisi angka. */
   citedFigures: z.array(CitedFigureSchema).optional(),
+  /** Absent on historical Claims; mandatory on current model proposals. */
+  evidenceLinks: z.array(ClaimEvidenceLinkSchema).optional(),
+  policyId: z.string().min(1).optional(),
+  policyFingerprint: z.string().min(1).optional(),
   /**
    * P1.1 Multi-Metric Reconciliation — flag deterministik yang DIPERHITUNGKAN
    * `ClaimValidator` (bukan dari LLM): `true` bila klaim hanya mengutip SATU sisi
@@ -37,6 +49,11 @@ export const ClaimSchema = z.object({
 });
 
 export type Claim = z.infer<typeof ClaimSchema>;
+
+/** Current model-write contract. The model cannot provide policy or singleMetric state. */
+export const ClaimProposalSchema = ClaimSchema.omit({ singleMetric: true, policyId: true, policyFingerprint: true })
+  .extend({ evidenceLinks: z.array(ClaimEvidenceLinkSchema).min(1) }).strict();
+export type ClaimProposal = z.infer<typeof ClaimProposalSchema>;
 
 /** Breakdown rubrik 5 kategori — marketMomentum & risk = null di Phase 0 (addendum §11/§15). */
 export const BreakdownSchema = z.object({

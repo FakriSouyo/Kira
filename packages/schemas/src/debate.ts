@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ClaimSchema } from './claim.js';
+import { ClaimProposalSchema, ClaimSchema } from './claim.js';
 import { BreakdownSchema } from './claim.js';
 
 export const BullLLMOutputSchema = z.object({
@@ -9,6 +9,10 @@ export const BullLLMOutputSchema = z.object({
 });
 
 export type BullLLMOutput = z.infer<typeof BullLLMOutputSchema>;
+
+/** Historical output above remains the checkpoint reader; this is the current model contract. */
+export const BullProposalOutputSchema = BullLLMOutputSchema.extend({ claims: ClaimProposalSchema.array().min(1) }).strict();
+export type BullProposalOutput = z.infer<typeof BullProposalOutputSchema>;
 
 export const BearCounterpointSchema = z.object({
   targetClaimId: z.string().min(1),

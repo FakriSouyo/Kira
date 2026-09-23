@@ -27,6 +27,7 @@ describe('BullAgent specialist', () => {
             confidence: 'moderate',
             reasoning: 'The cited primary report shows profitable operations across the supplied period.',
             evidenceIds: [evidenceId],
+            evidenceLinks: [{ evidenceId, relation: 'supports', rationale: 'The primary report supplies the observation.' }],
           }],
           evidenceIds: [evidenceId],
         }), metadata: {

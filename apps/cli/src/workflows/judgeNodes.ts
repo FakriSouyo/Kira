@@ -1,4 +1,5 @@
-import type { BearCounterpoint, BearLLMOutput, BullLLMOutput, Claim, Evidence, Judgment } from '@harness/schemas';
+import type { BearCounterpoint, BearLLMOutput, BullProposalOutput, Claim, Evidence, Judgment } from '@harness/schemas';
+import { ClaimPolicy, storedClaimToClaim } from '@harness/execution';
 import type { JudgeNodeExecutors, JudgeNodeId, JudgeRoundDecision } from '@harness/command-judge';
 import type { SubagentResult, SubagentResultLike } from '@harness/subagent-core';
 import { assembleSpecialistContext, type SpecialistContextPacket, type SpecialistPhase, type SpecialistRole } from '@harness/context';
@@ -34,7 +35,7 @@ export type JudgeProgressPhase = 'researcher' | 'bull' | 'bear' | 'judge';
 export type JudgeProgress = (phase: JudgeProgressPhase, line: string) => void;
 
 /** Public, renderer-ready responses. `messageId` matches the persisted conversation message. */
-export interface BullAnalysisResponse extends BullLLMOutput { messageId: string }
+export interface BullAnalysisResponse extends BullProposalOutput { messageId: string }
 export interface BearChallengeResponse extends BearLLMOutput { messageId: string }
 
 /** Durable subscriber for node results (workflow_steps/model_calls). One stream, no second truth. */
@@ -520,7 +521,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
-      const claims = await ctx.validator.validate(response.claims, selection.evidenceIds);
+      const claims = await new ClaimPolicy(ctx.db.evidence).ground({ executionId: runId, response: result.value,
+        allowedEvidenceIds: selection.evidenceIds, seenEvidenceIds: selection.evidenceIds });
       // Invariant §24-B.1: a claim may only cite evidence the agent actually saw.
       ctx.validator.assertSeenEvidence(claims.flatMap((claim) => claim.evidenceIds), selection.evidenceIds);
       const turn = { response, claims, result } satisfies ThesisTurn;
@@ -552,7 +554,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
       await ctx.validator.validateChallenge(response.counterpoints, response.evidenceIds, {
-        claimIds: thesis.claims.map((claim) => claim.claimId), evidenceIds: selection.evidenceIds,
+        executionId: runId, claimIds: thesis.claims.map((claim) => claim.claimId), evidenceIds: selection.evidenceIds,
       });
       round1BearCounterpoints = response.counterpoints;
       const turn = { response, result } satisfies ChallengeTurn;
@@ -576,23 +578,18 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'phase', phase: 'bull', label: 'Responding to the challenges.' });
       events({ type: 'agent.start', agent: 'bull' });
       progress('bull', 'Responding to the challenges...');
-      const bullClaims: Claim[] = (await ctx.db.claims.getByRun(runId)).map((claim) => ({
-        claimId: claim.claimId,
-        statement: claim.statement,
-        confidence: claim.confidence,
-        reasoning: claim.reasoning ?? 'Persisted validated claim reasoning is unavailable.',
-        evidenceIds: claim.evidenceIds,
-      }));
+      const bullClaims: Claim[] = (await ctx.db.claims.getByRun(runId)).map(storedClaimToClaim);
       const context = specialistContext({ role: 'BULL', phase: 'REBUTTAL', roundNumber: 1, evidence: selection.evidence, bullClaims, bearCounterpoints: challenge.response.counterpoints });
       const result = await ctx.bull.rebuttal(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bearCounterpoints: challenge.response.counterpoints });
       const response: BullAnalysisResponse = { ...result.value, messageId: `bull_rebuttal_${runId}` };
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
-      const validated = await ctx.validator.validate(response.claims, selection.evidenceIds);
+      const validated = await new ClaimPolicy(ctx.db.evidence).ground({ executionId: runId, response: result.value,
+        allowedEvidenceIds: selection.evidenceIds, seenEvidenceIds: selection.evidenceIds });
       ctx.validator.assertSeenEvidence(validated.flatMap((claim) => claim.evidenceIds), selection.evidenceIds);
       // Normalisasi claimId rebuttal — UNIQUE(run_id, claim_id); prefix menandai asal claim.
-      const claims: Claim[] = validated.map((claim, index) => ({ ...claim, claimId: `rebuttal_${index + 1}` }));
+      const claims = validated.map((claim, index) => ({ ...claim, claimId: `rebuttal_${index + 1}` }));
       const turn = { response, claims, result } satisfies ThesisTurn;
       await checkpoint('round-2-bull-rebuttal', turn);
       await ctx.db.conversation.addMessage({
@@ -660,7 +657,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
       await ctx.validator.validateChallenge(response.counterpoints, response.evidenceIds, {
-        claimIds: allClaims.map((claim) => claim.claimId), evidenceIds: selection.evidenceIds,
+        executionId: runId, claimIds: allClaims.map((claim) => claim.claimId), evidenceIds: selection.evidenceIds,
       });
       conditionalBearCounterpoints = response.counterpoints;
       const turn = { response, result } satisfies ChallengeTurn;
@@ -685,22 +682,17 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'phase', phase: 'bull', label: 'Conditional: responding to re-challenge.' });
       events({ type: 'agent.start', agent: 'bull' });
       progress('bull', 'Conditional: responding to re-challenge...');
-      const bullClaims: Claim[] = (await ctx.db.claims.getByRun(runId)).map((claim) => ({
-        claimId: claim.claimId,
-        statement: claim.statement,
-        confidence: claim.confidence,
-        reasoning: claim.reasoning ?? 'Persisted validated claim reasoning is unavailable.',
-        evidenceIds: claim.evidenceIds,
-      }));
+      const bullClaims: Claim[] = (await ctx.db.claims.getByRun(runId)).map(storedClaimToClaim);
       const context = specialistContext({ role: 'BULL', phase: 'REBUTTAL', roundNumber: 2, evidence: selection.evidence, bullClaims, bearCounterpoints: rechallenge.response.counterpoints });
       const result = await ctx.bull.rebuttal(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bearCounterpoints: rechallenge.response.counterpoints });
       const response: BullAnalysisResponse = { ...result.value, messageId: `bull_rebuttal_${runId}_conditional` };
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
-      const validated = await ctx.validator.validate(response.claims, selection.evidenceIds);
+      const validated = await new ClaimPolicy(ctx.db.evidence).ground({ executionId: runId, response: result.value,
+        allowedEvidenceIds: selection.evidenceIds, seenEvidenceIds: selection.evidenceIds });
       ctx.validator.assertSeenEvidence(validated.flatMap((claim) => claim.evidenceIds), selection.evidenceIds);
-      const claims: Claim[] = validated.map((claim, index) => ({ ...claim, claimId: `rebuttal_conditional_${index + 1}` }));
+      const claims = validated.map((claim, index) => ({ ...claim, claimId: `rebuttal_conditional_${index + 1}` }));
       const messageId = `${response.messageId}_conditional`;
       const turn = { response, claims, result } satisfies ThesisTurn;
       await checkpoint('conditional-bull-rebuttal', turn);
@@ -769,10 +761,10 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       ].filter((turn): turn is ChallengeTurn => Boolean(turn));
       const allClaims = thesisTurns.flatMap((turn) => turn.claims);
       ctx.validator.assertSeenEvidence(allClaims.flatMap((claim) => claim.evidenceIds), selection.evidenceIds);
-      await ctx.validator.validate(allClaims, selection.evidenceIds);
+      await ctx.validator.validate(allClaims, selection.evidenceIds, runId);
       for (const challenge of challenges) {
         await ctx.validator.validateChallenge(challenge.response.counterpoints, challenge.response.evidenceIds, {
-          claimIds: allClaims.map((claim) => claim.claimId), evidenceIds: selection.evidenceIds,
+          executionId: runId, claimIds: allClaims.map((claim) => claim.claimId), evidenceIds: selection.evidenceIds,
         });
       }
       return {

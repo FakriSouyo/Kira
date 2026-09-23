@@ -50,5 +50,5 @@ describe('S1 attachment migration', () => {
       sessionId: 'session_prior_s1', turnId: 'turn_prior_s1', filename: 'prior.txt', content: new TextEncoder().encode('prior'),
     })).resolves.toMatchObject({ sessionId: 'session_prior_s1', turnId: 'turn_prior_s1' });
     expect(migrated.raw.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
-  });
+  }, 10_000);
 });

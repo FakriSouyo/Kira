@@ -6,6 +6,7 @@ import type { ExecutionArtifacts, ExecutionRun, ExecutionStore } from '@harness/
 import { UserFriendlyError } from '@harness/shared';
 // reuse pemetaan evidence terpusat (Deviasi #19) — hindari duplikasi snake→camel
 import { type EvidenceRow, toEvidence } from './evidenceStoreSqlite';
+import { toStoredClaim } from './claimStoreSqlite';
 
 interface ExecutionRow {
   id: string;
@@ -132,17 +133,7 @@ export class ExecutionStoreSqlite implements ExecutionStore {
       createdAt: (r as { createdAt: string }).createdAt,
     })) as import('@harness/conversation').AgentMessage[];
 
-    const storedClaims = claimRows.map((r) => ({
-      id: (r as { id: string }).id,
-      runId: (r as { runId: string }).runId,
-      messageId: (r as { messageId: string | null }).messageId,
-      claimId: (r as { claimId: string }).claimId,
-      statement: (r as { statement: string }).statement,
-      confidence: (r as { confidence: string }).confidence as import('@harness/execution').StoredClaim['confidence'],
-      reasoning: (r as { reasoning: string | null }).reasoning,
-      evidenceIds: JSON.parse((r as { evidenceIds: string }).evidenceIds) as string[],
-      createdAt: (r as { createdAt: string }).createdAt,
-    })) as import('@harness/execution').StoredClaim[];
+    const storedClaims = claimRows.map(toStoredClaim);
 
     const judgment =
       judgmentRows.length > 0
