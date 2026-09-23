@@ -18,7 +18,7 @@ import {
   type BearChallengeResponse, type BullAnalysisResponse, type ChallengeTurn, type CollectedSources,
   type JudgeProgress, type JudgeTurn, type SynthesisTurn, type ThesisTurn,
 } from './judgeNodes';
-import { ensureJudgeArtifacts, JudgeCheckpointWriter, planJudgeResume, repairJudgeProjections, type JudgeResumePlan } from './judgeCheckpoint';
+import { ensureJudgeArtifacts, JudgeCheckpointWriter, planJudgeResume, prepareJudgeReleasePlan, publishJudgeRelease, repairJudgeProjections, type JudgeReleasePlan, type JudgeResumePlan } from './judgeCheckpoint';
 
 /**
  * Hasil lengkap /judge — dipakai renderer output conversational.
@@ -129,6 +129,7 @@ export async function judgeWorkflow(
   const startedAt = Date.now();
   const definition = createJudgeWorkflow();
   let resumePlan: JudgeResumePlan | undefined;
+  let releasePlan: JudgeReleasePlan | undefined;
   let profile: Awaited<ReturnType<typeof createJudgeExecutionProfile>> | undefined;
   const run = opts.lifecycle && opts.resumeExecutionId
     ? await (async () => {
@@ -269,6 +270,14 @@ export async function judgeWorkflow(
     const judgment = synthesis.judgment;
     const judgeTurn = resolved ?? firstVerdict;
 
+    if (opts.lifecycle && profile && (!resumePlan || resumePlan.releaseKind === 'current')) {
+      releasePlan = await prepareJudgeReleasePlan({
+        db: ctx.db,
+        execution: run as unknown as import('@harness/session-core').ResearchExecution,
+        profile,
+      });
+    }
+
     const executionTimeSeconds = (Date.now() - startedAt) / 1000;
     const completed = opts.lifecycle
       ? await ctx.db.sessions.settleExecution(run.id, 'completed', { executionTimeSeconds })
@@ -276,11 +285,18 @@ export async function judgeWorkflow(
     executionSettled = true;
     let artifactRefs: DurableArtifactRef[] = [];
     if (opts.lifecycle) {
-      const saved = await ensureJudgeArtifacts({
-        db: ctx.db,
-        execution: completed as unknown as import('@harness/session-core').ResearchExecution,
-        profile: profile!,
-      });
+      const saved = releasePlan
+        ? (await publishJudgeRelease({
+          db: ctx.db,
+          execution: completed as unknown as import('@harness/session-core').ResearchExecution,
+          profile: profile!,
+          plan: releasePlan,
+        })).artifacts
+        : await ensureJudgeArtifacts({
+          db: ctx.db,
+          execution: completed as unknown as import('@harness/session-core').ResearchExecution,
+          profile: profile!,
+        });
       artifactRefs = saved.map(artifact => ({ kind: artifact.kind, artifactId: artifact.artifactId }));
     }
     events({

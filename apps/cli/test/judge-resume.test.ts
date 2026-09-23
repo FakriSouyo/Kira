@@ -9,12 +9,13 @@ import {
   createJudgeWorkflow,
 } from '@harness/command-judge';
 import { openDb, type FinharnessDatabase } from '@harness/database';
-import { createWorkflowNodeOutput } from '@harness/session-core';
+import { createExecutionProfile, createWorkflowNodeOutput } from '@harness/session-core';
 import { buildContext } from '../src/context';
 import { loadConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
 import { createJudgeNodeExecutors } from '../src/workflows/judgeNodes';
 import { decodeJudgeCheckpoint, JudgeCheckpointWriter } from '../src/workflows/judgeCheckpoint';
+import { resumeJudgeRun } from '../src/workflows/judgeWorkflow';
 
 describe('PR P same-Execution Judge resume', () => {
   let homeDir: string;
@@ -31,7 +32,10 @@ describe('PR P same-Execution Judge resume', () => {
     rmSync(homeDir, { recursive: true, force: true });
   });
 
-  it('continues a checkpointed prefix in the same Execution without refetching completed sources', async () => {
+  it.each([
+    { label: 'current T5 profile', historical: false },
+    { label: 'pre-T5 profile', historical: true },
+  ])('continues a checkpointed prefix under the %s without refetching completed sources', async ({ historical }) => {
     const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
     const context = buildContext(db, config, { sessionId: 'judge-resume-test-session' });
     const session = await db.sessions.createSession({
@@ -55,7 +59,7 @@ describe('PR P same-Execution Judge resume', () => {
       command: 'judge',
     });
     const definition = createJudgeWorkflow();
-    const profile = createJudgeExecutionProfile({
+    const currentProfile = createJudgeExecutionProfile({
       executionId: execution.id,
       ticker: 'BBCA',
       reasoningMode: 'usual',
@@ -66,6 +70,21 @@ describe('PR P same-Execution Judge resume', () => {
       capabilityPlan: context.judgeCapabilityPlan,
       createdAt: execution.createdAt,
     });
+    const profile = historical
+      ? (() => {
+        const { releaseContract: _releaseContract, releaseContractFingerprint: _releaseFingerprint, ...payload } = currentProfile.payload;
+        return createExecutionProfile({
+          executionId: currentProfile.executionId,
+          workflowId: currentProfile.workflowId,
+          workflowVersion: currentProfile.workflowVersion,
+          graphFingerprint: currentProfile.graphFingerprint,
+          command: currentProfile.command,
+          ticker: currentProfile.ticker,
+          payload,
+          createdAt: currentProfile.createdAt,
+        });
+      })()
+      : currentProfile;
     await db.executionProfiles.save(profile);
 
     const decision = {};
@@ -141,6 +160,9 @@ describe('PR P same-Execution Judge resume', () => {
       status: 'completed',
       resumeGeneration: 1,
     });
+    const receipt = await db.claimGraphReleases.getByExecution(execution.id);
+    if (historical) expect(receipt).toBeNull();
+    else expect(receipt).not.toBeNull();
   });
 
   it('rejects a malformed typed model payload before it can become a restore seed', async () => {
@@ -158,5 +180,51 @@ describe('PR P same-Execution Judge resume', () => {
     await expect(decodeJudgeCheckpoint(
       'round-1-bull-thesis', output, undefined as never, { id: output.executionId, ticker: 'BBCA' } as never,
     )).rejects.toThrow();
+  });
+
+  it('rejects an unsupported T5 release pin before acquiring an interrupted Execution', async () => {
+    const config = loadConfig({ homeDir, mockSectors: true, mockLlm: true });
+    const context = buildContext(db, config, { sessionId: 'judge-release-mismatch-session' });
+    const session = await db.sessions.createSession({
+      sessionId: 'judge-release-mismatch-session',
+      title: 'Release contract mismatch',
+      provider: config.llm.agent.provider,
+      model: config.llm.agent.model,
+      reasoningMode: 'usual',
+    });
+    const turn = await db.sessions.createTurn({
+      turnId: 'turn_release_mismatch', sessionId: session.id, input: '/judge BBCA', command: 'judge',
+    });
+    const execution = await db.sessions.createExecution({
+      executionId: 'run_release_mismatch', sessionId: session.id, turnId: turn.id, ticker: 'BBCA', command: 'judge',
+    });
+    const current = createJudgeExecutionProfile({
+      executionId: execution.id, ticker: 'BBCA', reasoningMode: 'usual', conditional: false,
+      researchers: config.researchers, provider: config.llm.agent.provider, model: config.llm.agent.model,
+      capabilityPlan: context.judgeCapabilityPlan, createdAt: execution.createdAt,
+    });
+    const incompatible = createExecutionProfile({
+      executionId: current.executionId,
+      workflowId: current.workflowId,
+      workflowVersion: current.workflowVersion,
+      graphFingerprint: current.graphFingerprint,
+      command: current.command,
+      ticker: current.ticker,
+      payload: { ...current.payload, releaseContractFingerprint: '0'.repeat(64) },
+      createdAt: current.createdAt,
+    });
+    await db.executionProfiles.save(incompatible);
+    await db.sessions.interruptExecution(execution.id, 'fixture for release contract mismatch');
+    const acquire = vi.spyOn(db.sessions, 'acquireInterruptedExecution');
+
+    await expect(resumeJudgeRun(context, execution.id, () => {}, () => {}, {
+      lifecycle: { sessionId: session.id, turnId: turn.id },
+      resumeExecutionId: execution.id,
+    })).rejects.toMatchObject({ code: 'INCOMPATIBLE_CHECKPOINT' });
+
+    expect(acquire).not.toHaveBeenCalled();
+    const persisted = (await db.sessions.getSessionArtifacts(session.id)).executions[0]!;
+    expect(persisted.status).toBe('interrupted');
+    expect(persisted.resumeGeneration).toBe(0);
   });
 });

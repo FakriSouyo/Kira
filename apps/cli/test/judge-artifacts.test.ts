@@ -3,12 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkflowRunner } from '@harness/command-core';
-import { checkpointKindForNode, createJudgeWorkflow, JUDGE_NODE_IDS } from '@harness/command-judge';
+import { checkpointKindForNode, createJudgeWorkflow, JUDGE_NODE_IDS, JUDGE_RELEASE_CONTRACT_FINGERPRINT } from '@harness/command-judge';
 import { openDb, type FinharnessDatabase } from '@harness/database';
+import { claimGraphFingerprint, createClaimGraphReleaseReceipt } from '@harness/execution';
 import { createExecutionProfile, createWorkflowNodeOutput } from '@harness/session-core';
 import { loadConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
-import { workflowDependencyFingerprint } from '../src/workflows/judgeCheckpoint';
+import { judgeWorkflow } from '../src/workflows/judgeWorkflow';
+import { repairCompletedJudgeReleases, workflowDependencyFingerprint } from '../src/workflows/judgeCheckpoint';
 
 describe('PR F /judge typed artifacts', () => {
   let dir: string;
@@ -27,12 +29,47 @@ describe('PR F /judge typed artifacts', () => {
 
   const config = () => loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true });
 
+  async function expectT5ReleaseGateFailure(mutateCanonicalState: (executionId: string) => void): Promise<void> {
+    const session = await createHarnessSession(db, config(), { write: () => {} });
+    const providerCalls = [
+      'getCompanyReport', 'getQuarterlyFinancials', 'getDailyTransaction',
+      'getForeignFlow', 'getNews', 'getFilings', 'getSentiment',
+    ].map(method => vi.spyOn(session.context.financialData, method));
+    const modelCalls = [
+      vi.spyOn(session.context.bull, 'analyze'),
+      vi.spyOn(session.context.bear, 'challenge'),
+      vi.spyOn(session.context.judge, 'evaluate'),
+    ];
+    const dependencyCalls = [...providerCalls, ...modelCalls];
+    let countsAfterWorkflow: number[] = [];
+    const originalRun = WorkflowRunner.prototype.run;
+    const runner = vi.spyOn(WorkflowRunner.prototype, 'run');
+    runner.mockImplementation(async function (this: WorkflowRunner, ...args: unknown[]) {
+      const outputs = await originalRun.apply(this, args as never) as Record<string, unknown>;
+      countsAfterWorkflow = dependencyCalls.map(call => call.mock.calls.length);
+      const row = db.raw.prepare('SELECT id FROM executions ORDER BY rowid DESC LIMIT 1').get() as { id: string };
+      mutateCanonicalState(row.id);
+      return outputs;
+    } as never);
+
+    await expect(session.commands.get('judge')!(['BBCA'])).rejects.toThrow();
+    const execution = (await db.sessions.getSessionArtifacts(session.conversation.id)).executions[0]!;
+    expect(execution.status).toBe('failed');
+    expect(await db.artifacts.getByExecution(execution.id)).toEqual([]);
+    expect(await db.claimGraphReleases.getByExecution(execution.id)).toBeNull();
+    expect(dependencyCalls.map(call => call.mock.calls.length)).toEqual(countsAfterWorkflow);
+    await session.close();
+  }
+
   it('publishes stable Bull, Bear, and Verdict references from one successful /judge', async () => {
     const session = await createHarnessSession(db, config(), { write: () => {} });
     await session.commands.get('judge')!(['BBCA']);
     const sessionId = session.conversation.id;
     const execution = (await db.sessions.getSessionArtifacts(sessionId)).executions[0]!;
     const artifacts = await db.artifacts.getByExecution(execution.id);
+    const profile = await db.executionProfiles.getByExecutionId(execution.id);
+    const graph = await db.claimGraph.getByExecution(execution.id);
+    const receipt = await db.claimGraphReleases.getByExecution(execution.id);
 
     const refs = artifacts.map(artifact => ({ kind: artifact.kind, artifactId: artifact.artifactId }));
     expect(refs).toEqual([
@@ -41,6 +78,20 @@ describe('PR F /judge typed artifacts', () => {
       { kind: 'VERDICT', artifactId: `artifact_verdict_${execution.id}` },
     ]);
     expect(artifacts.every(artifact => artifact.executionId === execution.id && artifact.sessionId === sessionId)).toBe(true);
+    expect(execution.status).toBe('completed');
+    expect(profile?.payload.releaseContractFingerprint).toBe(JUDGE_RELEASE_CONTRACT_FINGERPRINT);
+    expect(receipt).toMatchObject({
+      executionId: execution.id,
+      sessionId: execution.sessionId,
+      turnId: execution.turnId,
+      ticker: execution.ticker,
+      releaseContractFingerprint: profile?.payload.releaseContractFingerprint,
+      claimGraphFingerprint: claimGraphFingerprint(graph),
+    });
+    expect(receipt?.artifactProjections.map(projection => projection.kind)).toEqual(['BULL_CASE', 'BEAR_CASE', 'VERDICT']);
+    expect(receipt?.artifactProjections[2]?.nodes).toEqual(graph.nodes);
+    expect(receipt?.artifactProjections[2]?.edges).toEqual(graph.edges);
+    expect(await db.claimGraphReleases.save(receipt!)).toEqual(receipt);
 
     const context = await db.workingContext.current(sessionId);
     expect(context?.activeThesisRef).toBeNull();
@@ -63,7 +114,136 @@ describe('PR F /judge typed artifacts', () => {
     expect(bearCounterpoints.every(point => point.sourceNodeId === 'round-1-bear-challenge')).toBe(true);
     expect(bearCounterpoints.every(point => Array.isArray(point.evidenceIds) && Array.isArray(point.evidenceLinks)
       && point.policyId === 'counterpoint-policy-v1')).toBe(true);
+    const bullPayload = artifacts[0]!.payload as {
+      thesis: { claims: Array<{ claimId: string }> };
+      rebuttal: { claims: Array<{ claimId: string }> };
+    };
+    expect(receipt?.artifactProjections[0]?.nodes.map(node => node.kind === 'claim' ? node.claimId : '')).toEqual(
+      [...bullPayload.thesis.claims, ...bullPayload.rebuttal.claims].map(claim => claim.claimId).sort(),
+    );
+    expect(receipt?.artifactProjections[1]?.edges.map(edge => [edge.from.counterpointId, edge.to.claimId]).sort()).toEqual(
+      roundOneCounterpoints.map(point => [point.counterpointId, point.targetClaimId]).sort(),
+    );
     await session.close();
+  });
+
+  it('keeps conditional graph rows only in the full VERDICT projection', async () => {
+    const session = await createHarnessSession(db, config(), { write: () => {} });
+    const sessionId = session.conversation.id;
+    const turn = await db.sessions.createTurn({ sessionId, input: '/judge BBCA --conditional', command: 'judge' });
+    let calls = 0;
+    const evaluate = session.context.judge.evaluate.bind(session.context.judge);
+    session.context.judge.evaluate = async params => {
+      calls += 1;
+      return {
+        value: {
+          ticker: 'BBCA',
+          score: 50,
+          stance: 'neutral' as const,
+          confidence: 'moderate' as const,
+          breakdown: { financialHealth: 50, growth: 50, valuation: 50, marketMomentum: null, risk: null },
+          summary: `Neutral release fixture ${calls}`,
+        },
+        subagent: 'judge',
+        skills: [{ name: 'evidence-weighing', contentHash: 'test-hash' }],
+      };
+    };
+    const result = await judgeWorkflow(session.context, 'BBCA', () => {}, () => {}, {
+      conditional: true,
+      lifecycle: { sessionId, turnId: turn.id },
+    });
+    session.context.judge.evaluate = evaluate;
+    const receipt = (await db.claimGraphReleases.getByExecution(result.run.id))!;
+    const graph = await db.claimGraph.getByExecution(result.run.id);
+    const counterpoints = await db.counterpoints.getByRun(result.run.id);
+    const artifacts = await db.artifacts.getByExecution(result.run.id);
+    const bullPayload = artifacts[0]!.payload as {
+      thesis: { claims: Array<{ claimId: string }> };
+      rebuttal: { claims: Array<{ claimId: string }> };
+    };
+    const bearPayload = artifacts[1]!.payload as { counterpoints: Array<{ counterpointId: string }> };
+
+    expect(calls).toBe(2);
+    expect(counterpoints.some(point => point.sourceNodeId === 'conditional-bear-rechallenge')).toBe(true);
+    expect(receipt.artifactProjections[0]!.nodes.map(node => node.kind === 'claim' ? node.claimId : '')).toEqual(
+      [...bullPayload.thesis.claims, ...bullPayload.rebuttal.claims].map(claim => claim.claimId).sort(),
+    );
+    expect(receipt.artifactProjections[1]!.nodes.filter(node => node.kind === 'counterpoint').map(node => node.counterpointId)).toEqual(
+      bearPayload.counterpoints.map(point => point.counterpointId),
+    );
+    expect(receipt.artifactProjections[1]!.nodes.some(node => node.kind === 'counterpoint' && node.counterpointId.includes('conditional'))).toBe(false);
+    expect(receipt.artifactProjections[2]!.nodes).toEqual(graph.nodes);
+    expect(receipt.artifactProjections[2]!.edges).toEqual(graph.edges);
+    await session.close();
+  });
+
+  it('keeps release receipts immutable and fails closed on lifecycle or fingerprint corruption', async () => {
+    const session = await createHarnessSession(db, config(), { write: () => {} });
+    await session.commands.get('judge')!(['BBCA']);
+    const execution = (await db.sessions.getSessionArtifacts(session.conversation.id)).executions[0]!;
+    const receipt = (await db.claimGraphReleases.getByExecution(execution.id))!;
+    const { receiptId: _receiptId, schemaVersion: _schemaVersion, fingerprint: _fingerprint, ...input } = receipt;
+
+    const conflictingReceipt = createClaimGraphReleaseReceipt({
+      ...input,
+      releaseContractFingerprint: 'f'.repeat(64),
+    });
+    await expect(db.claimGraphReleases.save(conflictingReceipt)).rejects.toThrow(/immutable|does not match/);
+    await expect(db.claimGraphReleases.save(createClaimGraphReleaseReceipt({
+      ...input,
+      sessionId: 'other-session',
+    }))).rejects.toThrow(/lifecycle identity/);
+
+    db.raw.prepare('DELETE FROM artifacts WHERE artifact_id = ?').run(`artifact_verdict_${execution.id}`);
+    await expect(db.claimGraphReleases.getByExecution(execution.id)).rejects.toThrow(/missing Artifact/);
+    await expect(repairCompletedJudgeReleases({ db, sessionId: session.conversation.id })).resolves.toBe(1);
+    expect(await db.artifacts.getByExecution(execution.id)).toHaveLength(3);
+    expect(await db.claimGraphReleases.getByExecution(execution.id)).not.toBeNull();
+
+    db.raw.prepare('UPDATE claim_graph_release_receipts SET payload_json = ?, fingerprint = ? WHERE execution_id = ?')
+      .run(JSON.stringify(conflictingReceipt), conflictingReceipt.fingerprint, execution.id);
+    await expect(repairCompletedJudgeReleases({ db, sessionId: session.conversation.id })).rejects.toThrow(/immutable and conflicts/);
+
+    db.raw.prepare('UPDATE claim_graph_release_receipts SET fingerprint = ? WHERE execution_id = ?')
+      .run('0'.repeat(64), execution.id);
+    await expect(repairCompletedJudgeReleases({ db, sessionId: session.conversation.id })).rejects.toThrow(/fingerprint validation/);
+    await session.close();
+  });
+
+  it('fails closed when a completed T5 artifact conflicts with its immutable checkpoint projection', async () => {
+    const session = await createHarnessSession(db, config(), { write: () => {} });
+    await session.commands.get('judge')!(['BBCA']);
+    const execution = (await db.sessions.getSessionArtifacts(session.conversation.id)).executions[0]!;
+    const artifactId = `artifact_bull_case_${execution.id}`;
+    const row = db.raw.prepare('SELECT payload_json FROM artifacts WHERE artifact_id = ?').get(artifactId) as { payload_json: string };
+    const payload = JSON.parse(row.payload_json) as { thesis: { reasoning: string } };
+    payload.thesis.reasoning = 'A valid but conflicting Bull thesis artifact was substituted.';
+    db.raw.prepare('UPDATE artifacts SET payload_json = ? WHERE artifact_id = ?').run(JSON.stringify(payload), artifactId);
+
+    await expect(repairCompletedJudgeReleases({ db, sessionId: session.conversation.id })).rejects.toThrow(/immutable write conflict/);
+    await session.close();
+  });
+
+  it.each([
+    ['a missing canonical Claim', (id: string) => db.raw.prepare('DELETE FROM claims WHERE run_id = ? AND rowid = (SELECT MIN(rowid) FROM claims WHERE run_id = ?)').run(id, id)],
+    ['an unexpected canonical Claim', (id: string) => db.raw.prepare(`INSERT INTO claims
+      SELECT lower(hex(randomblob(16))), run_id, message_id, claim_id || ':unexpected', statement, confidence, reasoning,
+        evidence_ids, cited_figures, single_metric, evidence_links, policy_id, policy_fingerprint, created_at
+      FROM claims WHERE run_id = ? LIMIT 1`).run(id)],
+    ['Claim checkpoint semantic drift', (id: string) => db.raw.prepare('UPDATE claims SET statement = ? WHERE run_id = ? AND rowid = (SELECT MIN(rowid) FROM claims WHERE run_id = ?)').run('A conflicting stored statement.', id, id)],
+    ['Claim Policy drift', (id: string) => db.raw.prepare('UPDATE claims SET policy_fingerprint = ? WHERE run_id = ?').run('0'.repeat(64), id)],
+    ['Claim Policy identity drift', (id: string) => db.raw.prepare('UPDATE claims SET policy_id = ? WHERE run_id = ?').run('claim-policy-legacy', id)],
+    ['a missing canonical Counterpoint', (id: string) => db.raw.prepare('DELETE FROM counterpoints WHERE run_id = ?').run(id)],
+    ['an unexpected canonical Counterpoint', (id: string) => db.raw.prepare(`INSERT INTO counterpoints
+      SELECT lower(hex(randomblob(16))), run_id, message_id, 'counterpoint:round-1-bear-challenge:99', source_node_id,
+        target_claim_id, argument, strength, evidence_ids, cited_figures, evidence_links, policy_id, policy_fingerprint, created_at
+      FROM counterpoints WHERE run_id = ? LIMIT 1`).run(id)],
+    ['Counterpoint checkpoint semantic drift', (id: string) => db.raw.prepare('UPDATE counterpoints SET argument = ? WHERE run_id = ?').run('A conflicting stored argument.', id)],
+    ['Counterpoint Policy drift', (id: string) => db.raw.prepare('UPDATE counterpoints SET policy_id = ? WHERE run_id = ?').run('counterpoint-policy-legacy', id)],
+    ['Counterpoint Policy fingerprint drift', (id: string) => db.raw.prepare('UPDATE counterpoints SET policy_fingerprint = ? WHERE run_id = ?').run('0'.repeat(64), id)],
+    ['a Counterpoint target outside the Claim set', (id: string) => db.raw.prepare('UPDATE counterpoints SET target_claim_id = ? WHERE run_id = ?').run('absent-claim', id)],
+  ])('fails before completion and publication for %s', async (_label, mutate) => {
+    await expectT5ReleaseGateFailure(mutate);
   });
 
   it('writes one validated PR P checkpoint for every Judge node, including skipped branches', async () => {
@@ -104,13 +284,13 @@ describe('PR F /judge typed artifacts', () => {
     await session.close();
   });
 
-  it('repairs missing completed-run artifacts on restart without rerunning the workflow', async () => {
+  it('repairs a missing artifact while retaining and validating the completed T5 receipt', async () => {
     let session = await createHarnessSession(db, config(), { write: () => {} });
     await session.commands.get('judge')!(['BBCA']);
     const sessionId = session.conversation.id;
     const execution = (await db.sessions.getSessionArtifacts(sessionId)).executions[0]!;
     await session.close();
-    db.raw.prepare('DELETE FROM artifacts WHERE execution_id = ?').run(execution.id);
+    db.raw.prepare('DELETE FROM artifacts WHERE execution_id = ? AND kind = ?').run(execution.id, 'BEAR_CASE');
     db.raw.close();
     db = openDb({ homeDir: dir });
 
@@ -118,11 +298,49 @@ describe('PR F /judge typed artifacts', () => {
     session = await createHarnessSession(db, config(), { write: () => {} });
     expect(run).not.toHaveBeenCalled();
     expect(await db.artifacts.getByExecution(execution.id)).toHaveLength(3);
+    expect(await db.claimGraphReleases.getByExecution(execution.id)).not.toBeNull();
     expect((await db.sessions.getSessionArtifacts(sessionId)).executions).toHaveLength(1);
     await session.close();
   });
 
-  it('repairs a completed pre-R2C2 profile without requiring active capability authority', async () => {
+  it('repairs three existing T5 artifacts when their release receipt is missing, without running Judge', async () => {
+    let session = await createHarnessSession(db, config(), { write: () => {} });
+    await session.commands.get('judge')!(['BBCA']);
+    const sessionId = session.conversation.id;
+    const execution = (await db.sessions.getSessionArtifacts(sessionId)).executions[0]!;
+    await session.close();
+    db.raw.prepare('DELETE FROM claim_graph_release_receipts WHERE execution_id = ?').run(execution.id);
+    db.raw.close();
+    db = openDb({ homeDir: dir });
+
+    const run = vi.spyOn(WorkflowRunner.prototype, 'run');
+    session = await createHarnessSession(db, config(), { write: () => {} });
+    expect(run).not.toHaveBeenCalled();
+    expect(await db.artifacts.getByExecution(execution.id)).toHaveLength(3);
+    expect(await db.claimGraphReleases.getByExecution(execution.id)).not.toBeNull();
+    await session.close();
+  });
+
+  it('repairs a completed T5 execution with no artifacts or receipt on startup', async () => {
+    let session = await createHarnessSession(db, config(), { write: () => {} });
+    await session.commands.get('judge')!(['BBCA']);
+    const sessionId = session.conversation.id;
+    const execution = (await db.sessions.getSessionArtifacts(sessionId)).executions[0]!;
+    await session.close();
+    db.raw.prepare('DELETE FROM artifacts WHERE execution_id = ?').run(execution.id);
+    db.raw.prepare('DELETE FROM claim_graph_release_receipts WHERE execution_id = ?').run(execution.id);
+    db.raw.close();
+    db = openDb({ homeDir: dir });
+
+    const run = vi.spyOn(WorkflowRunner.prototype, 'run');
+    session = await createHarnessSession(db, config(), { write: () => {} });
+    expect(run).not.toHaveBeenCalled();
+    expect(await db.artifacts.getByExecution(execution.id)).toHaveLength(3);
+    expect(await db.claimGraphReleases.getByExecution(execution.id)).not.toBeNull();
+    await session.close();
+  });
+
+  it('repairs a completed pre-T5 profile without fabricating a release receipt', async () => {
     let session = await createHarnessSession(db, config(), { write: () => {} });
     await session.commands.get('judge')!(['BBCA']);
     const sessionId = session.conversation.id;
@@ -130,7 +348,13 @@ describe('PR F /judge typed artifacts', () => {
     const profile = await db.executionProfiles.getByExecutionId(execution.id);
     expect(profile).toBeTruthy();
     const payload = profile!.payload as Record<string, unknown>;
-    const { capabilityPlan: _capabilityPlan, capabilityPlanFingerprint: _capabilityPlanFingerprint, ...legacyPayload } = payload;
+      const {
+        capabilityPlan: _capabilityPlan,
+        capabilityPlanFingerprint: _capabilityPlanFingerprint,
+        releaseContract: _releaseContract,
+        releaseContractFingerprint: _releaseContractFingerprint,
+        ...legacyPayload
+      } = payload;
     const legacyProfile = createExecutionProfile({
       executionId: profile!.executionId,
       workflowId: profile!.workflowId,
@@ -145,6 +369,7 @@ describe('PR F /judge typed artifacts', () => {
       .run(JSON.stringify(legacyProfile.payload), legacyProfile.fingerprint, execution.id);
     await session.close();
     db.raw.prepare('DELETE FROM artifacts WHERE execution_id = ?').run(execution.id);
+    db.raw.prepare('DELETE FROM claim_graph_release_receipts WHERE execution_id = ?').run(execution.id);
     db.raw.close();
     db = openDb({ homeDir: dir });
 
@@ -163,6 +388,7 @@ describe('PR F /judge typed artifacts', () => {
     session = await createHarnessSession(db, config(), { write: () => {} });
     expect(run).not.toHaveBeenCalled();
     expect(await db.artifacts.getByExecution(execution.id)).toHaveLength(3);
+    expect(await db.claimGraphReleases.getByExecution(execution.id)).toBeNull();
     await session.close();
   });
 

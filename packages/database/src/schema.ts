@@ -158,6 +158,19 @@ export const artifacts = sqliteTable('artifacts', {
   createdAt: text('created_at').notNull(),
 }, (table) => [unique('artifacts_execution_kind_uniq').on(table.executionId, table.kind)]);
 
+/** T5: immutable derived provenance for one completed Judge graph release. */
+export const claimGraphReleaseReceipts = sqliteTable('claim_graph_release_receipts', {
+  receiptId: text('receipt_id').primaryKey(),
+  schemaVersion: integer('schema_version').notNull(),
+  sessionId: text('session_id').notNull().references(() => researchSessions.id, { onDelete: 'cascade' }),
+  turnId: text('turn_id').notNull().references(() => researchTurns.id, { onDelete: 'cascade' }),
+  executionId: text('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  ticker: text('ticker').notNull(),
+  payloadJson: text('payload_json').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  createdAt: text('created_at').notNull(),
+}, table => [unique('claim_graph_release_execution_uniq').on(table.executionId)]);
+
 /** PR N: immutable, execution-scoped verified financial inputs. */
 export const financialSnapshots = sqliteTable('financial_snapshots', {
   snapshotId: text('snapshot_id').primaryKey(),

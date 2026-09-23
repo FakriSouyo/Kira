@@ -7,7 +7,7 @@ import type { AgentEvent } from './events';
 import type { CommandHandler } from './loop';
 import { ConversationController } from '../ui/conversationController';
 import { createWorkingContextPublisher } from './workingContext';
-import { repairCompletedJudgeArtifacts } from '../workflows/judgeCheckpoint';
+import { repairCompletedJudgeReleases } from '../workflows/judgeCheckpoint';
 
 /** Owns active clients and preview resources for either terminal renderer. */
 export async function createHarnessSession(db: FinharnessDatabase, initialConfig: FinharnessConfig, options: {
@@ -86,7 +86,7 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
     db,
     append: (payload) => controller.append(payload),
   });
-  await repairCompletedJudgeArtifacts({ db, sessionId: controller.snapshot.id });
+  await repairCompletedJudgeReleases({ db, sessionId: controller.snapshot.id });
   const startupArtifacts = await db.sessions.getSessionArtifacts(controller.snapshot.id);
   for (const turn of startupArtifacts.turns) {
     if (turn.status !== 'completed') continue;

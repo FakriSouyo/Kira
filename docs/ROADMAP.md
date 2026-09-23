@@ -36,7 +36,7 @@ already exist.
 ## Canonical high-level sequence
 
 ```text
-COMPLETED FOUNDATION
+COMPLETE ON MASTER
 
 A-P
 Q1
@@ -48,24 +48,19 @@ R2C1
 R2C2
 S1
 S2
-
-COMPLETE ON MASTER
-
 S3
 T1 Evidence Acceptance + Provenance
 T2 Claim Grounding + Durable Claim Model
 T3 Counterpoint Grounding + Durability
-
-IMPLEMENTED IN CURRENT T4 WORKTREE, PENDING SOURCE REVIEW
-
 T4 Claim Graph Core
 
-NEXT / FUTURE
+IMPLEMENTED IN CURRENT T5 WORKTREE, PENDING SOURCE REVIEW
 
 T5 Judge Integration + Release Integrity
 
-FUTURE RESEARCH PRODUCT COMPLETION
+NEXT / FUTURE
 
+U Research Composition / Product Completion
 U1
 U2 /research
 U3 /compare
@@ -95,7 +90,7 @@ research capability maturation. Discovery and design for later milestones may
 begin earlier, but production implementations must not bypass the dependency
 boundaries established by earlier milestones.
 
-## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1-T3 on master; T4 in current worktree
+## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1-T4 on master; T5 in current worktree
 
 The following milestones are complete in the current implementation:
 
@@ -113,6 +108,8 @@ The following milestones are complete in the current implementation:
 - **T1 — Evidence Acceptance + Provenance:** versioned deterministic Evidence Policy accepts verified financial observations, persists per-Execution acceptance/provenance on `run_evidence`, preserves immutable content deduplication, and exposes typed Document search candidates without persisting them.
 - **T2 — Claim Grounding + Durable Claim Model:** current Bull proposals carry explicit Evidence links; deterministic Claim Policy validates scoped Evidence and literal numeric assertions, derives `singleMetric`, and persists complete canonical grounding with historical checkpoint repair.
 - **T3 — Counterpoint Grounding + Durability:** current Bear proposals carry per-Counterpoint Evidence links; deterministic Counterpoint Policy validates scope, targets, links, and numeric figures, and stores canonical Counterpoints per Execution with restart repair and historical compatibility.
+- **T4 — Claim Graph Core:** a deterministic execution-local graph is reconstructed from canonical Claim and Counterpoint stores; only declared `Counterpoint.targetClaimId` targets are edges.
+- **T5 — Judge Integration + Release Integrity:** current Judge profiles pin release semantics, validate checkpoint/store/graph parity before completion, and publish existing artifacts plus a restart-repairable immutable graph release receipt after completion.
 
 The current Judge graph remains the source of truth: it has 15 stable nodes,
 `JUDGE_WORKFLOW_VERSION` remains `2`, and no obsolete historical Judge graph is
@@ -363,9 +360,9 @@ finally cross-surface product delivery.
 ## S — Files & Documents
 
 S is knowledge-input work. It is deliberately distinct from Evidence, Artifacts,
-Context, and Memory. S1, S2, S3, T1, T2, and T3 are complete on master. T4
-Claim Graph Core is implemented in the current T4 worktree pending source
-review. T5 Judge Integration + Release Integrity is next/future work.
+Context, and Memory. S1, S2, S3, and T1-T4 are complete on master. T5 Judge
+Integration + Release Integrity is implemented in the current T5 worktree
+pending source review. U Research Composition / Product Completion is next.
 
 ### S1 — Durable File / Attachment Layer
 
@@ -507,7 +504,7 @@ T4 Claim Graph Core
 T5 Judge Integration + Release Integrity
 ```
 
-Status: **T1, T2, and T3 complete on master; T4 implemented in the current T4 worktree pending source review; T5 remains next/future work**.
+Status: **T1-T4 complete on master; T5 implemented in the current worktree pending source review; U Research Composition / Product Completion is next**.
 
 ### T1 — Evidence Acceptance + Provenance
 
@@ -594,9 +591,16 @@ semantics, the 15-node Judge graph, or workflow version 2.
 
 ### T5 — Judge Integration + Release Integrity
 
-T5 remains future work. It may integrate graph completeness checks into Judge
-publication and define restart-repairable artifact graph projection, but those
-release changes are not part of T4.
+New lifecycle Judge profiles pin a deterministic release contract for the
+current Claim and Counterpoint policies, Claim Graph contract, and existing
+artifact kinds/schema. Before completion, T5 validates final checkpoint data
+against canonical Claim/Counterpoint rows and their complete execution-local
+graph. After completion it publishes the existing three artifacts and an
+immutable release receipt that maps each artifact to the graph subset it
+represents. Startup reconstructs and repairs partial artifact/receipt
+publication without model/provider calls. Historical pre-T5 profiles retain
+legacy artifact semantics and do not receive fabricated receipts. T5 leaves
+the 15-node Judge workflow, version 2, and artifact v1 payload schemas intact.
 
 T strengthens explicit relationships among Evidence, Claims, Theses,
 Counterclaims, and Artifacts:
