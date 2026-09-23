@@ -19,6 +19,7 @@ import { loadConfig, type FinharnessConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
 import { createJudgeNodeExecutors } from '../src/workflows/judgeNodes';
 import {
+  decodeJudgeCheckpoint,
   JudgeCheckpointWriter,
   planJudgeResume,
   repairJudgeProjections,
@@ -556,9 +557,16 @@ describe('PR P final acceptance hardening', () => {
     const conditional = await createFixture(db, config, { suffix: 'conditional_projection_repair', reasoningMode: 'reasoning', conditional: true });
     await runPrefix(conditional, 'conditional-bull-rebuttal');
     const conditionalOutputs = await conditional.db.workflowNodeOutputs.listNodeOutputsForExecution(conditional.executionId);
+    const conditionalCounterpoints = (await conditional.db.counterpoints.getByRun(conditional.executionId))
+      .filter(counterpoint => counterpoint.sourceNodeId === 'conditional-bear-rechallenge');
+    expect(conditionalCounterpoints.length).toBeGreaterThan(0);
+    conditional.db.raw.prepare("DELETE FROM counterpoints WHERE run_id = ? AND source_node_id = 'conditional-bear-rechallenge'")
+      .run(conditional.executionId);
     conditional.db.raw.prepare("DELETE FROM agent_messages WHERE run_id = ?").run(conditional.executionId);
     await repairJudgeProjections({ db: conditional.db, execution: (await sessionRows(conditional)).executions[0]!, outputs: conditionalOutputs });
     await repairJudgeProjections({ db: conditional.db, execution: (await sessionRows(conditional)).executions[0]!, outputs: conditionalOutputs });
+    expect((await conditional.db.counterpoints.getByRun(conditional.executionId))
+      .filter(counterpoint => counterpoint.sourceNodeId === 'conditional-bear-rechallenge')).toHaveLength(conditionalCounterpoints.length);
     expect((await conditional.db.conversation.getByRun(conditional.executionId)).find(message => message.messageId.endsWith('_conditional'))?.metadata)
       .toMatchObject({ conditional: true, seenEvidenceIds: expect.any(Array) });
   });
@@ -576,6 +584,129 @@ describe('PR P final acceptance hardening', () => {
     const rebuttal = packets.map(row => JSON.parse(row.packet_json) as { specialist?: { role?: string; phase?: string; bullClaims?: unknown[] } })
       .find(packet => packet.specialist?.role === 'BULL' && packet.specialist.phase === 'REBUTTAL');
     expect(rebuttal?.specialist?.bullClaims).toEqual(claims);
+  });
+
+  it('stores full current Bear grounding in the checkpoint and repairs missing rows without model work', async () => {
+    const config = createConfig(dir);
+    const fixture = await createFixture(db, config, { suffix: 'counterpoint_checkpoint_repair' });
+    await runPrefix(fixture, 'round-1-bear-challenge');
+    const outputs = await fixture.db.workflowNodeOutputs.listNodeOutputsForExecution(fixture.executionId);
+    const output = outputs.find(item => item.nodeId === 'round-1-bear-challenge')!;
+    const payload = output.payload as { response: { counterpoints: Array<Record<string, unknown>> }; counterpoints: Array<Record<string, unknown>> };
+    expect(payload.response.counterpoints[0]).not.toHaveProperty('counterpointId');
+    expect(payload.counterpoints[0]).toMatchObject({
+      counterpointId: 'counterpoint:round-1-bear-challenge:1',
+      sourceNodeId: 'round-1-bear-challenge',
+      policyId: 'counterpoint-policy-v1',
+      evidenceIds: [expect.any(String)],
+      evidenceLinks: [expect.objectContaining({ relation: 'qualifies' })],
+    });
+    const callsBefore = fixture.db.raw.prepare('SELECT COUNT(*) AS count FROM model_calls WHERE run_id = ?')
+      .get(fixture.executionId) as { count: number };
+    fixture.db.raw.prepare('DELETE FROM counterpoints WHERE run_id = ?').run(fixture.executionId);
+
+    await repairJudgeProjections({ db: fixture.db, execution: (await sessionRows(fixture)).executions[0]!, outputs });
+    await repairJudgeProjections({ db: fixture.db, execution: (await sessionRows(fixture)).executions[0]!, outputs });
+
+    const stored = await fixture.db.counterpoints.getByRun(fixture.executionId);
+    expect(stored).toHaveLength(payload.counterpoints.length);
+    expect(stored[0]).toMatchObject({
+      counterpointId: payload.counterpoints[0]!.counterpointId,
+      evidenceIds: payload.counterpoints[0]!.evidenceIds,
+      evidenceLinks: payload.counterpoints[0]!.evidenceLinks,
+      policyId: payload.counterpoints[0]!.policyId,
+    });
+    expect(fixture.db.raw.prepare('SELECT COUNT(*) AS count FROM model_calls WHERE run_id = ?')
+      .get(fixture.executionId)).toEqual(callsBefore);
+    const decoded = await decodeJudgeCheckpoint('round-1-bear-challenge', output, fixture.db, {
+      id: fixture.executionId, ticker: 'BBCA',
+    } as never) as { counterpoints: Array<Record<string, unknown>> };
+    expect(decoded.counterpoints).toEqual(payload.counterpoints);
+  });
+
+  it('reads a pre-T3 Bear checkpoint without fabricating Counterpoint grounding during repair', async () => {
+    const config = createConfig(dir);
+    const fixture = await createFixture(db, config, { suffix: 'legacy_counterpoint_repair' });
+    await runPrefix(fixture, 'round-1-bear-challenge');
+    const storedOutputs = await fixture.db.workflowNodeOutputs.listNodeOutputsForExecution(fixture.executionId);
+    const historicalOutputs = storedOutputs.map(output => {
+      if (output.nodeId !== 'round-1-bear-challenge' || !output.payload) return output;
+      const payload = output.payload as { response: Record<string, unknown>; counterpoints: Array<Record<string, unknown>> };
+      const counterpoints = payload.counterpoints.map(point => ({
+        targetClaimId: point.targetClaimId, argument: point.argument, strength: point.strength,
+      }));
+      return { ...output, payload: {
+        ...payload,
+        response: { ...payload.response, counterpoints },
+        counterpoints,
+      } };
+    });
+    fixture.db.raw.prepare('DELETE FROM counterpoints WHERE run_id = ?').run(fixture.executionId);
+    const historical = historicalOutputs.find(output => output.nodeId === 'round-1-bear-challenge')!;
+    const decoded = await decodeJudgeCheckpoint('round-1-bear-challenge', historical, fixture.db, {
+      id: fixture.executionId, ticker: 'BBCA',
+    } as never) as { counterpoints: Array<Record<string, unknown>> };
+    expect(decoded.counterpoints[0]).toEqual(expect.objectContaining({ targetClaimId: 'claim_1' }));
+    expect(decoded.counterpoints[0]).not.toHaveProperty('evidenceIds');
+    await repairJudgeProjections({ db: fixture.db, execution: (await sessionRows(fixture)).executions[0]!, outputs: historicalOutputs });
+    await repairJudgeProjections({ db: fixture.db, execution: (await sessionRows(fixture)).executions[0]!, outputs: historicalOutputs });
+    expect(await fixture.db.counterpoints.getByRun(fixture.executionId)).toEqual([]);
+  });
+
+  it.each([
+    'current response with legacy canonical list',
+    'legacy response with partial current canonical fields',
+    'current checkpoint missing policy fingerprint',
+  ])('fails closed on a downgraded or partial T3 checkpoint: %s', async (malformation) => {
+    const config = createConfig(dir);
+    const fixture = await createFixture(db, config, { suffix: `bad_counterpoint_${malformation.replaceAll(/[^a-z]+/gi, '_')}` });
+    await runPrefix(fixture, 'round-1-bear-challenge');
+    const outputs = await fixture.db.workflowNodeOutputs.listNodeOutputsForExecution(fixture.executionId);
+    const bearOutput = outputs.find(output => output.nodeId === 'round-1-bear-challenge')!;
+    const payload = bearOutput.payload as {
+      response: Record<string, unknown> & { counterpoints: Array<Record<string, unknown>> };
+      counterpoints: Array<Record<string, unknown>>;
+    };
+    const historicalPoints = payload.counterpoints.map(point => ({
+      targetClaimId: point.targetClaimId,
+      argument: point.argument,
+      strength: point.strength,
+    }));
+    let response = payload.response;
+    let counterpoints = payload.counterpoints;
+
+    if (malformation === 'current response with legacy canonical list') {
+      counterpoints = historicalPoints;
+    } else if (malformation === 'legacy response with partial current canonical fields') {
+      response = { ...payload.response, counterpoints: historicalPoints };
+      const current = payload.counterpoints[0]!;
+      counterpoints = [{
+        ...historicalPoints[0],
+        counterpointId: current.counterpointId,
+        evidenceIds: current.evidenceIds,
+        evidenceLinks: current.evidenceLinks,
+      }, ...historicalPoints.slice(1)];
+    } else {
+      counterpoints = payload.counterpoints.map((point, index) => {
+        if (index !== 0) return point;
+        return Object.fromEntries(Object.entries(point).filter(([key]) => key !== 'policyFingerprint'));
+      });
+    }
+
+    const malformedOutput = {
+      ...bearOutput,
+      payload: { ...payload, response, counterpoints },
+    } as typeof bearOutput;
+    const malformedOutputs = outputs.map(output => output.nodeId === 'round-1-bear-challenge' ? malformedOutput : output);
+    fixture.db.raw.prepare('DELETE FROM counterpoints WHERE run_id = ?').run(fixture.executionId);
+
+    await expect(decodeJudgeCheckpoint('round-1-bear-challenge', malformedOutput, fixture.db, {
+      id: fixture.executionId, ticker: 'BBCA',
+    } as never)).rejects.toThrow();
+    await expect(repairJudgeProjections({
+      db: fixture.db, execution: (await sessionRows(fixture)).executions[0]!, outputs: malformedOutputs,
+    })).rejects.toThrow();
+    expect(await fixture.db.counterpoints.getByRun(fixture.executionId)).toEqual([]);
   });
 
   it('repairs a pre-T2 Bull checkpoint without inventing Claim links or policy identity', async () => {

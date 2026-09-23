@@ -5,6 +5,7 @@ export { EvidenceStoreSqlite } from './evidenceStoreSqlite';
 export { ConversationStoreSqlite } from './conversationStoreSqlite';
 export { ExecutionStoreSqlite } from './executionStoreSqlite';
 export { ClaimStoreSqlite } from './claimStoreSqlite';
+export { CounterpointStoreSqlite } from './counterpointStoreSqlite';
 export { JudgmentStoreSqlite } from './judgmentStoreSqlite';
 export { searchEvidence } from './search';
 export { NormalizedStore } from './normalized';

@@ -90,6 +90,51 @@ describe('specialist context contracts', () => {
     })).toThrow(/claim/i);
   });
 
+  it('preserves current grounded Counterpoint Evidence and rejects Evidence outside the selected set', () => {
+    const grounded = {
+      ...bearCounterpoint,
+      counterpointId: 'counterpoint:round-1-bear-challenge:1',
+      sourceNodeId: 'round-1-bear-challenge',
+      evidenceIds: [EVIDENCE_B],
+      evidenceLinks: [{ evidenceId: EVIDENCE_B, relation: 'qualifies', rationale: 'Quarterly reporting qualifies the claim.' }],
+      citedFigures: [{ evidenceId: EVIDENCE_B, path: 'quarters[0].revenueGrowthYoy', value: 12.7, periodLabel: 'Q2 2026' }],
+      policyId: 'counterpoint-policy-v1',
+      policyFingerprint: 'a'.repeat(64),
+    };
+    const context = assembleSpecialistContext({
+      ...common, role: 'BULL', phase: 'REBUTTAL', bullClaims: [bullClaim], bearCounterpoints: [grounded],
+    });
+    expect(context.specialist.bearCounterpoints?.[0]).toEqual(grounded);
+    expect(renderSpecialistContext(context).roleZone).toContain('counterpoint-policy-v1');
+
+    expect(() => assembleSpecialistContext({
+      ...common, role: 'BULL', phase: 'REBUTTAL', bullClaims: [bullClaim],
+      bearCounterpoints: [{ ...grounded, evidenceIds: ['33333333-3333-4333-8333-333333333333'], evidenceLinks: [
+        { evidenceId: '33333333-3333-4333-8333-333333333333', relation: 'qualifies', rationale: 'Not selected.' },
+      ], citedFigures: undefined }],
+    })).toThrow(/evidence/i);
+  });
+
+  it.each([
+    ['Evidence fields without current identity and Policy metadata', {
+      ...bearCounterpoint,
+      evidenceIds: [EVIDENCE_B],
+      evidenceLinks: [{ evidenceId: EVIDENCE_B, relation: 'qualifies', rationale: 'Quarterly reporting qualifies the claim.' }],
+    }],
+    ['identity fields without complete Policy metadata', {
+      ...bearCounterpoint,
+      counterpointId: 'counterpoint:round-1-bear-challenge:1',
+      sourceNodeId: 'round-1-bear-challenge',
+      evidenceIds: [EVIDENCE_B],
+      evidenceLinks: [{ evidenceId: EVIDENCE_B, relation: 'qualifies', rationale: 'Quarterly reporting qualifies the claim.' }],
+      policyId: 'counterpoint-policy-v1',
+    }],
+  ])('rejects partial current Counterpoint fields in specialist context (%s)', (_label, counterpoint) => {
+    expect(() => assembleSpecialistContext({
+      ...common, role: 'BULL', phase: 'REBUTTAL', bullClaims: [bullClaim], bearCounterpoints: [counterpoint as never],
+    })).toThrow();
+  });
+
   it('keeps specialist snapshots explicit without changing conversation snapshot semantics', () => {
     const context = assembleSpecialistContext({ ...common, role: 'BULL', phase: 'THESIS' });
     const snapshot = createContextSnapshot({ sessionId: 'session-1', turnId: 'turn-1', packet: context, createdAt: '2026-09-18T00:00:00.000Z' });

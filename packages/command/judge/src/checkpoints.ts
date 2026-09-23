@@ -8,7 +8,7 @@ import type {
   QuarterlyFinancials,
   Sentiment,
 } from '@harness/financial-data';
-import type { Claim, Evidence, Judgment, BearCounterpoint } from '@harness/schemas';
+import type { Claim, Evidence, Judgment, BearCounterpointContext } from '@harness/schemas';
 import type { JsonValue } from '@harness/session-core';
 import type { JudgeNodeId } from './definition.js';
 
@@ -90,7 +90,7 @@ export interface JudgeBullCheckpoint {
 
 export interface JudgeBearCheckpoint {
   response: JsonValue;
-  counterpoints: BearCounterpoint[];
+  counterpoints: BearCounterpointContext[];
   audit: JudgeModelAudit;
 }
 

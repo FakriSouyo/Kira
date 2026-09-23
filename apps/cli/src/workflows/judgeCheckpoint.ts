@@ -20,8 +20,8 @@ import {
 import type { WorkflowDefinition, WorkflowNode, WorkflowRestoreSeed } from '@harness/command-core';
 import { createWorkflowNodeOutput, type JsonValue, type WorkflowNodeOutput } from '@harness/session-core';
 import type { Evidence } from '@harness/schemas';
-import { BearCounterpointSchema, BearLLMOutputSchema, BullLLMOutputSchema, ClaimSchema, JudgmentSchema } from '@harness/schemas';
-import type { GroundedClaim } from '@harness/execution';
+import { BearLLMOutputSchema, BearProposalResponseSchema, GroundedCounterpointSchema, HistoricalBearCounterpointSchema, BullLLMOutputSchema, ClaimSchema, JudgmentSchema, type BearCounterpoint, type BearCounterpointContext, type GroundedCounterpoint } from '@harness/schemas';
+import { COUNTERPOINT_POLICY_FINGERPRINT, COUNTERPOINT_POLICY_ID, type GroundedClaim } from '@harness/execution';
 import type { ArtifactEnvelope } from '@harness/schemas';
 import { verifyFinancialObservation } from '@harness/financial-data';
 import type { SubagentResultLike, RestoredSubagentResult } from '@harness/subagent-core';
@@ -129,13 +129,13 @@ async function encodePayload(nodeId: JudgeNodeId, value: unknown, db: Finharness
     case 'round-1-bull-thesis':
       return { response: (value as ThesisTurn).response, claims: (value as ThesisTurn).claims, audit: modelAudit((value as ThesisTurn).result) } as unknown as JsonValue;
     case 'round-1-bear-challenge':
-      return { response: (value as ChallengeTurn).response, counterpoints: (value as ChallengeTurn).response.counterpoints, audit: modelAudit((value as ChallengeTurn).result) } as unknown as JsonValue;
+      return { response: (value as ChallengeTurn).response, counterpoints: (value as ChallengeTurn).counterpoints, audit: modelAudit((value as ChallengeTurn).result) } as unknown as JsonValue;
     case 'round-2-bull-rebuttal':
       return { response: (value as ThesisTurn).response, claims: (value as ThesisTurn).claims, audit: modelAudit((value as ThesisTurn).result) } as unknown as JsonValue;
     case 'evaluate-arguments':
       return { judgment: (value as JudgeTurn).judgment, allClaims: (value as JudgeTurn).allClaims, needsExtra: (value as JudgeTurn).needsExtra, audit: modelAudit((value as JudgeTurn).result) } as unknown as JsonValue;
     case 'conditional-bear-rechallenge':
-      return { response: (value as ChallengeTurn).response, counterpoints: (value as ChallengeTurn).response.counterpoints, audit: modelAudit((value as ChallengeTurn).result) } as unknown as JsonValue;
+      return { response: (value as ChallengeTurn).response, counterpoints: (value as ChallengeTurn).counterpoints, audit: modelAudit((value as ChallengeTurn).result) } as unknown as JsonValue;
     case 'conditional-bull-rebuttal':
       return { response: (value as ThesisTurn).response, claims: (value as ThesisTurn).claims, audit: modelAudit((value as ThesisTurn).result) } as unknown as JsonValue;
     case 'resolve-conflicts':
@@ -348,6 +348,64 @@ function assertSameSemanticParts(left: unknown, right: unknown, label: string): 
   if (canonicalJson(left) !== canonicalJson(right)) throw new Error(`Judge checkpoint ${label} does not match its normalized payload`);
 }
 
+const HistoricalBearCheckpointResponseSchema = BearLLMOutputSchema.extend({
+  counterpoints: HistoricalBearCounterpointSchema.array().min(1),
+});
+
+const CURRENT_COUNTERPOINT_MARKERS = [
+  'evidenceIds', 'evidenceLinks', 'citedFigures', 'counterpointId', 'sourceNodeId', 'policyId', 'policyFingerprint',
+] as const;
+
+type ParsedCheckpointCounterpoints =
+  | { kind: 'current'; response: ReturnType<typeof BearProposalResponseSchema.parse>; counterpoints: GroundedCounterpoint[] }
+  | { kind: 'historical'; response: unknown; counterpoints: BearCounterpoint[] };
+
+function containsCurrentCounterpointMarkers(value: unknown): boolean {
+  return Array.isArray(value) && value.some(point => typeof point === 'object' && point !== null
+    && CURRENT_COUNTERPOINT_MARKERS.some(key => Object.prototype.hasOwnProperty.call(point, key)));
+}
+
+/** Classifies both serialized Bear representations together and rejects mixed T3/legacy checkpoints. */
+function parseCheckpointCounterpoints(
+  nodeId: JudgeNodeId,
+  responseValue: unknown,
+  counterpointsValue: unknown,
+  label: string,
+): ParsedCheckpointCounterpoints {
+  if (!Array.isArray(counterpointsValue)) throw new Error(`Judge checkpoint ${label} has invalid Counterpoints`);
+  const responseCounterpoints = typeof responseValue === 'object' && responseValue !== null
+    ? (responseValue as Record<string, unknown>).counterpoints
+    : undefined;
+  const isCurrent = containsCurrentCounterpointMarkers(responseCounterpoints)
+    || containsCurrentCounterpointMarkers(counterpointsValue);
+
+  if (isCurrent) {
+    const response = BearProposalResponseSchema.parse(responseValue);
+    const counterpoints = GroundedCounterpointSchema.array().parse(counterpointsValue);
+    counterpoints.forEach((point, index) => {
+      if (point.sourceNodeId !== nodeId || point.counterpointId !== `counterpoint:${nodeId}:${index + 1}`
+        || point.policyId !== COUNTERPOINT_POLICY_ID || point.policyFingerprint !== COUNTERPOINT_POLICY_FINGERPRINT) {
+        throw new Error(`Judge checkpoint ${label} has invalid Counterpoint identity or Policy metadata`);
+      }
+    });
+    const proposals = counterpoints.map(point => ({
+      targetClaimId: point.targetClaimId,
+      argument: point.argument,
+      strength: point.strength,
+      evidenceIds: point.evidenceIds,
+      evidenceLinks: point.evidenceLinks,
+      ...(point.citedFigures !== undefined ? { citedFigures: point.citedFigures } : {}),
+    }));
+    assertSameSemanticParts(response.counterpoints, proposals, `${label} Counterpoints`);
+    return { kind: 'current', response, counterpoints };
+  }
+
+  const historicalResponse = HistoricalBearCheckpointResponseSchema.parse(responseValue);
+  const counterpoints = HistoricalBearCounterpointSchema.array().parse(counterpointsValue);
+  assertSameSemanticParts(historicalResponse.counterpoints, counterpoints, `${label} historical Counterpoints`);
+  return { kind: 'historical', response: responseValue, counterpoints };
+}
+
 /** Validates durable Judge outputs before acquisition and derives the restore frontier. */
 async function planJudgeCheckpoint(params: {
   db: FinharnessDatabase;
@@ -557,12 +615,17 @@ export async function decodeJudgeCheckpoint(
     case 'round-1-bear-challenge':
     case 'conditional-bear-rechallenge': {
       const checkpoint = payload as unknown as JudgeBearCheckpoint;
-      const response = BearLLMOutputSchema.parse(checkpoint.response);
-      const counterpoints = BearCounterpointSchema.array().parse(checkpoint.counterpoints);
       if (typeof (checkpoint.response as Record<string, unknown>).messageId !== 'string') throw new Error(`Judge checkpoint ${execution.id}/${nodeId} has no message identity`);
-      assertSameSemanticParts(response.counterpoints, counterpoints, `${execution.id}/${nodeId} counterpoints`);
       const audit = assertModelAudit(checkpoint.audit);
-      return { response: checkpoint.response as unknown as BearChallengeResponse, result: resultFromAudit(audit, checkpoint.response) } satisfies ChallengeTurn;
+      const parsed = parseCheckpointCounterpoints(nodeId, checkpoint.response, checkpoint.counterpoints, `${execution.id}/${nodeId}`);
+      if (parsed.kind === 'current') {
+        return { response: parsed.response, counterpoints: parsed.counterpoints, result: resultFromAudit(audit, checkpoint.response) } satisfies ChallengeTurn;
+      }
+      return {
+        response: checkpoint.response as unknown as BearChallengeResponse,
+        counterpoints: parsed.counterpoints as BearCounterpointContext[],
+        result: resultFromAudit(audit, checkpoint.response),
+      } satisfies ChallengeTurn;
     }
     case 'evaluate-arguments':
     case 'resolve-conflicts': {
@@ -618,13 +681,16 @@ function checkpointMessage(nodeId: JudgeNodeId, runId: string, ticker: string, p
   }
   if (nodeId === 'round-1-bear-challenge' || nodeId === 'conditional-bear-rechallenge') {
     const response = payload.response as { messageId: string; reasoning?: string; evidenceIds?: string[]; counterpoints?: Array<{ targetClaimId: string; strength: string; argument: string }> };
+    const counterpoints = Array.isArray(payload.counterpoints)
+      ? payload.counterpoints as Array<{ targetClaimId: string; strength: string; argument: string }>
+      : response.counterpoints ?? [];
     const conditional = nodeId === 'conditional-bear-rechallenge';
-    const content = `${response.reasoning ?? ''}\n${(response.counterpoints ?? []).map((counterpoint, index) => `Challenge #${index + 1} (targets claim ${counterpoint.targetClaimId}, strength ${counterpoint.strength}): ${counterpoint.argument}`).join('\n')}`;
+    const content = `${response.reasoning ?? ''}\n${counterpoints.map((counterpoint, index) => `Challenge #${index + 1} (targets claim ${counterpoint.targetClaimId}, strength ${counterpoint.strength}): ${counterpoint.argument}`).join('\n')}`;
     return {
       messageId: conditional ? `${response.messageId}_conditional` : response.messageId,
       agent: 'bear', messageType: 'challenge', content, evidenceIds: response.evidenceIds ?? [],
       sequenceOrder: conditional ? 5 : 2,
-      metadata: { challengeCount: response.counterpoints?.length ?? 0, seenEvidenceIds, ...(conditional ? { conditional: true } : {}) },
+      metadata: { challengeCount: counterpoints.length, seenEvidenceIds, ...(conditional ? { conditional: true } : {}) },
     };
   }
   if (nodeId === 'evaluate-arguments' || nodeId === 'resolve-conflicts') {
@@ -652,11 +718,16 @@ export async function repairJudgeProjections(params: {
     && Array.isArray((selectionOutput.payload as Record<string, unknown>).evidenceIds)
     ? (selectionOutput.payload as { evidenceIds: unknown[] }).evidenceIds.filter((id): id is string => typeof id === 'string')
     : [];
+  const currentCounterpointsToRepair: Array<{ messageId: string; counterpoint: GroundedCounterpoint }> = [];
   for (const output of params.outputs) {
     const nodeId = output.nodeId as JudgeNodeId;
     const node = definition.nodes.find(candidate => candidate.id === nodeId);
     if (!node) throw new Error(`Judge projection repair references unknown node ${nodeId}`);
     const payload = output.payload as Record<string, unknown> | null;
+    const parsedBearCounterpoints = output.status === 'completed' && payload
+      && (nodeId === 'round-1-bear-challenge' || nodeId === 'conditional-bear-rechallenge')
+      ? parseCheckpointCounterpoints(nodeId, payload.response, payload.counterpoints, `${params.execution.id}/${nodeId}`)
+      : undefined;
     const optionalFailure = payload?.outcome === 'optional-failure';
     const existingStep = await params.db.sessions.getStep(params.execution.id, nodeId);
     const desiredStatus = output.status === 'skipped' ? 'skipped' : optionalFailure ? 'failed' : 'completed';
@@ -680,6 +751,24 @@ export async function repairJudgeProjections(params: {
     const message = checkpointMessage(nodeId, params.execution.id, params.execution.ticker, completedPayload, seenEvidenceIds);
     if (message) {
       await params.db.conversation.addMessage({ runId: params.execution.id, ...message });
+    }
+    if (nodeId === 'round-1-bear-challenge' || nodeId === 'conditional-bear-rechallenge') {
+      if (!parsedBearCounterpoints) throw new Error(`Judge checkpoint ${params.execution.id}/${nodeId} has no validated Counterpoint list`);
+      if (parsedBearCounterpoints.kind === 'current') {
+        const { response, counterpoints } = parsedBearCounterpoints;
+        const seen = new Set(seenEvidenceIds);
+        const responseIds = new Set(response.evidenceIds);
+        for (const id of response.evidenceIds) {
+          if (!seen.has(id)) throw new Error(`Current Bear checkpoint Evidence ${id} is outside seen Evidence`);
+        }
+        counterpoints.forEach(counterpoint => {
+          if (counterpoint.evidenceIds.some(id => !responseIds.has(id) || !seen.has(id))) {
+            throw new Error(`Current Counterpoint ${counterpoint.counterpointId} Evidence is outside the Bear response or seen Evidence`);
+          }
+          if (!message?.messageId) throw new Error(`Current Counterpoint ${counterpoint.counterpointId} has no durable message identity`);
+          currentCounterpointsToRepair.push({ messageId: message.messageId, counterpoint });
+        });
+      }
     }
     const claims = (completedPayload.claims ?? []) as Array<Record<string, unknown>>;
     if (claims.length > 0 && (nodeId === 'round-1-bull-thesis' || nodeId === 'round-2-bull-rebuttal' || nodeId === 'conditional-bull-rebuttal')) {
@@ -727,6 +816,13 @@ export async function repairJudgeProjections(params: {
         });
       }
     }
+  }
+  for (const current of currentCounterpointsToRepair) {
+    await params.db.counterpoints.save({
+      runId: params.execution.id,
+      messageId: current.messageId,
+      counterpoint: current.counterpoint,
+    });
   }
 }
 
@@ -782,7 +878,7 @@ export async function ensureJudgeArtifacts(params: {
       kind: 'BEAR_CASE', schemaVersion: 1,
       sessionId: params.execution.sessionId, turnId: params.execution.turnId, executionId: params.execution.id,
       ticker: params.execution.ticker,
-      payload: challenge.response,
+      payload: { ...challenge.response, counterpoints: challenge.counterpoints },
       createdAt,
     },
     {

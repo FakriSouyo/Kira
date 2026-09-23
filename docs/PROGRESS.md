@@ -11,7 +11,8 @@ complete on `master`.
 **S2 — Workspace + File Capability** and **S3 — Document Understanding /
 Retrieval** and **T1 — Evidence Acceptance + Provenance** are complete on
 master. **T2 — Claim Grounding + Durable Claim Model** is complete in the
-current implementation. **T3 — Counterpoint Grounding + Durability** is next.
+current implementation. **T3 — Counterpoint Grounding + Durability** is
+implemented in the current worktree pending source review; T4 is next.
 
 The canonical future sequence and dependency rationale live in
 [`docs/ROADMAP.md`](ROADMAP.md). This document is the mutable current-status
@@ -327,7 +328,29 @@ assertions. Code derives `singleMetric`. Migration `0018` stores full grounding
 and policy identity on canonical Claims. Historical rows and Judge checkpoints
 remain readable without fabricated links; projection repair is idempotent for
 current and historical Claims. Judge nodes, workflow version, capabilities,
-verdict scoring, and artifact kinds are unchanged. **T3 is next.**
+verdict scoring, and artifact kinds are unchanged.
+
+### T3 — Counterpoint Grounding + Durability
+
+Status: **implemented in the current worktree pending source review**.
+
+Bear model output now uses a strict proposal schema with Evidence links and
+optional CitedFigures for each Counterpoint. `counterpoint-policy-v1` checks
+targets, allowed/seen/response Evidence scope, execution membership, link
+integrity, and numeric assertions against linked CitedFigures. Code owns the
+source-node-scoped IDs and policy fingerprint. Migration `0019` stores complete
+canonical Counterpoints per Execution, and ExecutionStore exposes the same
+fail-closed projection as CounterpointStore.
+
+Current checkpoints keep model proposals separate from grounded Counterpoints;
+resume and projection repair restore full durable rows idempotently without
+model calls. Historical checkpoints remain readable without fabricated T3
+grounding. Specialist contexts preserve all current Evidence, link, figure,
+identity, and policy fields. `BEAR_CASE` keeps its existing kind and includes
+the round-one grounded points; conditional re-challenge points are also
+durable. The 15-node Judge graph, workflow version, capability plan, verdict
+scoring, and artifact kinds are unchanged. T4 Claim Graph and T5 release
+integrity remain future work.
 
 ## Maintenance policy
 

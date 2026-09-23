@@ -15,7 +15,7 @@ const claim: Claim = {
   evidenceIds: [evidenceId],
 };
 
-function runtimeFor(targetClaimId: string): SubagentRuntime {
+function runtimeFor(targetClaimId: string, counterpointFields: Record<string, unknown> = {}): SubagentRuntime {
   const llm = {
     async generateObjectResult<T>(params: GenerateObjectParams<T>): Promise<{ value: T; metadata: LLMCallMetadata }> {
       return { value: params.schema.parse({
@@ -24,6 +24,9 @@ function runtimeFor(targetClaimId: string): SubagentRuntime {
           targetClaimId,
           argument: 'The available reporting window does not establish persistence.',
           strength: 'moderate',
+          evidenceIds: [evidenceId],
+          evidenceLinks: [{ evidenceId, relation: 'qualifies', rationale: 'The supplied evidence covers only the observed reporting window.' }],
+          ...counterpointFields,
         }],
         evidenceIds: [evidenceId],
       }), metadata: {
@@ -51,8 +54,20 @@ describe('BearAgent specialist', () => {
       bullClaims: [claim],
     });
 
-    expect(result.value.counterpoints[0]?.targetClaimId).toBe('claim_1');
+    expect(result.value.counterpoints[0]).toMatchObject({
+      targetClaimId: 'claim_1', evidenceIds: [evidenceId],
+      evidenceLinks: [{ evidenceId, relation: 'qualifies' }],
+    });
     expect(result.skills).toHaveLength(1);
+  });
+
+  it('rejects model-owned Counterpoint identity and policy metadata', async () => {
+    await expect(new BearAgent(runtimeFor('claim_1', { counterpointId: 'model-owned' })).challenge({
+      ticker: 'BBCA', evidenceZone: 'STABLE EVIDENCE', bullClaims: [claim],
+    })).rejects.toThrow();
+    await expect(new BearAgent(runtimeFor('claim_1', { policyId: 'counterpoint-policy-v1' })).challenge({
+      ticker: 'BBCA', evidenceZone: 'STABLE EVIDENCE', bullClaims: [claim],
+    })).rejects.toThrow();
   });
 
   it('rejects an LLM counterpoint targeting an unknown Bull claim', async () => {

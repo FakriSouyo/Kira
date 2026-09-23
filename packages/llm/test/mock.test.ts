@@ -1,6 +1,7 @@
 import { renderEvidenceBlock } from '@harness/shared';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { BearProposalOutputSchema } from '@harness/schemas';
 import { MockLLMClient, createMockModelRuntime } from '../src/index';
 
 const BULL_OUTPUT_SCHEMA = z.object({
@@ -63,20 +64,6 @@ const BULL_ZONE2 = 'You are Bull Agent, an optimistic financial analyst.';
 const BEAR_ZONE2 = 'You are Bear Agent, a skeptical financial analyst.';
 const JUDGE_SYSTEM = 'You are Judge Agent, a neutral arbiter.';
 const ROUTER_SYSTEM = 'You are Intent Router for Financial Agent Harness.';
-
-const BEAR_OUTPUT_SCHEMA = z.object({
-  reasoning: z.string().min(10),
-  counterpoints: z
-    .array(
-      z.object({
-        targetClaimId: z.string().min(1),
-        argument: z.string().min(5),
-        strength: z.enum(['high', 'moderate', 'low']),
-      }),
-    )
-    .min(1),
-  evidenceIds: z.array(z.string().uuid()),
-});
 
 /** Format prompt challenge milik specialist Bear. */
 const BEAR_PROMPT = `You are a bearish analyst evaluating BBCA.
@@ -214,7 +201,7 @@ describe('MockLLMClient — Bear (Phase 1)', () => {
 
   it('targets the bull claim ids from the prompt, grounded in evidence numbers', async () => {
     const result = await mock.generateObject({
-      schema: BEAR_OUTPUT_SCHEMA,
+      schema: BearProposalOutputSchema,
       prompt: BEAR_PROMPT,
       system: [BULL_ZONE1, BEAR_ZONE2],
     });
@@ -229,10 +216,22 @@ describe('MockLLMClient — Bear (Phase 1)', () => {
     expect(result.counterpoints[1].argument).toContain('8.7');
     expect(result.counterpoints[1].strength).toBe('moderate');
     expect(result.evidenceIds).toEqual([E1, E2]);
+    expect(result.counterpoints).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        evidenceIds: [E1],
+        evidenceLinks: [expect.objectContaining({ evidenceId: E1, relation: 'qualifies' })],
+        citedFigures: [expect.objectContaining({ evidenceId: E1, path: 'financials.roe', value: 23.1 })],
+      }),
+      expect.objectContaining({
+        evidenceIds: [E2],
+        evidenceLinks: [expect.objectContaining({ evidenceId: E2, relation: 'qualifies' })],
+        citedFigures: [expect.objectContaining({ evidenceId: E2, path: 'quarters[0].netIncomeGrowthYoy', value: 8.7 })],
+      }),
+    ]));
   });
 
   it('is deterministic across calls', async () => {
-    const params = { schema: BEAR_OUTPUT_SCHEMA, prompt: BEAR_PROMPT, system: [BULL_ZONE1, BEAR_ZONE2] };
+    const params = { schema: BearProposalOutputSchema, prompt: BEAR_PROMPT, system: [BULL_ZONE1, BEAR_ZONE2] };
     expect(await mock.generateObject(params)).toEqual(await mock.generateObject(params));
   });
 });

@@ -287,7 +287,14 @@ function generateBull(prompt: string, system: string): BullOutput {
 
 interface BearOutput {
   reasoning: string;
-  counterpoints: Array<{ targetClaimId: string; argument: string; strength: 'high' | 'moderate' | 'low' }>;
+  counterpoints: Array<{
+    targetClaimId: string;
+    argument: string;
+    strength: 'high' | 'moderate' | 'low';
+    evidenceIds: string[];
+    evidenceLinks: Array<{ evidenceId: string; relation: 'supports' | 'contradicts' | 'qualifies'; rationale: string }>;
+    citedFigures?: Array<{ evidenceId: string; path: string; value: number; periodLabel: string }>;
+  }>;
   evidenceIds: string[];
 }
 
@@ -304,20 +311,29 @@ function generateBear(prompt: string, system: string): BearOutput {
   while ((m = claimRe.exec(prompt)) !== null) claims.push({ id: m[1] });
 
   let roe: number | null = null;
+  let roeEvidenceId: string | undefined;
   let niGrowth: number | null = null;
+  let niGrowthEvidenceId: string | undefined;
   for (const ev of evidence) {
     const f = ev.data.financials as Record<string, unknown> | undefined;
-    if (f && typeof f.roe === 'number') roe = f.roe;
+    if (f && typeof f.roe === 'number') { roe = f.roe; roeEvidenceId = ev.id; }
     const q = ev.data.quarters as Array<Record<string, unknown>> | undefined;
     if (Array.isArray(q) && q.length > 0 && typeof q[0].netIncomeGrowthYoy === 'number') {
       niGrowth = q[0].netIncomeGrowthYoy;
+      niGrowthEvidenceId = ev.id;
     }
   }
+
+  const linkedEvidence = (id: string) => ({
+    evidenceIds: [id],
+    evidenceLinks: [{ evidenceId: id, relation: 'qualifies' as const, rationale: 'This source records the observed metric and qualifies the targeted Claim.' }],
+  });
 
   const counterpoints: BearOutput['counterpoints'] = [];
   if (claims.length > 0) {
     const strength: 'high' | 'moderate' =
       roe !== null && roe >= 15 ? 'moderate' : niGrowth !== null && niGrowth < 5 ? 'high' : 'moderate';
+    const evidenceId = roeEvidenceId ?? evidence[0]?.id ?? 'evidence_unknown';
     counterpoints.push({
       targetClaimId: claims[0].id,
       argument:
@@ -326,9 +342,12 @@ function generateBear(prompt: string, system: string): BearOutput {
             `the company report does not break out balance-sheet detail, so this figure warrants corroboration before it is treated as durable.`
           : `The cited evidence covers a single reporting snapshot; without multi-year trend data the robustness of the thesis is limited.`,
       strength,
+      ...linkedEvidence(evidenceId),
+      ...(roe !== null ? { citedFigures: [{ evidenceId, path: 'financials.roe', value: roe, periodLabel: 'latest reported period' }] } : {}),
     });
   }
   if (claims.length > 1) {
+    const evidenceId = niGrowthEvidenceId ?? evidence[0]?.id ?? 'evidence_unknown';
     counterpoints.push({
       targetClaimId: claims[1].id,
       argument:
@@ -337,6 +356,8 @@ function generateBear(prompt: string, system: string): BearOutput {
             `a single-quarter reading does not establish the consistency the claim implies.`
           : `Growth is asserted from the latest period alone; earlier periods in the evidence do not clearly confirm a sustained trajectory.`,
       strength: niGrowth !== null && niGrowth >= 7 ? 'moderate' : 'high',
+      ...linkedEvidence(evidenceId),
+      ...(niGrowth !== null ? { citedFigures: [{ evidenceId, path: 'quarters[0].netIncomeGrowthYoy', value: niGrowth, periodLabel: 'latest reported quarter' }] } : {}),
     });
   }
 
@@ -354,6 +375,7 @@ function generateBear(prompt: string, system: string): BearOutput {
             targetClaimId: 'claim_1',
             argument: 'The claims reference a single reporting period; durability is not established by the available evidence.',
             strength: 'low',
+            ...linkedEvidence(evidence[0]?.id ?? 'evidence_unknown'),
           },
         ],
     evidenceIds: evidence.map((e) => e.id),

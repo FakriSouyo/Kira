@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ClaimSchema, JudgmentSchema } from './claim.js';
+import { BearCounterpointSchema, GroundedCounterpointSchema } from './debate.js';
 
 /** Artifact kinds currently produced by the canonical `/judge` workflow. */
 export const ARTIFACT_KINDS = ['BULL_CASE', 'BEAR_CASE', 'VERDICT'] as const;
@@ -29,14 +30,12 @@ const BullCaseArgumentSchema = z.object({
   evidenceIds: z.array(z.string().uuid()),
 }).strict();
 
+const BearCaseCounterpointSchema = z.union([GroundedCounterpointSchema, BearCounterpointSchema.strict()]);
+
 const BearCaseArgumentSchema = z.object({
   messageId: z.string().min(1),
   reasoning: z.string().min(10),
-  counterpoints: z.array(z.object({
-    targetClaimId: z.string().min(1),
-    argument: z.string().min(5),
-    strength: z.enum(['high', 'moderate', 'low']),
-  }).strict()).min(1),
+  counterpoints: BearCaseCounterpointSchema.array().min(1),
   evidenceIds: z.array(z.string().uuid()),
 }).strict();
 

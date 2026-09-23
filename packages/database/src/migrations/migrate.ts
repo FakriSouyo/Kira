@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import type Database from 'better-sqlite3';
 
 /** Daftar migrasi berurutan. File SQL dijalankan sekali, dicatat di _migrations. */
-const MIGRATIONS = ['./0001_initial.sql', './0002_normalized.sql', './0003_run_evidence.sql', './0004_evidence_hash_scoped.sql', './0005_research_sessions.sql', './0006_conversation_journal.sql', './0007_canonical_lifecycle.sql', './0008_session_working_context.sql', './0009_artifacts.sql', './0010_context_snapshots.sql', './0011_turn_model_calls.sql', './0012_financial_snapshots.sql', './0013_durable_resumability.sql', './0014_durable_model_selection.sql', './0015_attachments.sql', './0016_documents.sql', './0017_evidence_policy.sql', './0018_claim_grounding.sql'] as const;
+const MIGRATIONS = ['./0001_initial.sql', './0002_normalized.sql', './0003_run_evidence.sql', './0004_evidence_hash_scoped.sql', './0005_research_sessions.sql', './0006_conversation_journal.sql', './0007_canonical_lifecycle.sql', './0008_session_working_context.sql', './0009_artifacts.sql', './0010_context_snapshots.sql', './0011_turn_model_calls.sql', './0012_financial_snapshots.sql', './0013_durable_resumability.sql', './0014_durable_model_selection.sql', './0015_attachments.sql', './0016_documents.sql', './0017_evidence_policy.sql', './0018_claim_grounding.sql', './0019_counterpoint_grounding.sql'] as const;
 
 const TURN_MODEL_CALL_COLUMNS = [
   'id', 'run_id', 'step_id', 'context_snapshot_id', 'subagent', 'provider', 'model', 'attempt',
