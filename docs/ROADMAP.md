@@ -49,16 +49,19 @@ R2C2
 S1
 S2
 
-COMPLETE IN CURRENT IMPLEMENTATION
+COMPLETE ON MASTER
 
 S3
 T1 Evidence Acceptance + Provenance
-
-NEXT
-
 T2 Claim Grounding + Durable Claim Model
 T3 Counterpoint Grounding + Durability
+
+IMPLEMENTED IN CURRENT T4 WORKTREE, PENDING SOURCE REVIEW
+
 T4 Claim Graph Core
+
+NEXT / FUTURE
+
 T5 Judge Integration + Release Integrity
 
 FUTURE RESEARCH PRODUCT COMPLETION
@@ -92,7 +95,7 @@ research capability maturation. Discovery and design for later milestones may
 begin earlier, but production implementations must not bypass the dependency
 boundaries established by earlier milestones.
 
-## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1 on master; T2 in current implementation
+## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1-T3 on master; T4 in current worktree
 
 The following milestones are complete in the current implementation:
 
@@ -360,9 +363,9 @@ finally cross-surface product delivery.
 ## S — Files & Documents
 
 S is knowledge-input work. It is deliberately distinct from Evidence, Artifacts,
-Context, and Memory. S1, S2, S3, and T1 are complete on master. T2 is complete
-in the current implementation. T3 is implemented in the current worktree
-pending source review; T4 and T5 remain future work.
+Context, and Memory. S1, S2, S3, T1, T2, and T3 are complete on master. T4
+Claim Graph Core is implemented in the current T4 worktree pending source
+review. T5 Judge Integration + Release Integrity is next/future work.
 
 ### S1 — Durable File / Attachment Layer
 
@@ -504,7 +507,7 @@ T4 Claim Graph Core
 T5 Judge Integration + Release Integrity
 ```
 
-Status: **T1 complete on master; T2 complete and T3 implemented in the current worktree; T4-T5 remain future work**.
+Status: **T1, T2, and T3 complete on master; T4 implemented in the current T4 worktree pending source review; T5 remains next/future work**.
 
 ### T1 — Evidence Acceptance + Provenance
 
@@ -548,6 +551,8 @@ unchanged.
 
 ### T3 — Counterpoint Grounding + Durability
 
+Status: **complete on master**.
+
 Current Bear model output uses a strict proposal schema with per-Counterpoint
 Evidence IDs, explicit Evidence links, and optional CitedFigures. The model
 cannot supply Counterpoint identity or Policy metadata. Historical Bear output
@@ -568,13 +573,30 @@ Typed Bear-to-Bull and Judge contexts retain the complete grounded records.
 `BEAR_CASE` projects the round-one grounded points while the durable store also
 retains conditional re-challenge points. The 15-node Judge graph, workflow
 version, capability plan, deterministic verdict scoring, and artifact kinds
-remain unchanged. Claim Graph edges and release integration remain T4 and T5.
+remain unchanged.
 
-### T4-T5 — Remaining relationship integrity
+### T4 — Claim Graph Core
 
-T4 will add typed immutable Claim Graph edges using the domain stores as node
-authorities. T5 will integrate graph release checks and restart-repairable
-Artifact graph projection.
+T4 adds an execution-local typed Claim Graph as a deterministic projection of
+the canonical `ClaimStore` and current `CounterpointStore` authorities. Nodes
+remain owned by those stores. `Counterpoint.targetClaimId` is the sole durable
+Claim/Counterpoint relationship and is projected as
+`Counterpoint --targets--> Claim`; no graph edge table or duplicate migration
+is needed. `ClaimGraphReaderSqlite` reconstructs graphs from durable rows, and
+`ExecutionArtifacts` exposes the same result through the shared pure builder.
+
+Historical Claims remain nodes without fabricated T2 metadata, while historical
+pre-T3 Bear Counterpoints are not fabricated as graph nodes. Claim proposals do
+not name a specific Counterpoint, so T4 creates no rebuttal relationships.
+Reads reject cross-Execution rows, duplicate identities, missing targets, and
+corrupt canonical projections. T4 does not alter Judge artifacts, release
+semantics, the 15-node Judge graph, or workflow version 2.
+
+### T5 — Judge Integration + Release Integrity
+
+T5 remains future work. It may integrate graph completeness checks into Judge
+publication and define restart-repairable artifact graph projection, but those
+release changes are not part of T4.
 
 T strengthens explicit relationships among Evidence, Claims, Theses,
 Counterclaims, and Artifacts:
@@ -589,7 +611,8 @@ Claim 2 --challenges--> Thesis A
 Later T slices may add typed `supports`, `contradicts`, `qualifies`,
 `depends_on`, and `derived_from` relationships as source explicitly supports
 them. T1's Evidence Policy accepts scoped candidates, and T2 records explicit
-Claim Evidence relationships. The Claim Graph schema remains future work.
+Claim Evidence relationships. T4 currently projects only the declared
+Counterpoint target relation; other graph relationships remain future work.
 
 ## U — Research Composition + Product Completion
 

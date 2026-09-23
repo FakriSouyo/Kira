@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { asc, desc, eq } from 'drizzle-orm';
 import type { Orm } from './client';
 import { agentMessages, claims, counterpoints as counterpointRows, evidence, executions, judgments, runEvidence } from './schema';
-import type { ExecutionArtifacts, ExecutionRun, ExecutionStore } from '@harness/execution';
+import { buildClaimGraph, type ExecutionArtifacts, type ExecutionRun, type ExecutionStore } from '@harness/execution';
 import { UserFriendlyError } from '@harness/shared';
 // reuse pemetaan evidence terpusat (Deviasi #19) — hindari duplikasi snake→camel
 import { type EvidenceRow, toEvidence } from './evidenceStoreSqlite';
@@ -154,7 +154,15 @@ export class ExecutionStoreSqlite implements ExecutionStore {
           } as import('@harness/execution').StoredJudgment)
         : null;
 
-    return { run, evidence: evidenceArtifacts, messages, claims: storedClaims, counterpoints: storedCounterpoints, judgment };
+    return {
+      run,
+      evidence: evidenceArtifacts,
+      messages,
+      claims: storedClaims,
+      counterpoints: storedCounterpoints,
+      claimGraph: buildClaimGraph({ executionId: runId, claims: storedClaims, counterpoints: storedCounterpoints }),
+      judgment,
+    };
   }
 
   private async assertRunning(runId: string): Promise<void> {

@@ -11,6 +11,7 @@ Implementasi SQLite — satu-satunya paket yang menyentuh Drizzle/better-sqlite3
 | `workingContextStoreSqlite.ts` | Penyimpanan versioned `SessionWorkingContext` (PR D) dengan commit compare-and-set |
 | `artifactStoreSqlite.ts` | Penyimpanan immutable typed artifacts PR F, idempotent per execution/kind, dengan lookup durable |
 | `financialSnapshotStoreSqlite.ts` | Penyimpanan immutable `VerifiedFinancialSnapshot` PR N, unik per Execution, dengan lookup ID/Execution |
+| `claimGraphReaderSqlite.ts` | Rebuild deterministik Claim Graph per Execution dari canonical Claim dan Counterpoint rows |
 | `conversationJournalSqlite.ts` | Audit/replay append-only; menyimpan event berkorelasi tanpa membuat atau memiliki Session |
 | `*StoreSqlite.ts` | Implementasi store interface lain dari paket kontrak masing-masing |
 
@@ -45,3 +46,6 @@ Catatan:
   competing payload for the same Execution. Snapshot rows are separate from
   Evidence, Artifacts, and ContextSnapshots; the payload contains the Evidence
   IDs materialized from accepted observations.
+- Claim Graph reads project `counterpoints.target_claim_id` as the sole current
+  Claim/Counterpoint relation. The graph has no duplicate persistence table or
+  migration, and `ExecutionArtifacts.claimGraph` uses the same pure builder.
