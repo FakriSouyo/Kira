@@ -10,6 +10,7 @@
     "@harness/context": "workspace:*",
     "@harness/database": "workspace:*",
     "@harness/document": "workspace:*",
+    "@harness/evidence": "workspace:*",
     "@harness/execution": "workspace:*",
     "@harness/financial-data": "workspace:*",
     "@harness/llm": "workspace:*",

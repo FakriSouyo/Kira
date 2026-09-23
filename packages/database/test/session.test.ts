@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDb, type FinharnessDatabase } from '@harness/database';
 import type { Claim, Judgment } from '@harness/schemas';
+import { insertLegacyEvidenceFixture } from './helpers/legacyEvidenceFixture';
 
 let db: FinharnessDatabase;
 let dir: string;
@@ -58,11 +59,8 @@ describe('Session helpers (Phase 2 Task 1)', () => {
 
   it('getExecutionWithArtifacts mengembalikan evidence + messages + claims + judgment', async () => {
     const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
-    const ev = await db.evidence.save({
-      runId: run.id,
-      ticker: 'BBCA',
-      source: 'sectors.company_report',
-      data: { roe: 23.1 },
+    const ev = insertLegacyEvidenceFixture(db.raw, {
+      runId: run.id, ticker: 'BBCA', source: 'sectors.company_report', data: { roe: 23.1 },
     });
     await db.conversation.addMessage({
       runId: run.id,
@@ -113,10 +111,8 @@ describe('Session helpers (Phase 2 Task 1)', () => {
 
   it('artifacts.evidence identik dgn getByRun — reuse toEvidence (Deviasi #19)', async () => {
     const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
-    await db.evidence.save({
-      runId: run.id,
-      ticker: 'BBCA',
-      source: 'sectors.company_report',
+    insertLegacyEvidenceFixture(db.raw, {
+      runId: run.id, ticker: 'BBCA', source: 'sectors.company_report',
       data: { financials: { roe: 23.1 }, overview: { market_cap: 1e15 } },
     });
     const art = await db.execution.getExecutionWithArtifacts(run.id);

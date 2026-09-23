@@ -374,6 +374,24 @@ Evidence is execution-scoped for reasoning and carries provenance and content
 identity. Claims must reference allowed Evidence, Bear challenges must target
 valid Bull claims, and score/stance normalization is deterministic code.
 
+### Evidence acceptance and provenance — T1
+
+The Evidence domain distinguishes retrieval candidates from accepted Evidence.
+`evidence-policy-v1` has a deterministic fingerprint. Financial candidates
+come from `PresentFinancialObservation` and are checked by the authoritative
+financial verifier before persistence. The acceptance receipt preserves source
+origin, complete financial metadata, verification result, retrieval time, and
+acceptance time. `dataAsOf` remains provenance and does not populate `validAt`.
+
+The immutable content row remains deduplicated by content hash, ticker, and
+source. `run_evidence` is the execution membership authority and stores
+acceptance metadata per Execution. Scoped reads report the accepting Execution
+in `Evidence.runId`; pre-T1 rows are returned as explicit `legacy-v0`
+provenance. Document search hits and citations have a typed candidate adapter,
+but `/doc-search` still returns candidates without persisting Evidence or
+creating an Execution. Claim grounding and graph relationships are future T2+
+slices.
+
 ## Context engine
 
 ```text
@@ -739,10 +757,9 @@ credentials.
 
 The current and future milestone order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2,
-S1 and S2 are complete on master. S3 is complete in the current implementation.
-The next milestone after S3 merges is:
-
-**T — Evidence Policy + Claim Graph**
+S1, S2, and S3 are complete on master. T1 Evidence Acceptance + Provenance is
+complete in the current implementation; T2 Claim Grounding + Durable Claim
+Model is next.
 
 R2C2 migrated the remaining Judge direct-runtime path and added durable
 capability semantic compatibility. PR P continues to restore the same

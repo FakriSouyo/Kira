@@ -1,6 +1,6 @@
 # FinHarness Progress
 
-Last updated: 2026-09-22
+Last updated: 2026-09-23
 
 ## Current state
 
@@ -8,9 +8,10 @@ The stateful architecture milestones **A-P** are complete on `master`. **Q1**,
 **Q2**, **R1**, **R2A**, **R2B**, **R2C1**, **R2C2**, and **S1** are also
 complete on `master`.
 
-**S2 — Workspace + File Capability** is complete on master. **S3 — Document
-Understanding / Retrieval** is complete in the current implementation. **T —
-Evidence Policy + Claim Graph** is next after S3 merges.
+**S2 — Workspace + File Capability** and **S3 — Document Understanding /
+Retrieval** are complete on master. **T1 — Evidence Acceptance + Provenance**
+is complete in the current implementation. **T2 — Claim Grounding + Durable
+Claim Model** is next.
 
 The canonical future sequence and dependency rationale live in
 [`docs/ROADMAP.md`](ROADMAP.md). This document is the mutable current-status
@@ -290,12 +291,29 @@ Natural-language conversation does not silently execute `/judge`, `/research`,
 `/compare`, `/challenge`, `/investigate`, or `/screen`. Fresh research remains
 an explicit command boundary.
 
-## Next milestone
+## Current T milestone
 
-### T — Evidence Policy + Claim Graph
+### T1 — Evidence Acceptance + Provenance
 
-Status: **next after S3 merges**. `WorkflowNode.executor` is not a principal
-and skills are not grants.
+Status: **complete in the current implementation**.
+
+`@harness/evidence` defines `EvidenceCandidate`, `evidence-policy-v1`, and a
+deterministic policy fingerprint. Verified financial observations become
+candidates through an adapter and are checked again by the existing financial
+verifier before acceptance. Their provider origin, complete metadata,
+verification result, retrieval time, and acceptance time are retained per
+Execution. The policy never derives `validAt` from `dataAsOf`.
+
+The immutable `evidence` content row remains deduplicated by content hash,
+ticker, and source. `run_evidence` remains the membership authority and stores
+the acceptance identity and provenance. Execution-scoped reads return the
+accepting Execution in `Evidence.runId`; historical rows are explicitly marked
+`legacy-v0` with acceptance details left unknown. Document search hits and
+citations can be represented as typed candidates, but T1 does not persist them
+or change `/doc-search` lifecycle behavior.
+
+T1 does not add Claim policy, Counterpoint storage, Claim Graph edges, or Judge
+release checks. **T2 — Claim Grounding + Durable Claim Model** is next.
 
 ## Maintenance policy
 

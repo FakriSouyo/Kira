@@ -243,10 +243,10 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
 
   it('fails the run when persisting optional-stage evidence fails', async () => {
     const context = ctx();
-    const save = context.db.evidence.save.bind(context.db.evidence);
-    vi.spyOn(context.db.evidence, 'save').mockImplementation((params) => {
+    const accept = context.db.evidence.accept.bind(context.db.evidence);
+    vi.spyOn(context.db.evidence, 'accept').mockImplementation((params) => {
       if (params.source === 'sectors.daily_transaction') throw new Error('Database unavailable');
-      return save(params);
+      return accept(params);
     });
 
     await expect(judgeWorkflow(context, 'BBRI')).rejects.toThrow('Database unavailable');

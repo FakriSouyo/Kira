@@ -109,13 +109,13 @@ export class ExecutionStoreSqlite implements ExecutionStore {
       throw new UserFriendlyError('NOT_FOUND', `Run "${runId}" not found`, 'Try: /judge BBCA (or other valid ticker)');
     }
     const [evidenceRows, messageRows, claimRows, judgmentRows] = await Promise.all([
-      this.db.select({ evidence }).from(runEvidence).innerJoin(evidence, eq(runEvidence.evidenceId, evidence.id)).where(eq(runEvidence.runId, runId)),
+      this.db.select({ evidence, membership: runEvidence }).from(runEvidence).innerJoin(evidence, eq(runEvidence.evidenceId, evidence.id)).where(eq(runEvidence.runId, runId)),
       this.db.select().from(agentMessages).where(eq(agentMessages.runId, runId)).orderBy(asc(agentMessages.sequenceOrder)),
       this.db.select().from(claims).where(eq(claims.runId, runId)).orderBy(asc(claims.claimId)),
       this.db.select().from(judgments).where(eq(judgments.runId, runId)).limit(1),
     ]);
 
-    const evidenceArtifacts = evidenceRows.map((r) => toEvidence(r.evidence as EvidenceRow));
+    const evidenceArtifacts = evidenceRows.map((r) => toEvidence(r.evidence as EvidenceRow, r.membership));
 
     const messages = messageRows.map((r) => ({
       id: (r as { id: string }).id,

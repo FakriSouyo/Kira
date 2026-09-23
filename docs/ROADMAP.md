@@ -52,10 +52,14 @@ S2
 COMPLETE IN CURRENT IMPLEMENTATION
 
 S3
+T1 Evidence Acceptance + Provenance
 
-NEXT AFTER S3 MERGE
+NEXT
 
-T
+T2 Claim Grounding + Durable Claim Model
+T3 Counterpoint Grounding + Durability
+T4 Claim Graph Core
+T5 Judge Integration + Release Integrity
 
 FUTURE RESEARCH PRODUCT COMPLETION
 
@@ -88,7 +92,7 @@ research capability maturation. Discovery and design for later milestones may
 begin earlier, but production implementations must not bypass the dependency
 boundaries established by earlier milestones.
 
-## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2; S3 in current implementation
+## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3 on master; T1 in current implementation
 
 The following milestones are complete in the current implementation:
 
@@ -102,7 +106,8 @@ The following milestones are complete in the current implementation:
 - **R2C2 — Judge Capability Migration + Durable Resume Semantics:** Judge financial operations execute through explicit workflow principals and the capability gateway, and Judge profiles pin a deterministic capability plan whose fingerprint participates in durable resume compatibility.
 - **S1 — Durable File / Attachment Layer:** explicit `/attach` imports one user-selected local file into immutable FinHarness-owned content-addressed storage, associates safe metadata with the canonical Session/Turn lifecycle, and keeps raw bytes outside SQLite without creating an Execution or entering model context.
 - **S2 — Workspace + File Capability:** one application-wide capability registry/policy/gateway/runtime composes financial and raw Attachment tools; strict Session-scoped `workspace.list-attachments`, `attachment.describe`, and `attachment.read` tools are registered. S2 introduced `command.files -> workspace.list-attachments`; `/files` lists current-Session metadata with one Turn and no Execution or ModelCall.
-- **S3 — Document Understanding / Retrieval:** explicit `/doc-index` derives versioned Documents from verified Attachment bytes, and `/doc-search` returns bounded local lexical hits with citations. S3 is complete in the current implementation and has not yet merged into master.
+- **S3 — Document Understanding / Retrieval:** explicit `/doc-index` derives versioned Documents from verified Attachment bytes, and `/doc-search` returns bounded local lexical hits with citations. S3 is complete on master.
+- **T1 — Evidence Acceptance + Provenance:** versioned deterministic Evidence Policy accepts verified financial observations, persists per-Execution acceptance/provenance on `run_evidence`, preserves immutable content deduplication, and exposes typed Document search candidates without persisting them.
 
 The current Judge graph remains the source of truth: it has 15 stable nodes,
 `JUDGE_WORKFLOW_VERSION` remains `2`, and no obsolete historical Judge graph is
@@ -353,8 +358,8 @@ finally cross-surface product delivery.
 ## S — Files & Documents
 
 S is knowledge-input work. It is deliberately distinct from Evidence, Artifacts,
-Context, and Memory. S1 and S2 are complete on master; S3 is complete in the
-current implementation. T follows after S3 merges.
+Context, and Memory. S1, S2, and S3 are complete on master. T1 is complete in
+the current implementation; T2 is next.
 
 ### S1 — Durable File / Attachment Layer
 
@@ -426,7 +431,7 @@ retrieval, Document objects, or model context injection.
 
 ### S3 — Document Understanding / Retrieval
 
-Status: **complete in the current implementation**.
+Status: **complete on master**.
 
 S3 is the explicit Attachment-to-Document boundary. The new
 `@harness/document` package detects and extracts only local PDF, UTF-8 text,
@@ -486,7 +491,47 @@ citation/provenance candidate
 
 ## T — Evidence Policy + Claim Graph
 
-Status: **future**.
+T is split into independently reviewable implementation slices:
+
+```text
+T1 Evidence Acceptance + Provenance
+T2 Claim Grounding + Durable Claim Model
+T3 Counterpoint Grounding + Durability
+T4 Claim Graph Core
+T5 Judge Integration + Release Integrity
+```
+
+Status: **T1 complete in the current implementation; T2 next**.
+
+### T1 — Evidence Acceptance + Provenance
+
+T1 adds `EvidenceCandidate` and an explicit `evidence-policy-v1` contract with
+a deterministic fingerprint. Financial candidates are adapted only from
+`PresentFinancialObservation` values and rechecked through the existing
+`verifyFinancialObservation` authority. Accepted Evidence retains provider
+origin, full `FinancialDataMetadata`, `ObservationVerification`, retrieval
+time, and acceptance time. `dataAsOf` remains provenance and does not become
+`validAt`.
+
+`evidence` remains the immutable content authority, deduplicated by content
+hash, ticker, and source. `run_evidence` remains execution membership and now
+stores the policy identity, candidate kind, source origin, relevant times, and
+structured provenance for each accepting Execution. Execution-scoped reads
+set `Evidence.runId` to that accepting Execution. Pre-T1 memberships are
+returned with explicit `legacy-v0` provenance and unknown acceptance fields.
+
+S3 `DocumentSearchHit` / `DocumentCitation` values can be wrapped as typed
+Evidence candidates when a future research Execution supplies scope. T1 does
+not make `/doc-search` persist Evidence or create an Execution/ModelCall.
+
+### T2-T5 — Claim and graph integrity
+
+These remain future work. T2 will establish explicit per-Evidence Claim links
+and durable numeric grounding. T3 will persist execution-scoped Counterpoints
+and their own Evidence links. T4 will add typed immutable Claim Graph edges
+using the domain stores as node authorities. T5 will integrate those policies
+with Judge checkpoints, verdict release, and restart-repairable Artifact graph
+projection. None of those behaviors is implemented by T1.
 
 T strengthens explicit relationships among Evidence, Claims, Theses,
 Counterclaims, and Artifacts:
@@ -498,12 +543,10 @@ Claim 1 --supports--> Thesis A
 Claim 2 --challenges--> Thesis A
 ```
 
-Directional relationship examples include `supports`, `contradicts`,
-`qualifies`, `depends_on`, `derived_from`, and `supersedes`. Evidence Policy
-may eventually reason about source eligibility, freshness, primary versus
-secondary sources, subject compatibility, financial periods, execution scope,
-claim requirements, and provenance. No finalized Claim Graph schema exists
-today.
+Later T slices may add typed `supports`, `contradicts`, `qualifies`,
+`depends_on`, and `derived_from` relationships as source explicitly supports
+them. T1's Evidence Policy is limited to deterministic candidate acceptance
+and execution-scoped provenance. The Claim Graph schema remains future work.
 
 ## U — Research Composition + Product Completion
 

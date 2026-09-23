@@ -458,16 +458,12 @@ function sameIds(left: readonly string[], right: readonly string[]): boolean {
 }
 
 async function restoreEvidence(db: FinharnessDatabase, ids: string[], execution: ResearchExecution, ticker: string): Promise<Evidence[]> {
-  const evidence = await db.evidence.getManyByIds(ids);
+  const evidence = await db.evidence.getManyByIdsForRun(execution.id, ids);
   if (evidence.length !== ids.length) throw new Error('Judge checkpoint references missing Evidence');
-  const executionEvidence = new Set((await db.evidence.getByRun(execution.id)).map(item => item.id));
-  if (evidence.some(item => item.ticker.toUpperCase() !== ticker.toUpperCase() || !executionEvidence.has(item.id))) {
+  if (evidence.some(item => item.ticker.toUpperCase() !== ticker.toUpperCase())) {
     throw new Error('Judge checkpoint references Evidence outside the canonical Execution');
   }
-  // Evidence rows may be content-deduplicated and retain their original row
-  // owner. The runEvidence membership above is the authority for this
-  // execution; restore the current execution view before specialist validation.
-  return evidence.map(item => ({ ...item, runId: execution.id }));
+  return evidence;
 }
 
 export async function decodeJudgeCheckpoint(

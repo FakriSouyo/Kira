@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDb, type FinharnessDatabase } from '@harness/database';
+import { insertLegacyEvidenceFixture } from './helpers/legacyEvidenceFixture';
 
 let db: FinharnessDatabase;
 let dir: string;
@@ -78,29 +79,23 @@ describe('EvidenceStoreSqlite (Task 3)', () => {
     const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
     const values = [];
     for (const [ticker, source] of [['BBCA', 'sectors.news'], ['BBCA', 'sectors.filings'], ['BBRI', 'sectors.news']]) {
-      values.push(await db.evidence.save({ runId: run.id, ticker, source, data: [] as unknown as Record<string, unknown> }));
+      values.push(insertLegacyEvidenceFixture(db.raw, { runId: run.id, ticker, source, data: [] as unknown as Record<string, unknown> }));
     }
     expect(new Set(values.map((e) => e.id)).size).toBe(3);
     expect(values.map((e) => e.source)).toEqual(['sectors.news', 'sectors.filings', 'sectors.news']);
   });
-  it('dedup: data sama (beda key order) di run berbeda → satu row evidence', async () => {
+  it('projects a shared historical membership as belonging to the accepting Execution', async () => {
     const runA = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
     const runB = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
 
-    const e1 = await db.evidence.save({
-      runId: runA.id,
-      ticker: 'BBCA',
-      source: 'sectors.company_report',
-      data: { revenue: 100, profit: 20 },
+    const e1 = insertLegacyEvidenceFixture(db.raw, {
+      runId: runA.id, ticker: 'BBCA', source: 'sectors.company_report', data: { revenue: 100, profit: 20 },
     });
-    const e2 = await db.evidence.save({
-      runId: runB.id,
-      ticker: 'BBCA',
-      source: 'sectors.company_report',
-      data: { profit: 20, revenue: 100 },
-    });
+    db.raw.prepare('INSERT INTO run_evidence (run_id, evidence_id) VALUES (?, ?)').run(runB.id, e1.id);
+    const [e2] = await db.evidence.getManyByIdsForRun(runB.id, [e1.id]);
 
     expect(e2.id).toBe(e1.id);
+    expect(e2.runId).toBe(runB.id);
     const byTicker = await db.evidence.getByTicker('BBCA');
     expect(byTicker).toHaveLength(1);
     expect((await db.evidence.getByRun(runB.id)).map((e) => e.id)).toEqual([e1.id]);
@@ -110,18 +105,15 @@ describe('EvidenceStoreSqlite (Task 3)', () => {
   it('getManyByIds preserves prompt evidence order across callers', async () => {
     const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
     const items = [];
-    for (let i = 0; i < 5; i++) items.push(await db.evidence.save({ runId: run.id, ticker: 'BBCA', source: 'test', data: { index: i } }));
+    for (let i = 0; i < 5; i++) items.push(insertLegacyEvidenceFixture(db.raw, { runId: run.id, ticker: 'BBCA', source: 'test', data: { index: i } }));
     const ids = items.map((e) => e.id).sort().reverse();
     expect((await db.evidence.getManyByIds(ids)).map((e) => e.id)).toEqual(ids);
   });
 
   it('getManyByIds mengembalikan evidence penuh dengan data ter-parse', async () => {
     const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
-    const saved = await db.evidence.save({
-      runId: run.id,
-      ticker: 'BBCA',
-      source: 'sectors.company_report',
-      data: { roe: 23.1 },
+    const saved = insertLegacyEvidenceFixture(db.raw, {
+      runId: run.id, ticker: 'BBCA', source: 'sectors.company_report', data: { roe: 23.1 },
     });
 
     const [fetched] = await db.evidence.getManyByIds([saved.id]);
@@ -136,17 +128,11 @@ describe('EvidenceStoreSqlite (Task 3)', () => {
   it('getByRun mengembalikan evidence milik run', async () => {
     const run = await db.execution.createRun({ ticker: 'BBCA', command: 'judge' });
     const other = await db.execution.createRun({ ticker: 'BBRI', command: 'judge' });
-    const e1 = await db.evidence.save({
-      runId: run.id,
-      ticker: 'BBCA',
-      source: 'sectors.company_report',
-      data: { roe: 23.1 },
+    const e1 = insertLegacyEvidenceFixture(db.raw, {
+      runId: run.id, ticker: 'BBCA', source: 'sectors.company_report', data: { roe: 23.1 },
     });
-    await db.evidence.save({
-      runId: other.id,
-      ticker: 'BBRI',
-      source: 'sectors.company_report',
-      data: { roe: 20.3 },
+    insertLegacyEvidenceFixture(db.raw, {
+      runId: other.id, ticker: 'BBRI', source: 'sectors.company_report', data: { roe: 20.3 },
     });
 
     const byRun = await db.evidence.getByRun(run.id);
