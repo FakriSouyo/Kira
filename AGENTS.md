@@ -23,15 +23,18 @@ invocation/streaming, provider composition, CLI event adaptation, and
 ConversationController. It also owns journal correlation/causation when audit
 events are appended.
 packages/engine (@harness/engine) owns financial, Attachment, and Document
-capability composition, WorkflowTraceRecorder, Screen workflow, and conversation
-context preparation plus WorkingContext publication/reconciliation
-orchestration. These engine boundaries use host-supplied store contracts and
-narrow callbacks; their persistence implementations remain outside engine.
-WorkingContextStore owns durable WorkingContext persistence, and CLI's
-ConversationController remains the production journal correlation path. UA is
-incomplete; do not assume broader engine APIs exist. Do not put new reusable
-application/core behavior in CLI when a host-neutral boundary is clearly
-required.
+capability composition, WorkflowTraceRecorder, Screen workflow, conversation
+context preparation, WorkingContext publication/reconciliation orchestration,
+and the host-neutral Workspace/Document application workflows for `/files`,
+`/doc-index`, and `/doc-search`. These engine boundaries use host-supplied
+store contracts and narrow callbacks; their persistence implementations remain
+outside engine. WorkingContextStore owns durable WorkingContext persistence,
+and CLI's ConversationController remains the production journal correlation
+path. CLI still owns command parsing and rendering, and local-path Attachment
+import; engine does not own host filesystem access or persistence
+implementation. UA is incomplete; do not assume broader engine APIs exist. Do
+not put new reusable application/core behavior in CLI when a host-neutral
+boundary is clearly required.
 
 The future engine coordinates existing authorities. It must not replace
 Evidence, Claims, capability authorization, ToolRuntime, database, providers,

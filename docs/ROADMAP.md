@@ -61,13 +61,14 @@ UA1 Host-neutral Capability Runtime Extraction
 UA2 Host-neutral Workflow Trace Extraction
 UA3 Host-neutral Screen Workflow Extraction
 UA4 Host-neutral Conversation Context Preparation Extraction
+UA5 Host-neutral WorkingContext Publication Extraction
 
 CURRENT
 
 UA Kira Engine Extraction
-UA5 Host-neutral WorkingContext Publication Extraction
+UA6 Host-neutral Workspace + Document Workflows Extraction
 
-UA6 and later slices remain provisional and unselected.
+UA7 and later slices remain provisional and unselected.
 
 THEN
 
@@ -104,19 +105,27 @@ boundaries established by earlier milestones.
 
 ## UA slice selection
 
-**Selected slice:** UA5 — Host-neutral WorkingContext Publication Extraction.
+**Selected slice:** UA6 — Host-neutral Workspace + Document Workflows Extraction.
 
 UA1 — Host-neutral Capability Runtime Extraction, UA2 — Host-neutral Workflow
 Trace Extraction, UA3 — Host-neutral Screen Workflow Extraction, and UA4 —
-Host-neutral Conversation Context Preparation Extraction are complete on master.
-UA5 moves the existing WorkingContext publication and journal-reconciliation
-orchestration into packages/engine (@harness/engine), using supplied
-WorkingContextStore, ArtifactStore, and JudgmentStore contracts with narrow
-host-supplied journal read and audit append callbacks. WorkingContextStore
-retains durable persistence, and ConversationController remains the production
-journal correlation path. UA5 does not complete engine extraction.
+Host-neutral Conversation Context Preparation Extraction, and UA5 — Host-neutral
+WorkingContext Publication Extraction are complete on master. UA5 moved
+WorkingContext publication and journal-reconciliation orchestration into
+packages/engine (@harness/engine), using supplied WorkingContextStore,
+ArtifactStore, and JudgmentStore contracts with narrow host-supplied journal
+read and audit append callbacks. WorkingContextStore retains durable
+persistence, and ConversationController remains the production journal
+correlation path.
 
-UA6 and later slices remain provisional and unselected. Before each slice,
+UA6 moves the existing `/files`, `/doc-index`, and `/doc-search` application
+orchestration into packages/engine while CLI keeps command parsing, active
+lifecycle validation, `/attach` local-path import, and rendering. The engine
+workflows retain CapabilityGateway authorization, delegate document extraction
+and retrieval to `@harness/document`, and persist indexed bundles through the
+supplied DocumentStore. UA6 does not complete engine extraction.
+
+UA7 and later slices remain provisional and unselected. Before each slice,
 perform a fresh source audit and review its exact scope. This roadmap does not
 lock future APIs, filenames, classes, schemas, package boundaries, or migration
 behavior.

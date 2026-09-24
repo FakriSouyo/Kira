@@ -38,6 +38,10 @@ export type {
 } from './runtime/workflowTraceRecorder';
 export { screenWorkflow } from './workflows/screen';
 export type { ScreenArtifacts } from './workflows/screen';
+export { filesWorkflow } from './workflows/files.js';
+export type { FilesArtifacts } from './workflows/files.js';
+export { documentIndexWorkflow, documentSearchWorkflow } from './workflows/document.js';
+export type { DocumentSearchArtifacts } from './workflows/document.js';
 
 export interface EngineCapabilityRuntimeOptions {
   readonly financialData: FinancialDataProvider;

@@ -8,26 +8,30 @@ It is not a chronological implementation diary. The canonical roadmap is
 ## Current architecture facts
 
 apps/cli still owns significant application/runtime composition. It owns the CLI
-host, command dispatch, Session/repl lifecycle, Judge workflow/nodes and
-checkpointing, MainFinHarnessAgent invocation/streaming, provider composition,
-CLI event adaptation, and ConversationController. It remains more than a thin
-host adapter; ConversationController also remains the production journal
+host, command dispatch and parsing, Session/repl lifecycle, local-path
+Attachment import, rendering, Judge workflow/nodes and checkpointing,
+MainFinHarnessAgent invocation/streaming, provider composition, CLI event
+adaptation, and ConversationController. It remains more than a thin host
+adapter; ConversationController also remains the production journal
 correlation/causation path for audit appends.
 
 packages/engine (package name @harness/engine) owns the extracted host-neutral
 financial, Attachment, and Document tool definitions and capability composition,
-WorkflowTraceRecorder, Screen application workflow, and conversation context
-preparation, plus WorkingContext publication/reconciliation orchestration. The
-context coordinator receives supplied WorkingContextStore, ArtifactStore, and
-ContextSnapshotStore contracts; the WorkingContext publisher receives supplied
-WorkingContextStore, ArtifactStore, and JudgmentStore contracts, a journal read
-callback, and a host audit append callback. Persistence implementations remain
-outside engine. The publisher coordinates publication; WorkingContextStore
-owns durable WorkingContext persistence. The context coordinator coordinates
-existing @harness/context policies and @harness/orchestrator focus/prompt
-semantics. The capability factory receives the existing FinancialDataProvider,
-AttachmentStore, DocumentStore, and trusted Session ID, then returns the
-capability Gateway and Judge plan.
+WorkflowTraceRecorder, Screen application workflow, conversation context
+preparation, WorkingContext publication/reconciliation orchestration, and
+host-neutral Workspace/Document workflows for `/files`, `/doc-index`, and
+`/doc-search`. The context coordinator receives supplied WorkingContextStore,
+ArtifactStore, and ContextSnapshotStore contracts; the WorkingContext publisher
+receives supplied WorkingContextStore, ArtifactStore, and JudgmentStore
+contracts, a journal read callback, and a host audit append callback. Workspace
+and Document workflows use the supplied CapabilityGateway and DocumentStore.
+Persistence implementations and host filesystem access remain outside engine.
+The publisher coordinates publication; WorkingContextStore owns durable
+WorkingContext persistence. The context coordinator coordinates existing
+@harness/context policies and @harness/orchestrator focus/prompt semantics. The
+capability factory receives the existing FinancialDataProvider, AttachmentStore,
+DocumentStore, and trusted Session ID, then returns the capability Gateway and
+Judge plan.
 
     apps/cli
       CLI host + lifecycle, model/provider composition, and presentation
@@ -35,8 +39,8 @@ capability Gateway and Judge plan.
            v
     packages/engine (@harness/engine)
       host-neutral tools, capability composition, trace recorder,
-      Screen workflow, conversation context preparation, and WorkingContext
-      publication/reconciliation orchestration
+      Screen workflow, conversation context preparation, WorkingContext
+      publication/reconciliation, and Workspace/Document workflows
            | coordinates
            v
     packages/*
@@ -86,7 +90,7 @@ authorize. Tools execute. Domain packages own truth. Database persists.
 The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
-authority. UA boundaries beyond the selected UA5 slice remain provisional and
+authority. UA boundaries beyond the selected UA6 slice remain provisional and
 must be selected after a fresh source audit before each slice.
 
 ## Model runtime — Q1 / Q2
@@ -413,6 +417,39 @@ completed artifacts. `ConversationController` remains the production journal
 correlation/causation path for audit appends. Judge orchestration, model
 invocation/streaming, provider composition, and CLI event presentation remain
 in CLI.
+
+## UA6 - Host-neutral Workspace + Document Workflows Extraction
+
+UA6 moves the existing `/files`, `/doc-index`, and `/doc-search` application
+orchestration from CLI into `packages/engine`, without moving their argument
+parsing, active lifecycle checks, or rendering.
+
+```text
+/files
+  -> filesWorkflow
+  -> CapabilityGateway -> workspace.list-attachments
+
+/doc-index <attachmentId>
+  -> active Turn ID supplied by CLI
+  -> documentIndexWorkflow
+  -> CapabilityGateway -> attachment.read
+  -> @harness/document buildDocumentBundle
+  -> supplied DocumentStore.save
+
+/doc-search <query> [options]
+  -> CLI parses query/options
+  -> documentSearchWorkflow
+  -> CapabilityGateway -> document.search
+```
+
+CapabilityGateway and CapabilityPolicy retain authorization authority,
+ToolRuntime retains tool execution authority, `@harness/document` retains
+Document extraction, identity, chunking, and retrieval semantics, and the
+supplied DocumentStore remains persistence authority. Engine workflows do not
+load Turns, access the host filesystem, render CLI output, or duplicate
+Document/domain behavior. `/attach` remains CLI-local path/file-system
+ingestion. UA boundaries beyond UA6 remain provisional and require a fresh
+source audit before selection.
 
 ## Core boundaries and invariants
 

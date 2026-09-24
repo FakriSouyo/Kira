@@ -38,6 +38,25 @@ lifecycle or retrieve them itself. WorkingContextStore owns durable
 WorkingContext persistence. In production, ConversationController remains the
 audit append path so journal correlation and causation stay canonical.
 
+The engine owns host-neutral Workspace and Document application workflows for
+`/files`, `/doc-index`, and `/doc-search`. The CLI retains argument parsing,
+active lifecycle validation, and rendering. `/files` calls
+`CapabilityGateway` as `command.files` for `workspace.list-attachments` and
+preserves the returned order. `/doc-index` reads attachment bytes through
+`CapabilityGateway` as `command.doc-index` for `attachment.read`, builds the
+bundle with `@harness/document`, and saves it through the supplied
+`DocumentStore`. `/doc-search` calls `CapabilityGateway` as `command.doc-search`
+for `document.search`; Session scoping, ranking, and limits remain in the
+existing capability tool and document domain. The workflows preserve
+cancellation signals and propagate failures.
+
+`CapabilityPolicy` and `CapabilityGateway` remain authorization authority,
+`ToolRuntime` remains execution authority, `@harness/document` owns extraction,
+identity, chunking, and retrieval semantics, and `DocumentStore` remains
+persistence authority. `/attach` stays in CLI because local path resolution,
+file access, and raw Attachment import are host-specific; engine does not access
+the host filesystem or implement persistence.
+
 The engine does not create providers or databases, or own Judge workflows,
 Session lifecycle, CLI events, or persistence authority. Judge orchestration,
 model invocation and streaming, provider composition, and event presentation

@@ -22,16 +22,14 @@ import { createWebServer } from '../repl/web';
 import { makeVersionCommand } from './version';
 import { UserFriendlyError } from '@harness/shared';
 import { FinancialDataError } from '@harness/financial-data';
-import { DocumentError, buildDocumentBundle } from '@harness/document';
+import { DocumentError } from '@harness/document';
 import { PROVIDERS } from '../setup/providers';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import {
-  attachmentToolIds,
-  COMMAND_FILES_CAPABILITY_PRINCIPAL,
-  COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL,
-  COMMAND_DOC_SEARCH_CAPABILITY_PRINCIPAL,
-  documentToolIds,
+  documentIndexWorkflow,
+  documentSearchWorkflow,
+  filesWorkflow,
   screenWorkflow,
 } from '@harness/engine';
 
@@ -95,13 +93,8 @@ function makeFilesCommand(ctx: HarnessContext, write: (text: string) => void): C
     if (args.length !== 0) {
       throw new UserFriendlyError('INVALID_ARG', '/files does not take arguments', 'Usage: /files');
     }
-    const result = await ctx.capabilityGateway.invoke(
-      COMMAND_FILES_CAPABILITY_PRINCIPAL,
-      attachmentToolIds.list,
-      {},
-      { signal: execution?.signal },
-    );
-    write(`${renderFilesResult(result.value)}\n\n`);
+    const artifacts = await filesWorkflow(ctx.capabilityGateway, { signal: execution?.signal });
+    write(`${renderFilesResult(artifacts.attachments)}\n\n`);
   };
 }
 
@@ -151,18 +144,11 @@ function makeDocumentIndexCommand(ctx: HarnessContext, write: (text: string) => 
     if (!lifecycle) {
       throw new UserFriendlyError('MISSING_LIFECYCLE', 'Document indexing requires an active Session Turn', 'Retry the command from the Kira command prompt.');
     }
-    const result = await ctx.capabilityGateway.invoke(
-      COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL,
-      attachmentToolIds.read,
-      { attachmentId: args[0] },
-      { signal: execution?.signal },
-    );
-    const bundle = await buildDocumentBundle({
-      attachment: result.value.attachment,
-      content: result.value.content,
+    const saved = await documentIndexWorkflow(ctx.capabilityGateway, ctx.db.documents, {
+      attachmentId: args[0],
       createdByTurnId: lifecycle.turnId,
+      signal: execution?.signal,
     });
-    const saved = await ctx.db.documents.save(bundle);
     write(`${renderDocumentIndexResult(saved.document)}\n\n`);
   };
 }
@@ -195,13 +181,13 @@ function makeDocumentSearchCommand(ctx: HarnessContext, write: (text: string) =>
     }
     const query = queryTokens.join(' ').trim();
     if (!query) throw new UserFriendlyError('MISSING_ARG', 'No document query provided', 'Usage: /doc-search <query> [--document <id>] [--limit N]');
-    const result = await ctx.capabilityGateway.invoke(
-      COMMAND_DOC_SEARCH_CAPABILITY_PRINCIPAL,
-      documentToolIds.search,
-      { query, ...(documentId ? { documentId } : {}), ...(limit ? { limit } : {}) },
-      { signal: execution?.signal },
-    );
-    write(`${renderDocumentSearchResult(query, result.value)}\n\n`);
+    const artifacts = await documentSearchWorkflow(ctx.capabilityGateway, {
+      query,
+      ...(documentId ? { documentId } : {}),
+      ...(limit !== undefined ? { limit } : {}),
+      signal: execution?.signal,
+    });
+    write(`${renderDocumentSearchResult(artifacts.query, artifacts.results)}\n\n`);
   };
 }
 
