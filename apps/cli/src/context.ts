@@ -1,6 +1,6 @@
 import type { FinharnessDatabase } from '@harness/database';
 import { fileURLToPath } from 'node:url';
-import type { CapabilityPlan } from '@harness/capability';
+import { createEngineCapabilityRuntime, type EngineCapabilityRuntime } from '@harness/engine';
 import { ClaimValidator } from '@harness/execution';
 import { createLLMClient, type ModelRuntimePlan } from '@harness/llm';
 import { DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS } from '@harness/context';
@@ -14,25 +14,12 @@ import { BullAgent } from '@harness/subagent-bull';
 import { SubagentRuntime } from '@harness/subagent-core';
 import { JudgeAgent } from '@harness/subagent-judge';
 import { ResearcherAgent } from '@harness/subagent-researcher';
-import { ToolRuntime } from '@harness/tool-runtime';
 import type { FinharnessConfig } from './config';
-import {
-  createJudgeCapabilityPlan,
-} from './tools/financialCapabilities';
-import {
-  createApplicationCapabilityGateway,
-  type ApplicationCapabilityGateway,
-} from './tools/applicationCapabilities';
-import { createAttachmentTools } from './tools/attachmentTools';
-import { createDocumentTools } from './tools/documentTools';
-import { createFinancialTools } from './tools/financialTools';
 import { createConversationContextCoordinator, type ConversationContextCoordinator } from './runtime/conversationContextCoordinator';
 
-export interface HarnessContext {
+export interface HarnessContext extends EngineCapabilityRuntime {
   db: FinharnessDatabase;
   financialData: FinancialDataProvider;
-  capabilityGateway: ApplicationCapabilityGateway;
-  judgeCapabilityPlan: CapabilityPlan;
   researcher: ResearcherAgent;
   bull: BullAgent;
   bear: BearAgent;
@@ -91,15 +78,11 @@ export function buildContext(
     newsCacheTtlHours: config.sectors.newsCacheTtlHours,
     homeDir: config.homeDir,
   });
-  const toolRuntime = new ToolRuntime();
-  const financialTools = createFinancialTools(financialData);
-  const attachmentTools = createAttachmentTools({ attachmentStore: db.attachments, sessionId });
-  const documentTools = createDocumentTools({ documentStore: db.documents, sessionId });
-  const capabilityGateway = createApplicationCapabilityGateway({
-    financialTools,
-    attachmentTools,
-    documentTools,
-    toolRuntime,
+  const { capabilityGateway, judgeCapabilityPlan } = createEngineCapabilityRuntime({
+    financialData,
+    attachmentStore: db.attachments,
+    documentStore: db.documents,
+    sessionId,
   });
   const runtimePlan = agentLlm.describeRuntimePlan();
   const runtimeBudget = runtimeBudgetForPlan(runtimePlan);
@@ -124,7 +107,7 @@ export function buildContext(
     db,
     financialData,
     capabilityGateway,
-    judgeCapabilityPlan: createJudgeCapabilityPlan(capabilityGateway),
+    judgeCapabilityPlan,
     researcher: new ResearcherAgent(specialist('researcher')),
     bull: new BullAgent(specialist('bull')),
     bear: new BearAgent(specialist('bear')),

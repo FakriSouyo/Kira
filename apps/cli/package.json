@@ -10,6 +10,7 @@
     "@harness/context": "workspace:*",
     "@harness/database": "workspace:*",
     "@harness/document": "workspace:*",
+    "@harness/engine": "workspace:*",
     "@harness/evidence": "workspace:*",
     "@harness/execution": "workspace:*",
     "@harness/financial-data": "workspace:*",
@@ -26,7 +27,6 @@
     "@harness/subagent-judge": "workspace:*",
     "@harness/subagent-researcher": "workspace:*",
     "@harness/shared": "workspace:*",
-    "@harness/tool-runtime": "workspace:*",
-    "zod": "^3.25.0"
+    "@harness/tool-runtime": "workspace:*"
   }
 }

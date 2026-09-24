@@ -56,14 +56,12 @@ T2 Claim Grounding + Durable Claim Model
 T3 Counterpoint Grounding + Durability
 T4 Claim Graph Core
 T5 Judge Integration + Release Integrity
+KA Kira Identity Surface + Documentation Governance
 
 CURRENT
 
-KA Kira Identity Surface + Documentation Governance
-
-NEXT
-
 UA Kira Engine Extraction
+UA1 Host-neutral Capability Runtime Extraction
 
 THEN
 
@@ -98,22 +96,20 @@ research capability maturation. Discovery and design for later milestones may
 begin earlier, but production implementations must not bypass the dependency
 boundaries established by earlier milestones.
 
-## UA candidate decomposition — provisional / not yet locked design
+## UA slice selection
 
-The following is a candidate decomposition for UA, not a committed slice plan:
+**Selected slice:** UA1 — Host-neutral Capability Runtime Extraction.
 
-1. UA1 Engine boundary foundation
-2. UA2 Shared capability/tool composition extraction
-3. UA3 Judge application runtime extraction
-4. UA4 Session + lifecycle orchestration extraction
-5. UA5 Conversation/context/WorkingContext extraction
-6. UA6 Host-neutral event boundary
-7. UA7 Thin CLI adapter + dependency enforcement
+The selected UA1 boundary moves the existing financial, Attachment, and
+Document tool definitions and capability composition into
+packages/engine (@harness/engine), with an existing production CLI consumer.
+This is the first UA implementation slice; it does not complete engine
+extraction.
 
-Select exact UA slices only after a fresh source audit before each slice. This
-candidate does not promise APIs, filenames, classes, schemas, or migration
-behavior. Repository architecture and current source determine each reviewed
-slice.
+UA2 and later slices remain provisional and unselected. Before each slice,
+perform a fresh source audit and review its exact scope. This roadmap does not
+lock future APIs, filenames, classes, schemas, package boundaries, or migration
+behavior.
 
 ## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1-T5 on master
 

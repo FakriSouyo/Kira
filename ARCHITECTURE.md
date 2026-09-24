@@ -7,61 +7,70 @@ It is not a chronological implementation diary. The canonical roadmap is
 
 ## Current architecture facts
 
-The current application/runtime composition is still primarily in apps/cli.
-It owns the CLI host, command dispatch, Session/repl orchestration, provider
-composition, and significant application wiring. It is more than a thin host
-adapter. No packages/engine or @kira/engine package exists.
+apps/cli still owns significant application/runtime composition. It owns the CLI
+host, command dispatch, Session/repl orchestration, Judge workflow/nodes and
+checkpointing, conversation/context and WorkingContext publication, provider
+composition, and CLI event adaptation. It remains more than a thin host
+adapter.
 
-```text
-apps/cli
-  CLI host + significant application/runtime composition
-          │
-          ▼
-packages/*
-  existing command, capability, context, session, execution,
-  evidence, conversation, document, LLM, provider, and persistence authorities
-```
+packages/engine (package name @harness/engine) now owns the first extracted
+host-neutral boundary: financial, Attachment, and Document tool definitions
+and their capability composition. Its factory receives the existing
+FinancialDataProvider, AttachmentStore, DocumentStore, and trusted Session ID,
+then returns the capability Gateway and Judge plan. It does not create
+providers or databases, or own Judge workflows, lifecycle, conversation,
+context, WorkingContext publication, or CLI event adaptation. UA extraction is
+not complete.
 
-External seams are explicit: packages/llm owns model clients,
+    apps/cli
+      CLI host + significant remaining application/runtime orchestration
+           | consumes
+           v
+    packages/engine (@harness/engine)
+      host-neutral financial, Attachment, and Document tools
+      + capability runtime composition
+           | coordinates
+           v
+    packages/*
+      existing command, capability, context, session, execution,
+      evidence, conversation, document, LLM, provider, and persistence authorities
+
+External seams remain explicit: packages/llm owns model clients,
 packages/financial-data owns the provider-neutral financial contract, and
 packages/sectors-api is the current financial provider implementation. The
-current source symbol for the conversational host is MainFinHarnessAgent; it
-is a legacy internal name scheduled for KB. The current @harness/* package
-namespace and FinharnessConfig/HarnessContext identifiers are also deferred to
-KB; no internal identity migration occurs in KA.
+current source symbol for the conversational host is MainFinHarnessAgent; it is
+a legacy internal name scheduled for KB. The current @harness/* package
+namespace and FinharnessConfig/HarnessContext identifiers are also deferred
+to KB; no internal identity migration occurs in KA or UA1.
 
-## Target direction — Kira engine
+## Target direction — complete Kira engine
 
-This section is future architecture direction, not a claim about current
-packages or production wiring. Kira is a reusable financial research engine.
-The CLI is its first host adapter. Future Desktop and Web surfaces should
-consume the same host-neutral engine rather than reimplement Judge, Session,
-Context, Evidence, capability, or lifecycle behavior.
+The current packages/engine is only the first extracted boundary, not the
+complete target engine. Kira is a reusable financial research engine. The CLI
+is its first host adapter. Future Desktop and Web surfaces should consume the
+same host-neutral engine rather than reimplement Judge, Session, Context,
+Evidence, capability, or lifecycle behavior.
 
-```text
-             Kira Engine
+                 Kira Engine
 
-CLI ──────┐
-Desktop ──┼──> host-neutral engine
-Web ──────┘          │
-                     ▼
-            existing domain/runtime packages
-```
+    CLI --------+
+    Desktop ----+----> host-neutral engine
+    Web --------+              |
+                               v
+                      existing domain/runtime packages
 
 The eventual conceptual dependency direction is:
 
-```text
-host adapters
-    ↓
-Kira engine/application boundary
-    ↓
-command / capability / context
-session / execution / evidence
-conversation / document / llm
-subagents / financial-data
-    ↓
-persistence/providers
-```
+    host adapters
+        ↓
+    Kira engine/application boundary
+        ↓
+    command / capability / context
+    session / execution / evidence
+    conversation / document / llm
+    subagents / financial-data
+        ↓
+    persistence/providers
 
 Apps present. Engine coordinates. Commands define workflows. Capabilities
 authorize. Tools execute. Domain packages own truth. Database persists.
@@ -69,8 +78,8 @@ authorize. Tools execute. Domain packages own truth. Database persists.
 The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
-authority. UA is the planned extraction slice. Exact UA boundaries are selected
-after a fresh source audit and are not locked by this map.
+authority. UA boundaries beyond the selected UA1 slice remain provisional and
+must be selected after a fresh source audit before each slice.
 
 ## Model runtime — Q1 / Q2
 
@@ -160,9 +169,11 @@ rotation when semantic runtime identity is unchanged. Q2 does not change the
 
 ## Capability runtime — R2A, R2B, R2C1, and R2C2
 
-R2A and R2B add the domain-neutral `@harness/capability` package. R2C1 consumes
-that package in the CLI composition layer for the first production migration.
-The package dependency direction remains deliberately small:
+R2A and R2B add the domain-neutral @harness/capability package. R2C1 and R2C2
+first consumed it in CLI composition. UA1 moves the existing financial,
+Attachment, and Document tool/capability composition to @harness/engine without
+changing its authorities or behavior. The package dependency direction remains
+deliberately small:
 
 ```text
 @harness/command-judge
@@ -229,7 +240,8 @@ integration, roles, wildcards, conditional policy, or an autonomous tool loop.
 
 ### Financial capability composition and Screen migration — R2C1
 
-The CLI application layer registers the eight existing financial tools under
+The @harness/engine application boundary registers the eight existing
+financial tools under
 their canonical IDs:
 
 ```text
@@ -310,6 +322,21 @@ Checkpoint dependency fingerprints include the profile fingerprint
 transitively. This preserves the existing generic profile schema and Judge
 workflow version while making capability semantics part of Judge resume
 compatibility.
+
+## UA1 — Host-neutral Capability Runtime Extraction
+
+UA1 moves the existing financial, Attachment, and Document tool definitions and
+application capability composition from CLI-owned modules into packages/engine
+(@harness/engine). createEngineCapabilityRuntime composes one ToolRuntime, the
+existing tools, capability Gateway, and Judge CapabilityPlan per application
+context. It accepts existing provider/store interfaces and a trusted Session
+ID. The CLI continues to create concrete providers and stores, and consumes
+the returned Gateway and plan from its HarnessContext.
+
+apps/cli/src/tools/financialToolEvents.ts remains a CLI adapter because it maps
+ToolRuntimeEvent to CLI AgentEvent. Judge workflow/nodes/checkpointing,
+Session/repl orchestration, conversation/context, and WorkingContext
+publication also remain in CLI. UA1 does not complete the engine extraction.
 
 ## Core boundaries and invariants
 

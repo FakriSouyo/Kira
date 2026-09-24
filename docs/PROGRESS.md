@@ -5,9 +5,13 @@ Last updated: 2026-09-24
 ## Current state
 
 - T5 Judge Integration + Release Integrity is complete on master.
-- KA Kira Identity Surface + Documentation Governance is the current slice.
-- UA Kira Engine Extraction is next after KA.
-- KB Internal Kira Identity Migration follows UA; U Research Composition follows KB.
+- KA Kira Identity Surface + Documentation Governance is complete on master.
+- UA is the current architecture extraction family. UA1 Host-neutral
+  Capability Runtime Extraction is the selected first UA slice implemented in
+  the current source.
+- Later UA slices remain provisional and must be selected through fresh source
+  audit. KB Internal Kira Identity Migration follows UA, then U Research
+  Composition.
 
 The canonical dependency sequence and future design boundaries live in
 [ROADMAP.md](ROADMAP.md). Current architecture facts live in

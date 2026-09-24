@@ -22,12 +22,9 @@ import {
 import { createFinancialEvidenceCandidate, EVIDENCE_POLICY } from '@harness/evidence';
 import { buildEvidenceZone, normalizeJudgmentScore, stanceForScore, UserFriendlyError, ValidationError } from '@harness/shared';
 import type { CapabilityPrincipal } from '@harness/capability';
+import { financialToolIds, JUDGE_CAPABILITY_PRINCIPALS } from '@harness/engine';
 import type { AgentEvent } from '../repl/events';
 import type { HarnessContext } from '../context';
-import {
-  JUDGE_CAPABILITY_PRINCIPALS,
-} from '../tools/financialCapabilities';
-import { financialToolIds } from '../tools/financialTools';
 import { projectFinancialToolEvent } from '../tools/financialToolEvents';
 
 /** Phase shown by progress renderers; the composition layer re-exports it for events.ts. */

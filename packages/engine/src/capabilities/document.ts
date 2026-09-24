@@ -1,5 +1,5 @@
 import type { CapabilityGrant, CapabilityRegistration } from '@harness/capability';
-import { documentToolIds, type DocumentTools } from './documentTools';
+import { documentToolIds, type DocumentTools } from '../tools/document';
 
 export const DOCUMENT_CAPABILITY_INTEGRATION_ID = 'document-store' as const;
 
