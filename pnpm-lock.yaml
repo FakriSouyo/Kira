@@ -254,12 +254,18 @@ importers:
       '@harness/command-core':
         specifier: workspace:*
         version: link:../command/core
+      '@harness/context':
+        specifier: workspace:*
+        version: link:../context
       '@harness/document':
         specifier: workspace:*
         version: link:../document
       '@harness/financial-data':
         specifier: workspace:*
         version: link:../financial-data
+      '@harness/orchestrator':
+        specifier: workspace:*
+        version: link:../orchestrator
       '@harness/schemas':
         specifier: workspace:*
         version: link:../schemas

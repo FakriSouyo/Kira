@@ -1,6 +1,6 @@
 import type { FinharnessDatabase } from '@harness/database';
 import { fileURLToPath } from 'node:url';
-import { createEngineCapabilityRuntime, type EngineCapabilityRuntime } from '@harness/engine';
+import { createConversationContextCoordinator, createEngineCapabilityRuntime, type ConversationContextCoordinator, type EngineCapabilityRuntime } from '@harness/engine';
 import { ClaimValidator } from '@harness/execution';
 import { createLLMClient, type ModelRuntimePlan } from '@harness/llm';
 import { DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS } from '@harness/context';
@@ -15,7 +15,6 @@ import { SubagentRuntime } from '@harness/subagent-core';
 import { JudgeAgent } from '@harness/subagent-judge';
 import { ResearcherAgent } from '@harness/subagent-researcher';
 import type { FinharnessConfig } from './config';
-import { createConversationContextCoordinator, type ConversationContextCoordinator } from './runtime/conversationContextCoordinator';
 
 export interface HarnessContext extends EngineCapabilityRuntime {
   db: FinharnessDatabase;
@@ -114,7 +113,11 @@ export function buildContext(
     judge: new JudgeAgent(specialist('judge')),
     router: new IntentRouter(routerLlm),
     mainAgent: new MainFinHarnessAgent(agentLlm),
-    conversationContext: createConversationContextCoordinator(db, {
+    conversationContext: createConversationContextCoordinator({
+      workingContext: db.workingContext,
+      artifacts: db.artifacts,
+      contextSnapshots: db.contextSnapshots,
+    }, {
       modelCapabilities: {
         ...modelCapabilities,
       },

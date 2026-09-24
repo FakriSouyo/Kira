@@ -7,7 +7,7 @@ import { openDb, type FinharnessDatabase } from '@harness/database';
 import { renderContextPacket } from '@harness/orchestrator';
 import type { FinancialDataProvider } from '@harness/financial-data';
 import { loadConfig } from '../src/config';
-import { createConversationContextCoordinator } from '../src/runtime/conversationContextCoordinator';
+import { createConversationContextCoordinator } from '@harness/engine';
 import { createHarnessSession } from '../src/repl/session';
 
 describe('PR I conversational context integration', () => {
@@ -181,7 +181,11 @@ describe('PR I conversational context integration', () => {
     const config = loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true });
     const session = await createHarnessSession(db, config, { write: () => {} });
     await session.commands.get('judge')!(['BBRI']);
-    session.context.conversationContext = createConversationContextCoordinator(db, {
+    session.context.conversationContext = createConversationContextCoordinator({
+      workingContext: db.workingContext,
+      artifacts: db.artifacts,
+      contextSnapshots: db.contextSnapshots,
+    }, {
       modelCapabilities: { contextWindowTokens: 1100 },
       reservedOutputTokens: 64,
       safetyMarginTokens: DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS,
@@ -222,7 +226,11 @@ describe('PR I conversational context integration', () => {
     const config = loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true });
     const session = await createHarnessSession(db, config, { write: () => {} });
     await session.commands.get('judge')!(['BBRI']);
-    session.context.conversationContext = createConversationContextCoordinator(db, {
+    session.context.conversationContext = createConversationContextCoordinator({
+      workingContext: db.workingContext,
+      artifacts: db.artifacts,
+      contextSnapshots: db.contextSnapshots,
+    }, {
       modelCapabilities: { contextWindowTokens: 128 },
       reservedOutputTokens: 64,
       safetyMarginTokens: DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS,

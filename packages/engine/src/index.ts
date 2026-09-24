@@ -20,6 +20,12 @@ export {
   JUDGE_CAPABILITY_PRINCIPALS,
   SCREEN_CAPABILITY_PRINCIPAL,
 } from './capabilities/financial';
+export { createConversationContextCoordinator } from './conversation/contextCoordinator.js';
+export type {
+  ConversationContextBudgetOptions,
+  ConversationContextCoordinator,
+  PreparedConversationContext,
+} from './conversation/contextCoordinator.js';
 export { WorkflowTraceRecorder } from './runtime/workflowTraceRecorder';
 export type {
   TraceableWorkflowDefinition,
