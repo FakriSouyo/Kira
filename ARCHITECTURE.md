@@ -13,14 +13,16 @@ checkpointing, conversation/context and WorkingContext publication, provider
 composition, and CLI event adaptation. It remains more than a thin host
 adapter.
 
-packages/engine (package name @harness/engine) now owns the first extracted
-host-neutral boundary: financial, Attachment, and Document tool definitions
-and their capability composition. Its factory receives the existing
-FinancialDataProvider, AttachmentStore, DocumentStore, and trusted Session ID,
-then returns the capability Gateway and Judge plan. It does not create
-providers or databases, or own Judge workflows, lifecycle, conversation,
-context, WorkingContext publication, or CLI event adaptation. UA extraction is
-not complete.
+packages/engine (package name @harness/engine) owns the extracted host-neutral
+financial, Attachment, and Document tool definitions and capability
+composition, plus `WorkflowTraceRecorder`. The recorder translates
+`WorkflowEvent` and subagent results into existing durable trace writes through
+a host-supplied Session trace store; it does not own persistence. The capability
+factory receives the existing FinancialDataProvider, AttachmentStore,
+DocumentStore, and trusted Session ID, then returns the capability Gateway and
+Judge plan. The engine does not create providers or databases, or own Judge
+workflow execution, Session lifecycle, conversation, context, WorkingContext
+publication, or CLI event adaptation. UA extraction is not complete.
 
     apps/cli
       CLI host + significant remaining application/runtime orchestration
@@ -28,7 +30,7 @@ not complete.
            v
     packages/engine (@harness/engine)
       host-neutral financial, Attachment, and Document tools
-      + capability runtime composition
+      + capability composition + WorkflowTraceRecorder
            | coordinates
            v
     packages/*
@@ -41,15 +43,15 @@ packages/sectors-api is the current financial provider implementation. The
 current source symbol for the conversational host is MainFinHarnessAgent; it is
 a legacy internal name scheduled for KB. The current @harness/* package
 namespace and FinharnessConfig/HarnessContext identifiers are also deferred
-to KB; no internal identity migration occurs in KA or UA1.
+to KB; no internal identity migration occurs in KA or UA.
 
 ## Target direction — complete Kira engine
 
-The current packages/engine is only the first extracted boundary, not the
-complete target engine. Kira is a reusable financial research engine. The CLI
-is its first host adapter. Future Desktop and Web surfaces should consume the
-same host-neutral engine rather than reimplement Judge, Session, Context,
-Evidence, capability, or lifecycle behavior.
+The current packages/engine remains a partial host-neutral application
+boundary, not the complete target engine. Kira is a reusable financial
+research engine. The CLI is its first host adapter. Future Desktop and Web
+surfaces should consume the same host-neutral engine rather than reimplement
+Judge, Session, Context, Evidence, capability, or lifecycle behavior.
 
                  Kira Engine
 
@@ -78,7 +80,7 @@ authorize. Tools execute. Domain packages own truth. Database persists.
 The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
-authority. UA boundaries beyond the selected UA1 slice remain provisional and
+authority. UA boundaries beyond the selected UA2 slice remain provisional and
 must be selected after a fresh source audit before each slice.
 
 ## Model runtime — Q1 / Q2
@@ -337,6 +339,21 @@ apps/cli/src/tools/financialToolEvents.ts remains a CLI adapter because it maps
 ToolRuntimeEvent to CLI AgentEvent. Judge workflow/nodes/checkpointing,
 Session/repl orchestration, conversation/context, and WorkingContext
 publication also remain in CLI. UA1 does not complete the engine extraction.
+
+## UA2 — Host-neutral Workflow Trace Extraction
+
+UA2 moves the existing `WorkflowTraceRecorder` from the CLI runtime into
+`packages/engine`. It receives `WorkflowEvent` and `SubagentResult` values and
+an externally supplied Session trace store, then coordinates existing
+`WorkflowStep` and `ModelCall` writes. It is not the `WorkflowRunner`, which
+owns workflow execution and event semantics, or a persistence authority.
+
+`projectWorkflowStep` remains in CLI and projects the same `WorkflowEvent`
+stream into presentation-facing `AgentEvent` values. Judge orchestration,
+workflow nodes, checkpointing, Session/repl, conversation/context,
+WorkingContext publication, and provider composition remain in CLI. The
+recorder and CLI projection are separate subscribers to workflow runtime truth;
+UA2 does not complete engine extraction.
 
 ## Core boundaries and invariants
 

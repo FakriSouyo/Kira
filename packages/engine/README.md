@@ -6,6 +6,12 @@ and Document tools. `createEngineCapabilityRuntime` receives the existing
 financial provider and Session-scoped stores, then returns the capability
 Gateway and Judge plan used by the current CLI host.
 
+It also owns the host-neutral `WorkflowTraceRecorder`, which translates
+`WorkflowEvent` and subagent results into durable trace writes through a
+trace store supplied by the host. `WorkflowRunner` owns workflow execution and
+event semantics; the recorder is not a database/store authority, and CLI event
+projection remains in the CLI.
+
 Authority stays explicit: `@harness/capability` owns capability contracts,
 `CapabilityRegistry`, `CapabilityPolicy`, `CapabilityGateway`, and the authorization
 mechanism. `@harness/engine` owns application tool bindings, registrations, and
@@ -13,4 +19,4 @@ grants. `@harness/tool-runtime` remains execution authority. Domain packages
 retain store, provider, and domain truth.
 
 The engine does not create providers or databases, or own Judge workflows,
-Session lifecycle, CLI events, or persistence.
+Session lifecycle, CLI events, or persistence authority.

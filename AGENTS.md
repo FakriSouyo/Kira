@@ -20,8 +20,9 @@ roadmap or historical design document.
 apps/cli remains more than a thin host adapter. It still owns substantial Judge,
 Session/repl, conversation/context, WorkingContext, provider, and event
 orchestration, and is scheduled for extraction in UA.
-packages/engine (@harness/engine) currently owns only the extracted financial,
-Attachment, and Document tool definitions and capability composition. UA is
+packages/engine (@harness/engine) currently owns the extracted financial,
+Attachment, and Document tool definitions and capability composition, plus
+the host-neutral WorkflowTraceRecorder using a host-supplied trace store. UA is
 incomplete; do not assume broader engine APIs exist. Do not put new reusable
 application/core behavior in CLI when a host-neutral boundary is clearly
 required.

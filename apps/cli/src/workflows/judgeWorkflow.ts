@@ -9,10 +9,10 @@ import {
 import { WorkflowRunner, WorkflowStepError, type WorkflowEvent } from '@harness/command-core';
 import { mapToUserFriendly, UserFriendlyError } from '@harness/shared';
 import { FinancialDataVerificationError } from '@harness/financial-data';
+import { WorkflowTraceRecorder } from '@harness/engine';
 import type { SkillReference } from '@harness/subagent-core';
 import type { AgentEvent, UiWorkflowStepStatus } from '../repl/events';
 import type { HarnessContext } from '../context';
-import { WorkflowTraceRecorder } from '../runtime/workflowTraceRecorder';
 import {
   assertNotAborted, createJudgeNodeExecutors,
   type BearChallengeResponse, type BullAnalysisResponse, type ChallengeTurn, type CollectedSources,
