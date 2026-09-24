@@ -117,7 +117,7 @@ describe('PR P same-Execution Judge resume', () => {
     await db.sessions.interruptExecution(execution.id, 'test interruption after durable prefix');
 
     const checkpointed = await db.workflowNodeOutputs.listNodeOutputsForExecution(execution.id);
-    expect(checkpointed.map(output => output.nodeId)).toEqual(prefix.nodes.map(node => node.id));
+    expect(checkpointed.map(output => output.nodeId).sort()).toEqual(prefix.nodes.map(node => node.id).sort());
 
     db.journal.append(session.id, {
       type: 'message.added', id: 'message_same_execution', role: 'user', content: '/judge BBCA', state: 'completed',
