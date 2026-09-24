@@ -596,7 +596,7 @@ export class MockLLMClient implements LLMClientLike {
 
   async generateText(params: GenerateTextParams): Promise<string> {
     const system = Array.isArray(params.system) ? params.system.join('\n') : params.system ?? '';
-    if (system.includes('Main FinHarness Agent')) {
+    if (system.includes('Main Kira Agent')) {
       return this.mainAgentAnswer(params.prompt);
     }
     return `[mock-llm] ${params.prompt.slice(0, 120)}`;
@@ -612,7 +612,7 @@ export class MockLLMClient implements LLMClientLike {
   /** Streaming deterministik (tanpa delay) — konsumen menerima beberapa yield. */
   async *streamText(params: StreamTextParams): AsyncIterable<string> {
     const system = Array.isArray(params.system) ? params.system.join('\n') : params.system ?? '';
-    if (system.includes('Main FinHarness Agent')) {
+    if (system.includes('Main Kira Agent')) {
       // Samakan dengan generateText supaya streaming conversation konsisten di mock.
       const answer = this.mainAgentAnswer(params.prompt);
       const step = Math.max(1, Math.ceil(answer.length / 3));
@@ -629,7 +629,7 @@ export class MockLLMClient implements LLMClientLike {
     return { chunks, metadata: (async () => mockMetadata())() };
   }
 
-  /** Jawaban kanonik Main FinHarness Agent untuk prompt conversation (konsisten response & stream). */
+  /** Jawaban kanonik Main Kira Agent untuk prompt conversation (konsisten response & stream). */
   private mainAgentAnswer(prompt: string): string {
     const topic = prompt.match(/User question:\s*(.+)/i)?.[1] ?? 'pertanyaan finansial';
     return `${topic} adalah topik finansial yang bisa saya bantu jelaskan secara umum. Untuk jawaban berbasis data dan sumber terbaru, lanjutkan dengan /research ${topic}`;

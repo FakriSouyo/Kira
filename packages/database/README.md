@@ -16,7 +16,7 @@ Implementasi SQLite — satu-satunya paket yang menyentuh Drizzle/better-sqlite3
 | `*StoreSqlite.ts` | Implementasi store interface lain dari paket kontrak masing-masing |
 
 Catatan:
-- DB dibuat otomatis di `<homeDir>/finharness.db` (default `~/.finharness/`; bisa diarahkan `--home`/`FINHARNESS_HOME`).
+- DB Kira dibuat otomatis di `<homeDir>/finharness.db` (default `~/.finharness/`, legacy internal storage path scheduled for KB; bisa diarahkan `--home`/`FINHARNESS_HOME`).
 - `research_turns.run_id` dipertahankan nullable selama transisi; ownership baru
   berada pada `executions.turn_id`. Baris lama di-backfill tanpa mengubah ID atau
   artifact run yang sudah tersimpan.

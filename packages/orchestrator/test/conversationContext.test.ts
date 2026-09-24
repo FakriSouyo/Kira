@@ -50,7 +50,7 @@ describe('conversation context focus and renderer', () => {
     expect(first).toContain('Saya fokus pada kualitas bank.');
     expect(first).toContain('ASSUMPTIONS');
     expect(first).toContain('OPEN QUESTIONS');
-    expect(first).toContain('prior FinHarness research state');
+    expect(first).toContain('prior Kira research state');
     expect(first).not.toContain('snapshot_');
     expect(first).not.toContain('workingContextVersion');
     expect(first).not.toContain('createdAt');

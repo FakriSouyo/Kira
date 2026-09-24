@@ -30,8 +30,8 @@ const LIGHT = '─'.repeat(58);
 export function renderBanner(homeDir: string, mockSectors: boolean, mockLlm: boolean, version: string = '0.2.0-rc'): string {
   const lines = [
     HEAVY,
-    `  ${color.cyan(color.bold(`⚡ Financial Agent Harness v${version}`))}`,
-    `  Evidence-based stock research system`,
+    `  ${color.cyan(color.bold(`⚡ Kira v${version}`))}`,
+    `  Evidence-backed financial research engine`,
     `  Type ${color.green('/help')} for available commands`,
     `  Data dir: ${color.gray(homeDir)}`,
   ];
@@ -45,12 +45,12 @@ export function renderBanner(homeDir: string, mockSectors: boolean, mockLlm: boo
 
 export function renderHelp(): string {
   return [
-    color.bold('Financial Agent Harness Commands'),
+    color.bold('Kira Commands'),
     '',
     color.bold('Core:'),
     `  ${color.green('/judge [TICKER]')}           Full analysis + Debate ronde (Researcher → Bull → Bear → Bull → Judge)`,
     `  ${color.green('/screen [CRITERIA]')}        Screen stocks (profitable, growing)`,
-    `  ${color.green('/attach <path>')}           Import one user-selected file into FinHarness`,
+    `  ${color.green('/attach <path>')}           Import one user-selected file into Kira`,
     `  ${color.green('/files')}                   List files owned by the current Session`,
     `  ${color.green('/doc-index <attachmentId>')} Index one owned attachment into deterministic document chunks`,
     `  ${color.green('/doc-search <query>')}       Search indexed document chunks with citations`,
@@ -136,7 +136,7 @@ export function renderJudgeResult(artifacts: JudgeArtifacts): string {
 
   return [
     HEAVY,
-    `  ${color.bold('FINANCIAL AGENT HARNESS')}`,
+    `  ${color.bold('KIRA')}`,
     `  ${run.ticker} · Multi-Agent Analysis`,
     HEAVY,
     '',

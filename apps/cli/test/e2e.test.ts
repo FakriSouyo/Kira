@@ -69,7 +69,7 @@ describe('E2E — /judge offline (mock sectors + mock LLM)', () => {
     const run = await runCli(home, '/judge BBCA\n/exit\n');
 
     expect(run.code).toBe(0);
-    expect(run.stdout).toContain('FINANCIAL AGENT HARNESS');
+    expect(run.stdout).toContain('KIRA');
     expect(run.stdout).toContain('🔍 RESEARCHER');
     expect(run.stdout).toContain('🐂 BULL AGENT');
     expect(run.stdout).toContain('🐻 BEAR AGENT');

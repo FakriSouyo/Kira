@@ -9,7 +9,7 @@ export interface EvidenceLike {
 }
 
 export const EVIDENCE_PREAMBLE =
-  'You are part of the Financial Agent Harness, an evidence-based stock research system. ' +
+  'You are part of Kira, an evidence-based stock research system. ' +
   'Cite evidence by ID only — never invent data.';
 
 /**

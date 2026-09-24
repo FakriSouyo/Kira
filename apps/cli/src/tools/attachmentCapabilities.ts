@@ -33,17 +33,17 @@ export function createAttachmentCapabilityRegistrations(tools: AttachmentTools) 
     registration(
       tools.list,
       'List Session Attachments',
-      'List raw attachments owned by the active FinHarness Session.',
+      'List raw attachments owned by the active Kira Session.',
     ),
     registration(
       tools.describe,
       'Describe Attachment',
-      'Read metadata for one raw attachment owned by the active FinHarness Session.',
+      'Read metadata for one raw attachment owned by the active Kira Session.',
     ),
     registration(
       tools.read,
       'Read Attachment',
-      'Read exact raw bytes for one attachment owned by the active FinHarness Session.',
+      'Read exact raw bytes for one attachment owned by the active Kira Session.',
     ),
   ] as const);
 }

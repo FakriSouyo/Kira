@@ -1,5 +1,8 @@
 # Legacy Roadmap
 
+Historical document from the FinHarness era. The current project is Kira. This
+document is retired and is not a current architecture authority.
+
 ## Status
 
 This roadmap is retired and is not a source of current architectural truth.

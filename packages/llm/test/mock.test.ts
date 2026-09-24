@@ -59,11 +59,11 @@ const EVIDENCE_BLOCK = renderEvidenceBlock([
   },
 ]);
 
-const BULL_ZONE1 = `You are part of the Financial Agent Harness.\nAvailable evidence for BBCA:\n${EVIDENCE_BLOCK}`;
+const BULL_ZONE1 = `You are part of Kira.\nAvailable evidence for BBCA:\n${EVIDENCE_BLOCK}`;
 const BULL_ZONE2 = 'You are Bull Agent, an optimistic financial analyst.';
 const BEAR_ZONE2 = 'You are Bear Agent, a skeptical financial analyst.';
 const JUDGE_SYSTEM = 'You are Judge Agent, a neutral arbiter.';
-const ROUTER_SYSTEM = 'You are Intent Router for Financial Agent Harness.';
+const ROUTER_SYSTEM = 'You are Intent Router for Kira.';
 
 /** Format prompt challenge milik specialist Bear. */
 const BEAR_PROMPT = `You are a bearish analyst evaluating BBCA.
@@ -317,7 +317,7 @@ describe('MockLLMClient — Market & News (Phase 1, addendum §24-A)', () => {
   const mock = new MockLLMClient();
   const M = '77777777-cccc-4ccc-8ccc-777777777777'; // daily_transaction
   const S = '66666666-dddd-4ddd-8ddd-666666666666'; // sentiment
-  const CONSTRUCTIVE = 'You are part of the Financial Agent Harness.\nAvailable evidence for BBCA:\n' +
+  const CONSTRUCTIVE = 'You are part of Kira.\nAvailable evidence for BBCA:\n' +
     renderEvidenceBlock([
       { id: E1, source: 'sectors.company_report', data: { ticker: 'BBCA', financials: { roe: 23.1 } } },
       { id: M, source: 'sectors.daily_transaction', data: { ticker: 'BBCA', upDaysPct: 63, liquidityBand: 'high' } },

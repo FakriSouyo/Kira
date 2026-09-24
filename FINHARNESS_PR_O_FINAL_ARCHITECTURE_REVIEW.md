@@ -1,5 +1,8 @@
 # FinHarness PR O Final Architecture Review
 
+Historical architecture review from the FinHarness era. The current project is
+Kira; current architecture authority is ARCHITECTURE.md.
+
 Date: 2026-09-19
 Branch: `feat/pr-o-durable-resumability-foundation`
 Scope: PR O durable resumability foundation only. PR P was not implemented.

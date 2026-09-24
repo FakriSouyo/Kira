@@ -46,7 +46,7 @@ function verifyBytes(content: Uint8Array, expectedHash: string, expectedSize: nu
   }
 }
 
-/** SQLite metadata plus immutable content-addressed bytes under the FinHarness data root. */
+/** SQLite metadata plus immutable content-addressed bytes under the Kira data root. */
 export class AttachmentStoreSqlite implements AttachmentStore {
   constructor(private readonly db: Orm, private readonly homeDir: string) {}
 

@@ -1,39 +1,76 @@
-# FinHarness Architecture
+# Kira Architecture
 
 This document describes the current runtime architecture and its invariants.
 It is not a chronological implementation diary. The canonical roadmap is
 [`docs/ROADMAP.md`](docs/ROADMAP.md), and current project status is
 [`docs/PROGRESS.md`](docs/PROGRESS.md).
 
-## System shape
+## Current architecture facts
+
+The current application/runtime composition is still primarily in apps/cli.
+It owns the CLI host, command dispatch, Session/repl orchestration, provider
+composition, and significant application wiring. It is more than a thin host
+adapter. No packages/engine or @kira/engine package exists.
 
 ```text
 apps/cli
-  explicit slash commands + natural-language conversation
+  CLI host + significant application/runtime composition
           │
           ▼
-packages/orchestrator + packages/routing
-          │
-          ▼
-packages/context
-  resolver → retrieval → validity → policy → assembler
-          │
-          ├───────────────┬─────────────────┐
-          ▼               ▼                 ▼
-packages/command   packages/subagent   packages/financial-data
-WorkflowRunner     Bull/Bear/Judge     provider-neutral seam
-          │               │                 │
-          └───────────────┴─────────────────┘
-                          ▼
-     evidence / execution / session / conversation
-                          │
-                          ▼
-                   packages/database
+packages/*
+  existing command, capability, context, session, execution,
+  evidence, conversation, document, LLM, provider, and persistence authorities
 ```
 
-External seams are explicit: `packages/llm` owns model clients,
-`packages/financial-data` owns the provider-neutral financial contract, and
-`packages/sectors-api` is the current financial provider implementation.
+External seams are explicit: packages/llm owns model clients,
+packages/financial-data owns the provider-neutral financial contract, and
+packages/sectors-api is the current financial provider implementation. The
+current source symbol for the conversational host is MainFinHarnessAgent; it
+is a legacy internal name scheduled for KB. The current @harness/* package
+namespace and FinharnessConfig/HarnessContext identifiers are also deferred to
+KB; no internal identity migration occurs in KA.
+
+## Target direction — Kira engine
+
+This section is future architecture direction, not a claim about current
+packages or production wiring. Kira is a reusable financial research engine.
+The CLI is its first host adapter. Future Desktop and Web surfaces should
+consume the same host-neutral engine rather than reimplement Judge, Session,
+Context, Evidence, capability, or lifecycle behavior.
+
+```text
+             Kira Engine
+
+CLI ──────┐
+Desktop ──┼──> host-neutral engine
+Web ──────┘          │
+                     ▼
+            existing domain/runtime packages
+```
+
+The eventual conceptual dependency direction is:
+
+```text
+host adapters
+    ↓
+Kira engine/application boundary
+    ↓
+command / capability / context
+session / execution / evidence
+conversation / document / llm
+subagents / financial-data
+    ↓
+persistence/providers
+```
+
+Apps present. Engine coordinates. Commands define workflows. Capabilities
+authorize. Tools execute. Domain packages own truth. Database persists.
+
+The future engine coordinates these existing authorities; it does not become
+another Evidence authority, Claim authority, capability authorization
+authority, ToolRuntime, database authority, provider authority, or graph
+authority. UA is the planned extraction slice. Exact UA boundaries are selected
+after a fresh source audit and are not locked by this map.
 
 ## Model runtime — Q1 / Q2
 
@@ -720,7 +757,7 @@ Context
 ```
 
 The explicit `/attach <path>` command creates one canonical Turn and no
-Execution. It snapshots exact raw bytes into FinHarness-owned content-addressed
+Execution. It snapshots exact raw bytes into Kira-owned content-addressed
 storage below the configured data directory:
 
 ```text
@@ -747,7 +784,7 @@ Attachment != Document != Evidence != Artifact != Context
 
 ## Session-scoped raw file capabilities — S2
 
-S2 adds controlled access to existing FinHarness-owned Attachments. It does not
+S2 adds controlled access to existing Kira-owned Attachments. It does not
 introduce a durable `Workspace`, a second file identity, a new migration, a
 Document model, parsing, retrieval, context injection, or host filesystem
 access. In S2, “workspace” is only the active Session-scoped view:
@@ -830,7 +867,7 @@ call is involved.
 ```
 
 Document identity is a deterministic hash of schema version, source
-Attachment, source content hash, and the exact parser plus FinHarness pipeline
+Attachment, source content hash, and the exact parser plus current document pipeline
 version. The same Attachment can retain distinct Document derivations across
 pipeline versions. Re-indexing under one version is idempotent; conflicting
 semantics under that version fail closed. PDF magic in verified bytes takes
@@ -863,21 +900,11 @@ Errors cross the CLI boundary as structured user-facing errors. Internal
 conflicts remain diagnosable without persisting secrets or exposing raw
 credentials.
 
-## Current roadmap
+## Roadmap and status
 
-The current and future milestone order is maintained in
-[`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2,
-S1, S2, S3, T1 Evidence Acceptance + Provenance, T2 Claim Grounding + Durable
-Claim Model, T3 Counterpoint Grounding + Durability, and T4 Claim Graph Core
-are complete on master. T5 Judge Integration + Release Integrity is
-implemented in the current worktree pending source review. U Research
-Composition / Product Completion is next.
-
-R2C2 migrated the remaining Judge direct-runtime path and added durable
-capability semantic compatibility. PR P continues to restore the same
-Execution's validated snapshot, Evidence, and typed debate outputs without
-changing its lifecycle or Judge graph. The full future order is maintained in
-[`docs/ROADMAP.md`](docs/ROADMAP.md).
+The canonical future dependency sequence is maintained in
+[`docs/ROADMAP.md`](docs/ROADMAP.md). Mutable current slice status is
+maintained in [`docs/PROGRESS.md`](docs/PROGRESS.md).
 
 ### R1 Typed Tool Runtime
 

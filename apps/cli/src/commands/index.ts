@@ -113,7 +113,7 @@ function makeAttachCommand(ctx: HarnessContext, write: (text: string) => void): 
     }
     const lifecycle = execution?.lifecycle;
     if (!lifecycle) {
-      throw new UserFriendlyError('MISSING_LIFECYCLE', 'Attachment import requires an active Session Turn', 'Retry the import from the FinHarness command prompt.');
+      throw new UserFriendlyError('MISSING_LIFECYCLE', 'Attachment import requires an active Session Turn', 'Retry the import from the Kira command prompt.');
     }
     const sourcePath = resolve(args[0]!);
     let sourceStat;
@@ -147,7 +147,7 @@ function makeDocumentIndexCommand(ctx: HarnessContext, write: (text: string) => 
     }
     const lifecycle = execution?.lifecycle;
     if (!lifecycle) {
-      throw new UserFriendlyError('MISSING_LIFECYCLE', 'Document indexing requires an active Session Turn', 'Retry the command from the FinHarness command prompt.');
+      throw new UserFriendlyError('MISSING_LIFECYCLE', 'Document indexing requires an active Session Turn', 'Retry the command from the Kira command prompt.');
     }
     const result = await ctx.capabilityGateway.invoke(
       COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL,
@@ -290,7 +290,7 @@ function makeStatusCommand(ctx: HarnessContext): CommandHandler {
   return async () => {
     const cfg = loadConfig({ homeDir: ctx.homeDir });
     process.stdout.write(
-      `${color.cyan('FinHarness Status')}\n` +
+      `${color.cyan('Kira Status')}\n` +
         `  Sectors API: ${cfg.sectors.apiKey ? color.green('✓ configured') : color.red('✗ missing')} ${color.dim(maskKey(cfg.sectors.apiKey))}\n` +
         `  AI Provider: ${cfg.llm.agent.provider} · ${cfg.llm.agent.model} ${cfg.llm.agent.apiKey ? color.green('✓') : color.red('✗')}\n` +
         `  Router: ${cfg.llm.router.provider} · ${cfg.llm.router.model} ${cfg.llm.router.apiKey ? color.green('✓') : color.red('✗')}\n` +
@@ -315,7 +315,7 @@ function makeSetupCommand(ctx: HarnessContext): CommandHandler {
     if (!process.stdout.isTTY) {
       const cfg = loadConfig({ homeDir: ctx.homeDir });
       process.stdout.write(
-        `${color.cyan('FinHarness Setup')}\n` +
+        `${color.cyan('Kira Setup')}\n` +
           `  Sectors API: ${cfg.sectors.apiKey ? '✓' : '✗'}\n` +
           `  AI Provider: ${cfg.llm.agent.provider} · ${cfg.llm.agent.model}\n` +
           `  Use /auth-set for non-interactive setup.\n\n`,

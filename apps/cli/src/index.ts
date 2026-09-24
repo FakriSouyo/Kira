@@ -10,12 +10,12 @@ import { VERSION } from './commands/version';
 import { needsSetup } from './setup/service';
 import { statusLine } from './setup/components/StatusLine';
 
-const USAGE = `Usage: pnpm finharness [options]
+const USAGE = `Usage: pnpm kira [options]
 
-Financial Agent Harness — evidence-based stock research REPL.
+Kira — evidence-backed financial research REPL.
 
 Options:
-  --home <dir>       Data directory (default: ~/.finharness)
+  --home <dir>       Data directory (default: legacy ~/.finharness)
   --mock-sectors     Use offline Sectors API fixtures (no API key needed)
   --mock-llm         Use deterministic offline LLM (no API key needed)
   --no-setup         Skip first-run wizard even if config missing
@@ -111,7 +111,7 @@ async function main(): Promise<void> {
     process.stdout.write(`${renderBanner(config.homeDir, config.sectors.mock, config.mockLlm, VERSION)}\n\n`);
   } else {
     const line = statusLine(config);
-    process.stdout.write(`⚡ FinHarness\nEvidence-based financial research\n${line}\n────────────────────────────────────────────\n\n`);
+    process.stdout.write(`⚡ Kira\nEvidence-backed financial research\n${line}\n────────────────────────────────────────────\n\n`);
   }
 
   try {

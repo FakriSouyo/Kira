@@ -47,7 +47,7 @@ export function makeResumeCommand(ctx: HarnessContext, options: { events?: (even
   return async (args: string[], execution) => {
     const runId = args[0] ?? execution?.resume?.executionId;
     if (!runId) throw new UserFriendlyError('MISSING_ARG', 'No runId provided', 'Usage: /resume <runId>');
-    if (!execution?.lifecycle || !execution.resume) throw new UserFriendlyError('INVALID_RESUME_CONTEXT', 'Resume commands must run inside an active conversation Session.', 'Use /resume <executionId> from the FinHarness prompt.');
+    if (!execution?.lifecycle || !execution.resume) throw new UserFriendlyError('INVALID_RESUME_CONTEXT', 'Resume commands must run inside an active conversation Session.', 'Use /resume <executionId> from the Kira prompt.');
     const artifacts = await resumeJudgeRun(ctx, runId, () => undefined, options.events ?? (() => undefined), {
       signal: execution.signal,
       lifecycle: execution.lifecycle,

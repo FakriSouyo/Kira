@@ -92,7 +92,7 @@ function request(overrides: Partial<Parameters<typeof budgetContext>[0]> = {}) {
   return {
     packet: packet(), render,
     focus: 'generic' as const,
-    basePrompt: 'Main FinHarness system instructions.',
+    basePrompt: 'Main Kira system instructions.',
     conversationHistory: '', currentUserMessage: 'jadi menurutmu bagaimana?',
     modelCapabilities: { contextWindowTokens: 4096 },
     reservedOutputTokens: 512, safetyMarginTokens: 64,
@@ -131,7 +131,7 @@ describe('deterministic context budgeting and compaction', () => {
     const source = packet();
     const available = estimateTextTokens(render(source));
     const result = budgetContext(request({
-      modelCapabilities: { contextWindowTokens: available + 512 + 64 + estimateTextTokens('Main FinHarness system instructions.') + estimateTextTokens('jadi menurutmu bagaimana?') },
+      modelCapabilities: { contextWindowTokens: available + 512 + 64 + estimateTextTokens('Main Kira system instructions.') + estimateTextTokens('jadi menurutmu bagaimana?') },
     }));
 
     expect(result.compacted).toBe(false);
@@ -146,7 +146,7 @@ describe('deterministic context budgeting and compaction', () => {
     const verdictOnly = { ...source, artifacts: [source.artifacts[2]!], userAssertions: [], assumptions: [], unresolvedQuestions: [] };
     const target = estimateTextTokens(render(verdictOnly));
     const result = budgetContext(request({
-      modelCapabilities: { contextWindowTokens: target + 512 + 64 + estimateTextTokens('Main FinHarness system instructions.') + estimateTextTokens('jadi menurutmu bagaimana?') },
+      modelCapabilities: { contextWindowTokens: target + 512 + 64 + estimateTextTokens('Main Kira system instructions.') + estimateTextTokens('jadi menurutmu bagaimana?') },
     }));
 
     expect(fullTokens).toBeGreaterThan(target);

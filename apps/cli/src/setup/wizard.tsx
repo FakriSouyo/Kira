@@ -134,10 +134,10 @@ export function SetupWizard({
   if (step === 'welcome') {
     return (
       <Box flexDirection="column">
-        <Text>⚡ FinHarness</Text>
-        <Text>Evidence-based financial research agent</Text>
+        <Text>⚡ Kira</Text>
+        <Text>Evidence-backed financial research engine</Text>
         <Text> </Text>
-        <Text>Welcome! Let's set up FinHarness.</Text>
+        <Text>Welcome! Let's set up Kira.</Text>
         <Text>─────────────────────────────────────</Text>
         <StepIndicator steps={steps} current={currentIdx} />
         <Text dimColor>Press Enter to begin  [Esc] Exit</Text>
@@ -149,7 +149,7 @@ export function SetupWizard({
     return (
       <Box flexDirection="column">
         <Text bold>Sectors API</Text>
-        <Text>FinHarness uses Sectors API to retrieve company and financial data.</Text>
+        <Text>Kira uses Sectors API to retrieve company and financial data.</Text>
         <Text dimColor>{SECTORS_KEY_HINT}</Text>
         <Text>API Key</Text>
         <SecretInput value={sectorsKey} onChange={setSectorsKey} onSubmit={handleSectorsSubmit} />
@@ -164,7 +164,7 @@ export function SetupWizard({
     return (
       <Box flexDirection="column">
         <Text bold>AI Provider</Text>
-        <Text>Choose how FinHarness should run its AI models.</Text>
+        <Text>Choose how Kira should run its AI models.</Text>
         <ProviderSelector
           onSelect={(id) => {
             setProviderId(id);
@@ -310,7 +310,7 @@ export function SetupWizard({
   return (
     <Box flexDirection="column">
       <Text color="green">Setup complete.</Text>
-      <Text>⚡ FinHarness — Ready · {provider?.label} · {agentModel}</Text>
+      <Text>⚡ Kira — Ready · {provider?.label} · {agentModel}</Text>
       <Text dimColor>Press Enter to continue</Text>
     </Box>
   );
