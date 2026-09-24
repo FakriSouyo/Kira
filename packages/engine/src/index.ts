@@ -26,6 +26,11 @@ export type {
   ConversationContextCoordinator,
   PreparedConversationContext,
 } from './conversation/contextCoordinator.js';
+export { createWorkingContextPublisher } from './session/workingContextPublisher.js';
+export type {
+  WorkingContextPublisher,
+  WorkingContextPublishStatus,
+} from './session/workingContextPublisher.js';
 export { WorkflowTraceRecorder } from './runtime/workflowTraceRecorder';
 export type {
   TraceableWorkflowDefinition,

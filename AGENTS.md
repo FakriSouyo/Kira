@@ -19,14 +19,19 @@ roadmap or historical design document.
 
 apps/cli remains more than a thin host adapter. It owns command dispatch,
 Session/repl lifecycle, Judge workflows/checkpointing, MainFinHarnessAgent
-invocation/streaming, WorkingContext publication, provider composition, CLI
-event adaptation, and ConversationController.
+invocation/streaming, provider composition, CLI event adaptation, and
+ConversationController. It also owns journal correlation/causation when audit
+events are appended.
 packages/engine (@harness/engine) owns financial, Attachment, and Document
 capability composition, WorkflowTraceRecorder, Screen workflow, and conversation
-context preparation. Conversation context preparation uses host-supplied stores;
-their persistence implementations remain outside engine. UA is incomplete; do
-not assume broader engine APIs exist. Do not put new reusable application/core
-behavior in CLI when a host-neutral boundary is clearly required.
+context preparation plus WorkingContext publication/reconciliation
+orchestration. These engine boundaries use host-supplied store contracts and
+narrow callbacks; their persistence implementations remain outside engine.
+WorkingContextStore owns durable WorkingContext persistence, and CLI's
+ConversationController remains the production journal correlation path. UA is
+incomplete; do not assume broader engine APIs exist. Do not put new reusable
+application/core behavior in CLI when a host-neutral boundary is clearly
+required.
 
 The future engine coordinates existing authorities. It must not replace
 Evidence, Claims, capability authorization, ToolRuntime, database, providers,

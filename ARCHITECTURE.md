@@ -9,19 +9,25 @@ It is not a chronological implementation diary. The canonical roadmap is
 
 apps/cli still owns significant application/runtime composition. It owns the CLI
 host, command dispatch, Session/repl lifecycle, Judge workflow/nodes and
-checkpointing, MainFinHarnessAgent invocation/streaming, WorkingContext
-publication, provider composition, CLI event adaptation, and
-ConversationController. It remains more than a thin host adapter.
+checkpointing, MainFinHarnessAgent invocation/streaming, provider composition,
+CLI event adaptation, and ConversationController. It remains more than a thin
+host adapter; ConversationController also remains the production journal
+correlation/causation path for audit appends.
 
 packages/engine (package name @harness/engine) owns the extracted host-neutral
 financial, Attachment, and Document tool definitions and capability composition,
 WorkflowTraceRecorder, Screen application workflow, and conversation context
-preparation. The context coordinator receives supplied WorkingContextStore,
-ArtifactStore, and ContextSnapshotStore contracts; persistence implementations
-remain outside engine. It coordinates existing @harness/context policies and
-@harness/orchestrator focus/prompt semantics. The capability factory receives
-the existing FinancialDataProvider, AttachmentStore, DocumentStore, and trusted
-Session ID, then returns the capability Gateway and Judge plan.
+preparation, plus WorkingContext publication/reconciliation orchestration. The
+context coordinator receives supplied WorkingContextStore, ArtifactStore, and
+ContextSnapshotStore contracts; the WorkingContext publisher receives supplied
+WorkingContextStore, ArtifactStore, and JudgmentStore contracts, a journal read
+callback, and a host audit append callback. Persistence implementations remain
+outside engine. The publisher coordinates publication; WorkingContextStore
+owns durable WorkingContext persistence. The context coordinator coordinates
+existing @harness/context policies and @harness/orchestrator focus/prompt
+semantics. The capability factory receives the existing FinancialDataProvider,
+AttachmentStore, DocumentStore, and trusted Session ID, then returns the
+capability Gateway and Judge plan.
 
     apps/cli
       CLI host + lifecycle, model/provider composition, and presentation
@@ -29,7 +35,8 @@ Session ID, then returns the capability Gateway and Judge plan.
            v
     packages/engine (@harness/engine)
       host-neutral tools, capability composition, trace recorder,
-      Screen workflow, and conversation context preparation
+      Screen workflow, conversation context preparation, and WorkingContext
+      publication/reconciliation orchestration
            | coordinates
            v
     packages/*
@@ -79,7 +86,7 @@ authorize. Tools execute. Domain packages own truth. Database persists.
 The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
-authority. UA boundaries beyond the selected UA4 slice remain provisional and
+authority. UA boundaries beyond the selected UA5 slice remain provisional and
 must be selected after a fresh source audit before each slice.
 
 ## Model runtime — Q1 / Q2
@@ -385,8 +392,27 @@ WorkingContextStore, ArtifactStore, and ContextSnapshotStore interfaces.
 Context policy remains in @harness/context, and focus/prompt rendering
 semantics remain in @harness/orchestrator; concrete persistence stays in
 persistence packages. Session/Turn lifecycle, model invocation and streaming,
-ModelCall persistence, provider composition, WorkingContext publication, and
-CLI event adaptation remain in CLI.
+ModelCall persistence, provider composition, and CLI event adaptation remain in
+CLI. UA4 did not extract WorkingContext publication or persistence.
+
+## UA5 - Host-neutral WorkingContext Publication Extraction
+
+UA5 moves WorkingContext publication and journal-reconciliation orchestration
+from `apps/cli` into `packages/engine`. The publisher receives the existing
+`WorkingContextStore`, `ArtifactStore`, and `JudgmentStore` contracts, a
+host-supplied journal read callback, and a host audit append callback. It keeps
+completed-Turn eligibility, completed-Execution filtering, typed Artifact
+resolution and legacy Judgment fallback, no-op suppression, canonical
+`turn.started` acceptance ordering, compare-and-set publication, and missing
+audit-event reconciliation together at the application boundary.
+
+The publisher coordinates publication; `WorkingContextStore` owns durable
+WorkingContext persistence. The publisher does not own Session/Turn lifecycle
+or load `ResearchSessionArtifacts`: CLI Session orchestration supplies those
+completed artifacts. `ConversationController` remains the production journal
+correlation/causation path for audit appends. Judge orchestration, model
+invocation/streaming, provider composition, and CLI event presentation remain
+in CLI.
 
 ## Core boundaries and invariants
 

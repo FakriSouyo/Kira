@@ -29,5 +29,16 @@ ContextSnapshotStore. Context policy remains in @harness/context; focus/prompt
 rendering semantics remain in @harness/orchestrator, and concrete persistence
 remains in persistence packages.
 
+The engine also owns WorkingContext publication and journal-reconciliation
+orchestration through `createWorkingContextPublisher`. It receives the existing
+WorkingContextStore, ArtifactStore, and JudgmentStore contracts, a journal read
+callback, and a host audit append callback. The CLI Session supplies the
+completed `ResearchSessionArtifacts`; the publisher does not own Session/Turn
+lifecycle or retrieve them itself. WorkingContextStore owns durable
+WorkingContext persistence. In production, ConversationController remains the
+audit append path so journal correlation and causation stay canonical.
+
 The engine does not create providers or databases, or own Judge workflows,
-Session lifecycle, CLI events, or persistence authority.
+Session lifecycle, CLI events, or persistence authority. Judge orchestration,
+model invocation and streaming, provider composition, and event presentation
+remain in CLI.

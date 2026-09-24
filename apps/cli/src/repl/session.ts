@@ -1,4 +1,5 @@
 import type { FinharnessDatabase } from '@harness/database';
+import { createWorkingContextPublisher } from '@harness/engine';
 import { UserFriendlyError } from '@harness/shared';
 import { buildContext } from '../context';
 import { loadConfig, type FinharnessConfig } from '../config';
@@ -6,7 +7,6 @@ import { buildCommands } from '../commands';
 import type { AgentEvent } from './events';
 import type { CommandHandler } from './loop';
 import { ConversationController } from '../ui/conversationController';
-import { createWorkingContextPublisher } from './workingContext';
 import { repairCompletedJudgeReleases } from '../workflows/judgeCheckpoint';
 
 /** Owns active clients and preview resources for either terminal renderer. */
@@ -83,8 +83,11 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
   };
   const commands = new Map<string, CommandHandler>();
   const publisher = createWorkingContextPublisher({
-    db,
-    append: (payload) => controller.append(payload),
+    workingContext: db.workingContext,
+    artifacts: db.artifacts,
+    judgments: db.judgments,
+    readJournal: sessionId => db.journal.read(sessionId),
+    appendAuditEvent: payload => controller.append(payload),
   });
   await repairCompletedJudgeReleases({ db, sessionId: controller.snapshot.id });
   const startupArtifacts = await db.sessions.getSessionArtifacts(controller.snapshot.id);
