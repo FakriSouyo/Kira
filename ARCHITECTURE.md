@@ -15,14 +15,16 @@ adapter.
 
 packages/engine (package name @harness/engine) owns the extracted host-neutral
 financial, Attachment, and Document tool definitions and capability
-composition, plus `WorkflowTraceRecorder`. The recorder translates
-`WorkflowEvent` and subagent results into existing durable trace writes through
-a host-supplied Session trace store; it does not own persistence. The capability
-factory receives the existing FinancialDataProvider, AttachmentStore,
-DocumentStore, and trusted Session ID, then returns the capability Gateway and
-Judge plan. The engine does not create providers or databases, or own Judge
-workflow execution, Session lifecycle, conversation, context, WorkingContext
-publication, or CLI event adaptation. UA extraction is not complete.
+composition, `WorkflowTraceRecorder`, and the Screen application workflow. The
+recorder translates `WorkflowEvent` and subagent results into existing durable
+trace writes through a host-supplied Session trace store; it does not own
+persistence. The capability factory receives the existing FinancialDataProvider,
+AttachmentStore, DocumentStore, and trusted Session ID, then returns the
+capability Gateway and Judge plan. The CLI owns `/screen` argument parsing and
+rendering; the engine owns Screen workflow behavior. The engine does not create
+providers or databases, or own Judge workflow execution, Session lifecycle,
+conversation, context, WorkingContext publication, or CLI event adaptation. UA
+extraction is not complete.
 
     apps/cli
       CLI host + significant remaining application/runtime orchestration
@@ -30,7 +32,7 @@ publication, or CLI event adaptation. UA extraction is not complete.
            v
     packages/engine (@harness/engine)
       host-neutral financial, Attachment, and Document tools
-      + capability composition + WorkflowTraceRecorder
+      + capability composition + WorkflowTraceRecorder + Screen workflow
            | coordinates
            v
     packages/*
@@ -80,7 +82,7 @@ authorize. Tools execute. Domain packages own truth. Database persists.
 The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
-authority. UA boundaries beyond the selected UA2 slice remain provisional and
+authority. UA boundaries beyond the selected UA3 slice remain provisional and
 must be selected after a fresh source audit before each slice.
 
 ## Model runtime — Q1 / Q2
@@ -268,7 +270,11 @@ The implemented production Screen path is:
 ```text
 /screen
   ↓
-command.screen
+CLI command / argument normalization
+  ↓
+@harness/engine screenWorkflow
+  ↓
+command.screen principal
   ↓
 CapabilityGateway
   ↓
@@ -285,13 +291,17 @@ The registry contains all eight financial capabilities. The `command.screen`
 principal is granted only `financial.screen`; it cannot discover, describe, or
 invoke the other seven through the gateway. `HarnessContext` exposes the
 gateway without exposing raw Registry or Policy instances.
+The engine's `screenWorkflow` is application orchestration, not authorization
+or execution authority; authorization remains with CapabilityPolicy and
+CapabilityRegistry through the Gateway, and ToolRuntime remains execution
+authority.
 
 R2C1 established the first production transition. R2C2 completes the Judge
 migration:
 
 ```text
-Screen = CapabilityGateway → ToolRuntime
-Judge  = explicit workflow.judge.* principal → CapabilityGateway → ToolRuntime
+Screen workflow = command.screen → CapabilityGateway → ToolRuntime
+Judge           = explicit workflow.judge.* principal → CapabilityGateway → ToolRuntime
 ```
 
 `HarnessContext` exposes `capabilityGateway` and the current `judgeCapabilityPlan`
@@ -354,6 +364,20 @@ workflow nodes, checkpointing, Session/repl, conversation/context,
 WorkingContext publication, and provider composition remain in CLI. The
 recorder and CLI projection are separate subscribers to workflow runtime truth;
 UA2 does not complete engine extraction.
+
+## UA3 — Host-neutral Screen Workflow Extraction
+
+UA3 moves the existing Screen application workflow into `packages/engine`.
+It depends only on the existing `CapabilityGateway`, invokes the explicit
+Screen principal and `financial.screen`, filters non-positive matches, and
+preserves provider order and the existing ten-row limit. The CLI retains
+`/screen` argument normalization, error presentation, and rendering. The
+workflow is neither a capability authorization authority nor a provider or
+ToolRuntime boundary. Judge workflow/nodes/checkpointing, Session/repl,
+conversation/context, WorkingContext publication, provider composition, and
+CLI event adaptation remain outside engine. UA3 does not complete engine
+extraction; boundaries beyond UA3 remain provisional and require fresh source
+audit before selection.
 
 ## Core boundaries and invariants
 

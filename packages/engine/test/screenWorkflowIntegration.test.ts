@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createEngineCapabilityRuntime } from '@harness/engine';
+import { createEngineCapabilityRuntime, screenWorkflow } from '@harness/engine';
 import type { FinancialDataProvider, ScreenerResult } from '@harness/financial-data';
-import { screenWorkflow } from '../src/workflows/screenWorkflow';
-import type { HarnessContext } from '../src/context';
 
 describe('Screen tool-runtime composition', () => {
   it('invokes financial.screen and retains only positive matches up to ten rows', async () => {
@@ -19,14 +17,12 @@ describe('Screen tool-runtime composition', () => {
       documentStore: {} as never,
       sessionId: 'test-session',
     });
-    const context = {
-      capabilityGateway: capabilityRuntime.capabilityGateway,
-    } as unknown as HarnessContext;
+    const criteria = ['profitable'];
 
-    await expect(screenWorkflow(context, ['profitable'])).resolves.toEqual({
-      criteria: ['profitable'],
+    await expect(screenWorkflow(capabilityRuntime.capabilityGateway, criteria)).resolves.toEqual({
+      criteria,
       results: rows.slice(1, 11),
     });
-    expect(provider.screen).toHaveBeenCalledWith(['profitable']);
+    expect(provider.screen).toHaveBeenCalledWith(criteria);
   });
 });

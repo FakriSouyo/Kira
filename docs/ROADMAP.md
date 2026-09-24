@@ -58,11 +58,12 @@ T4 Claim Graph Core
 T5 Judge Integration + Release Integrity
 KA Kira Identity Surface + Documentation Governance
 UA1 Host-neutral Capability Runtime Extraction
+UA2 Host-neutral Workflow Trace Extraction
 
 CURRENT
 
 UA Kira Engine Extraction
-UA2 Host-neutral Workflow Trace Extraction
+UA3 Host-neutral Screen Workflow Extraction
 
 THEN
 
@@ -99,16 +100,17 @@ boundaries established by earlier milestones.
 
 ## UA slice selection
 
-**Selected slice:** UA2 — Host-neutral Workflow Trace Extraction.
+**Selected slice:** UA3 — Host-neutral Screen Workflow Extraction.
 
-UA1 — Host-neutral Capability Runtime Extraction is complete on master. The
-selected UA2 boundary moves the existing host-neutral `WorkflowTraceRecorder`
-from CLI runtime into packages/engine (@harness/engine), with the current Judge
-workflow as its production consumer. The recorder uses an externally supplied
-trace store and does not own persistence. UA2 does not complete engine
+UA1 — Host-neutral Capability Runtime Extraction and UA2 — Host-neutral
+Workflow Trace Extraction are complete on master. UA3 moves the existing
+host-neutral Screen application workflow into packages/engine (@harness/engine).
+The CLI retains Screen argument parsing and rendering; the workflow invokes the
+existing authorized `financial.screen` capability and preserves the current
+filtering, provider order, and ten-result limit. UA3 does not complete engine
 extraction.
 
-UA3 and later slices remain provisional and unselected. Before each slice,
+UA4 and later slices remain provisional and unselected. Before each slice,
 perform a fresh source audit and review its exact scope. This roadmap does not
 lock future APIs, filenames, classes, schemas, package boundaries, or migration
 behavior.

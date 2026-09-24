@@ -25,6 +25,8 @@ export type {
   TraceableWorkflowDefinition,
   WorkflowTraceRecorderOptions,
 } from './runtime/workflowTraceRecorder';
+export { screenWorkflow } from './workflows/screen';
+export type { ScreenArtifacts } from './workflows/screen';
 
 export interface EngineCapabilityRuntimeOptions {
   readonly financialData: FinancialDataProvider;

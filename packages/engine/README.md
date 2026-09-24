@@ -12,11 +12,16 @@ trace store supplied by the host. `WorkflowRunner` owns workflow execution and
 event semantics; the recorder is not a database/store authority, and CLI event
 projection remains in the CLI.
 
+The engine also owns the host-neutral Screen application workflow. The CLI
+retains `/screen` argument parsing and rendering.
+`screenWorkflow` invokes `CapabilityGateway`; the gateway delegates execution
+to `ToolRuntime`, which invokes the `FinancialDataProvider`.
+
 Authority stays explicit: `@harness/capability` owns capability contracts,
-`CapabilityRegistry`, `CapabilityPolicy`, `CapabilityGateway`, and the authorization
-mechanism. `@harness/engine` owns application tool bindings, registrations, and
-grants. `@harness/tool-runtime` remains execution authority. Domain packages
-retain store, provider, and domain truth.
+`CapabilityRegistry`, `CapabilityPolicy`, `CapabilityGateway`, and the
+authorization mechanism. `@harness/engine` owns application tool bindings,
+registrations, and grants. `@harness/tool-runtime` remains execution authority.
+Domain packages retain store, provider, and domain truth.
 
 The engine does not create providers or databases, or own Judge workflows,
 Session lifecycle, CLI events, or persistence authority.
