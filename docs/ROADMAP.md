@@ -60,11 +60,14 @@ KA Kira Identity Surface + Documentation Governance
 UA1 Host-neutral Capability Runtime Extraction
 UA2 Host-neutral Workflow Trace Extraction
 UA3 Host-neutral Screen Workflow Extraction
+UA4 Host-neutral Conversation Context Preparation Extraction
 
 CURRENT
 
 UA Kira Engine Extraction
-UA4 Host-neutral Conversation Context Preparation Extraction
+UA5 Host-neutral WorkingContext Publication Extraction
+
+UA6 and later slices remain provisional and unselected.
 
 THEN
 
@@ -101,18 +104,19 @@ boundaries established by earlier milestones.
 
 ## UA slice selection
 
-**Selected slice:** UA4 — Host-neutral Conversation Context Preparation
-Extraction.
+**Selected slice:** UA5 — Host-neutral WorkingContext Publication Extraction.
 
 UA1 — Host-neutral Capability Runtime Extraction, UA2 — Host-neutral Workflow
-Trace Extraction, and UA3 — Host-neutral Screen Workflow Extraction are complete
-on master. UA4 moves the existing host-neutral conversation context preparation
-coordinator into packages/engine (@harness/engine), using supplied store
-contracts while preserving context policy ownership in @harness/context and
-focus/prompt rendering semantics in @harness/orchestrator. UA4 does not complete
-engine extraction.
+Trace Extraction, UA3 — Host-neutral Screen Workflow Extraction, and UA4 —
+Host-neutral Conversation Context Preparation Extraction are complete on master.
+UA5 moves the existing WorkingContext publication and journal-reconciliation
+orchestration into packages/engine (@harness/engine), using supplied
+WorkingContextStore, ArtifactStore, and JudgmentStore contracts with narrow
+host-supplied journal read and audit append callbacks. WorkingContextStore
+retains durable persistence, and ConversationController remains the production
+journal correlation path. UA5 does not complete engine extraction.
 
-UA5 and later slices remain provisional and unselected. Before each slice,
+UA6 and later slices remain provisional and unselected. Before each slice,
 perform a fresh source audit and review its exact scope. This roadmap does not
 lock future APIs, filenames, classes, schemas, package boundaries, or migration
 behavior.

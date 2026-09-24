@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openDb, type FinharnessDatabase } from '@harness/database';
+import { createWorkingContextPublisher } from '@harness/engine';
 import type { ConversationEvent } from '@harness/session-core';
 import { loadConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
-import { createWorkingContextPublisher } from '../src/repl/workingContext';
 
 /**
  * PR D live flow: `/judge` is the reference integration, conversational Turns
@@ -165,7 +165,13 @@ describe('session working context (PR D)', () => {
 
     const artifacts = await db.sessions.getSessionArtifacts(sessionId);
     const judgeTurn = artifacts.turns.find(turn => turn.command === 'judge')!;
-    const publisher = createWorkingContextPublisher({ db, append: () => undefined });
+    const publisher = createWorkingContextPublisher({
+      workingContext: db.workingContext,
+      artifacts: db.artifacts,
+      judgments: db.judgments,
+      readJournal: sessionId => db.journal.read(sessionId),
+      appendAuditEvent: () => undefined,
+    });
 
     // Another Turn settles first (v4), while this writer still holds the v3 read.
     await db.workingContext.commit({
@@ -203,8 +209,11 @@ describe('session working context (PR D)', () => {
     await db.sessions.settleTurn(first.id, 'completed');
     const artifacts = await db.sessions.getSessionArtifacts(sessionRecord.id);
     const publisher = createWorkingContextPublisher({
-      db,
-      append: payload => db.journal.append(sessionRecord.id, payload),
+      workingContext: db.workingContext,
+      artifacts: db.artifacts,
+      judgments: db.judgments,
+      readJournal: sessionId => db.journal.read(sessionId),
+      appendAuditEvent: payload => db.journal.append(sessionRecord.id, payload),
     });
 
     const secondResult = await publisher.publishAfterSettledTurn({

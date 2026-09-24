@@ -260,6 +260,9 @@ importers:
       '@harness/document':
         specifier: workspace:*
         version: link:../document
+      '@harness/execution':
+        specifier: workspace:*
+        version: link:../execution
       '@harness/financial-data':
         specifier: workspace:*
         version: link:../financial-data

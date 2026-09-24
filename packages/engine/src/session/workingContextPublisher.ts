@@ -1,11 +1,14 @@
-import type { FinharnessDatabase } from '@harness/database';
+import type { JudgmentStore } from '@harness/execution';
 import {
   deriveWorkingContextPatch,
   isWorkingContextPatchNoOp,
   StaleWorkingContextError,
+  type ArtifactStore,
+  type ConversationEntry,
   type ConversationEvent,
   type ResearchSessionArtifacts,
   type SessionWorkingContext,
+  type WorkingContextStore,
 } from '@harness/session-core';
 import type { DurableArtifactRef } from '@harness/schemas';
 
@@ -41,19 +44,28 @@ const NON_PUBLISHING_COMMANDS = new Set(['new']);
  * The Turn's acceptance watermark orders completions by request order rather
  * than by whichever completion happened to observe the journal last.
  */
-function turnSourceSequence(db: FinharnessDatabase, sessionId: string, turnId: string): number | null {
-  return db.journal.read(sessionId)
+function turnSourceSequence(readJournal: (sessionId: string) => readonly ConversationEntry[], sessionId: string, turnId: string): number | null {
+  return readJournal(sessionId)
     .find(entry => entry.payload.type === 'turn.started'
       && entry.payload.turnId === turnId
       && entry.payload.id === turnId)?.sequence ?? null;
 }
 
 export function createWorkingContextPublisher(params: {
-  db: FinharnessDatabase;
-  /** Journal append from the conversation controller, so correlation stays canonical. */
-  append: (payload: ConversationEvent) => unknown;
+  readonly workingContext: WorkingContextStore;
+  readonly artifacts: ArtifactStore;
+  readonly judgments: JudgmentStore;
+  readonly readJournal: (sessionId: string) => readonly ConversationEntry[];
+  /** Host append path preserves journal correlation and causation. */
+  readonly appendAuditEvent: (payload: ConversationEvent) => unknown;
 }): WorkingContextPublisher {
-  const { db, append } = params;
+  const {
+    workingContext,
+    artifacts: artifactStore,
+    judgments,
+    readJournal,
+    appendAuditEvent,
+  } = params;
 
   const contextEvent = (context: SessionWorkingContext, turnId: string): ConversationEvent => ({
     type: 'session.context.updated',
@@ -79,10 +91,10 @@ export function createWorkingContextPublisher(params: {
       const artifactRefs: DurableArtifactRef[] = [];
       for (const execution of executions) {
         if (execution.command !== 'judge') continue;
-        const resolved = await db.artifacts.getByExecution(execution.id);
+        const resolved = await artifactStore.getByExecution(execution.id);
         if (resolved.length > 0) {
           artifactRefs.push(...resolved.map(artifact => ({ kind: artifact.kind, artifactId: artifact.artifactId })));
-        } else if (await db.judgments.getByRun(execution.id)) {
+        } else if (await judgments.getByRun(execution.id)) {
           // Defined legacy lookup: pre-PR-F rows keep their readable PR D ref.
           judgedExecutionIds.push(execution.id);
         }
@@ -93,16 +105,16 @@ export function createWorkingContextPublisher(params: {
         judgedExecutionIds,
         artifactRefs: artifactRefs.length > 0 ? artifactRefs : undefined,
       });
-      const current = await db.workingContext.current(sessionId);
+      const current = await workingContext.current(sessionId);
       if (isWorkingContextPatchNoOp(current, patch)) return { status: 'skipped', version: current?.version ?? null };
-      const sourceSequence = turnSourceSequence(db, sessionId, turn.id);
+      const sourceSequence = turnSourceSequence(readJournal, sessionId, turn.id);
       // Without the canonical acceptance watermark, publishing would require
       // a second ordering source and could let a late completion look newer.
       if (sourceSequence === null) return { status: 'skipped', version: current?.version ?? null };
 
       let committed: SessionWorkingContext;
       try {
-        committed = await db.workingContext.commit({
+        committed = await workingContext.commit({
           sessionId,
           expectedVersion: current?.version ?? 0,
           sourceSequence,
@@ -116,7 +128,7 @@ export function createWorkingContextPublisher(params: {
       }
 
       try {
-        append(contextEvent(committed, turn.id));
+        appendAuditEvent(contextEvent(committed, turn.id));
       } catch {
         // Durable version wins over the audit append (PR B principle); the missing
         // event is repaired deterministically when the session is restored.
@@ -126,9 +138,9 @@ export function createWorkingContextPublisher(params: {
     },
 
     async reconcileJournal(sessionId) {
-      const versions = await db.workingContext.history(sessionId);
+      const versions = await workingContext.history(sessionId);
       if (versions.length === 0) return 0;
-      const recorded = new Set(db.journal.read(sessionId)
+      const recorded = new Set(readJournal(sessionId)
         .flatMap(entry => (entry.payload.type === 'session.context.updated' ? [entry.payload.newVersion] : [])));
       let repaired = 0;
       for (const version of versions) {
@@ -136,7 +148,7 @@ export function createWorkingContextPublisher(params: {
         // audit event is fabricated for it.
         if (recorded.has(version.version) || version.updatedByTurnId === null) continue;
         try {
-          append(contextEvent(version, version.updatedByTurnId));
+          appendAuditEvent(contextEvent(version, version.updatedByTurnId));
         } catch {
           break;
         }

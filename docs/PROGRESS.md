@@ -9,11 +9,10 @@ Last updated: 2026-09-24
 - UA1 Host-neutral Capability Runtime Extraction is complete on master.
 - UA2 Host-neutral Workflow Trace Extraction is complete on master.
 - UA3 Host-neutral Screen Workflow Extraction is complete on master.
-- UA is the current architecture extraction family. UA4 Host-neutral
-  Conversation Context Preparation Extraction is the selected current UA slice
-  implemented in the current source.
-- Later UA slices require fresh source audit. KB Internal Kira Identity
-  Migration follows UA, then U Research Composition.
+- UA4 Host-neutral Conversation Context Preparation Extraction is complete on master.
+- UA5 Host-neutral WorkingContext Publication Extraction is the selected current UA slice implemented in the current source.
+- Later UA slices require fresh source audit.
+- KB Internal Kira Identity Migration follows UA, then U Research Composition.
 
 The canonical dependency sequence and future design boundaries live in
 [ROADMAP.md](ROADMAP.md). Current architecture facts live in
