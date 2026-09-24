@@ -22,10 +22,10 @@ Session/repl, conversation/context, WorkingContext, provider, and event
 orchestration, and is scheduled for extraction in UA.
 packages/engine (@harness/engine) currently owns the extracted financial,
 Attachment, and Document tool definitions and capability composition, plus
-the host-neutral WorkflowTraceRecorder using a host-supplied trace store. UA is
-incomplete; do not assume broader engine APIs exist. Do not put new reusable
-application/core behavior in CLI when a host-neutral boundary is clearly
-required.
+the host-neutral WorkflowTraceRecorder using a host-supplied trace store and
+the Screen application workflow. UA is incomplete; do not assume broader engine
+APIs exist. Do not put new reusable application/core behavior in CLI when a
+host-neutral boundary is clearly required.
 
 The future engine coordinates existing authorities. It must not replace
 Evidence, Claims, capability authorization, ToolRuntime, database, providers,

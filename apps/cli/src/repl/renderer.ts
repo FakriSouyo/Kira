@@ -1,5 +1,5 @@
 import type { JudgeArtifacts } from '../workflows/judgeWorkflow';
-import type { ScreenArtifacts } from '../workflows/screenWorkflow';
+import type { ScreenArtifacts } from '@harness/engine';
 import type { ExecutionArtifacts } from '@harness/execution';
 import type { UserFriendlyError } from '@harness/shared';
 import type { Attachment } from '@harness/schemas';

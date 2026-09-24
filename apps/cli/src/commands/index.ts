@@ -15,7 +15,6 @@ import {
   writeProgress,
 } from '../repl/renderer';
 import { judgeWorkflow } from '../workflows/judgeWorkflow';
-import { screenWorkflow } from '../workflows/screenWorkflow';
 import { makeExportCommand } from './export';
 import { makeContinueCommand, makeHistoryCommand, makeResumeCommand, makeSessionCommand } from './history';
 import { makeSearchCommand } from './search';
@@ -33,6 +32,7 @@ import {
   COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL,
   COMMAND_DOC_SEARCH_CAPABILITY_PRINCIPAL,
   documentToolIds,
+  screenWorkflow,
 } from '@harness/engine';
 
 const TICKER_RE = /^[A-Z]{2,6}$/;
@@ -85,7 +85,7 @@ function makeJudgeCommand(ctx: HarnessContext, options: {
 function makeScreenCommand(ctx: HarnessContext): CommandHandler {
   return async (args: string[]) => {
     const criteria = args.map((a) => a.toLowerCase());
-    const artifacts = await screenWorkflow(ctx, criteria);
+    const artifacts = await screenWorkflow(ctx.capabilityGateway, criteria);
     process.stdout.write(`${renderScreenResult(artifacts)}\n\n`);
   };
 }
