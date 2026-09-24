@@ -1,5 +1,5 @@
 import type { FinharnessDatabase } from '@harness/database';
-import { createWorkingContextPublisher } from '@harness/engine';
+import { conversationRespondWorkflow, conversationStreamWorkflow, createWorkingContextPublisher } from '@harness/engine';
 import { UserFriendlyError } from '@harness/shared';
 import { buildContext } from '../context';
 import { loadConfig, type FinharnessConfig } from '../config';
@@ -286,56 +286,27 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
         controller.user(question);
         emit({ type: 'conversation.user', id, content: question, createdAt: Date.now() });
         emit({ type: 'conversation.start', id, mode: 'conversation' });
-        const preparedContext = await context.conversationContext.prepare({
+        const responseDependencies = {
+          context: context.conversationContext,
+          agent: context.mainAgent,
+          sessions: db.sessions,
+        };
+        const responseInput = {
           sessionId: turn.sessionId,
           turnId: turn.id,
           message: question,
-        });
-        const modelCallStarted = performance.now();
-        const recordConversationModelCall = async (metadata: import('@harness/llm').LLMCallMetadata) => {
-          await db.sessions.recordModelCall({
-            callId: `call_${turn.id}`,
-            turnId: turn.id,
-            subagent: 'conversation',
-            provider: metadata.provider,
-            model: metadata.model,
-            providerId: metadata.providerId ?? null,
-            modelId: metadata.modelId ?? null,
-            adapterId: metadata.adapterId ?? null,
-            protocol: metadata.protocol ?? null,
-            runtimeFingerprint: metadata.runtimeFingerprint ?? null,
-            attempt: 1,
-            inputTokens: metadata.inputTokens,
-            outputTokens: metadata.outputTokens,
-            cachedInputTokens: metadata.cachedInputTokens,
-            totalTokens: metadata.totalTokens,
-            latencyMs: Math.max(0, Math.round(performance.now() - modelCallStarted)),
-            finishReason: metadata.finishReason,
-            cost: null,
-            currency: null,
-            contextSnapshotId: preparedContext?.snapshot.snapshotId ?? null,
-          });
+          signal: execution?.signal,
         };
-        const modelOptions = {
-          abortSignal: execution?.signal,
-          ...(preparedContext ? {
-            context: {
-              snapshotId: preparedContext.snapshot.snapshotId,
-              rendered: preparedContext.rendered,
-            },
-          } : {}),
-          onModelCall: recordConversationModelCall,
-        } as const;
         if (options.events) {
           // TTY: alirkan token ke transcript conversation supaya tampil streaming.
-          for await (const chunk of context.mainAgent.stream(question, modelOptions)) {
+          for await (const chunk of conversationStreamWorkflow(responseDependencies, responseInput)) {
             if (execution?.signal?.aborted) throw new UserFriendlyError('ABORTED', 'Response cancelled', 'Enter another message when ready.');
             emit({ type: 'conversation.delta', id, content: chunk });
           }
           emit({ type: 'conversation.complete', id });
         } else {
           // Non-TTY/readline: jawaban utuh, tulis langsung.
-          const answer = await context.mainAgent.respond(question, modelOptions);
+          const answer = await conversationRespondWorkflow(responseDependencies, responseInput);
           emit({ type: 'conversation.delta', id, content: answer });
           emit({ type: 'conversation.complete', id });
           rawWrite(`${controller.publicText(answer)}\n\n`);

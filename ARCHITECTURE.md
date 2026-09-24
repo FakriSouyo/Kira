@@ -8,24 +8,32 @@ It is not a chronological implementation diary. The canonical roadmap is
 ## Current architecture facts
 
 apps/cli still owns significant application/runtime composition. It owns the CLI
-host, command dispatch and parsing, Session/repl lifecycle, local-path
-Attachment import, rendering, Judge workflow/nodes and checkpointing,
-MainFinHarnessAgent invocation/streaming, provider composition, CLI event
-adaptation, and ConversationController. It remains more than a thin host
-adapter; ConversationController also remains the production journal
-correlation/causation path for audit appends.
+host, command dispatch and parsing, Session/repl lifecycle, conversation Turn
+creation and settlement, local-path Attachment import, rendering, Judge
+workflow/nodes and checkpointing, provider composition, CLI event adaptation,
+streaming presentation, and ConversationController. The CLI consumes the
+conversation response stream and presents its chunks; host-neutral response
+orchestration is in the engine. It remains more than a thin host adapter, and
+ConversationController remains the production journal correlation/causation
+path for audit appends. The CLI triggers WorkingContext publication after a
+Turn settles.
 
 packages/engine (package name @harness/engine) owns the extracted host-neutral
 financial, Attachment, and Document tool definitions and capability composition,
 WorkflowTraceRecorder, Screen application workflow, conversation context
-preparation, WorkingContext publication/reconciliation orchestration, and
-host-neutral Workspace/Document workflows for `/files`, `/doc-index`, and
-`/doc-search`. The context coordinator receives supplied WorkingContextStore,
+preparation and host-neutral Conversation Response orchestration, WorkingContext
+publication/reconciliation orchestration, and host-neutral Workspace/Document
+workflows for `/files`, `/doc-index`, and `/doc-search`. Conversation Response
+orchestration coordinates `ConversationContextCoordinator` ->
+`MainFinHarnessAgent` -> `ResearchSessionStore.recordModelCall` through supplied
+current contracts. The context coordinator receives supplied WorkingContextStore,
 ArtifactStore, and ContextSnapshotStore contracts; the WorkingContext publisher
 receives supplied WorkingContextStore, ArtifactStore, and JudgmentStore
 contracts, a journal read callback, and a host audit append callback. Workspace
 and Document workflows use the supplied CapabilityGateway and DocumentStore.
 Persistence implementations and host filesystem access remain outside engine.
+Engine does not own Turn lifecycle, ConversationController, AgentEvent
+presentation, provider composition, or Session lifecycle.
 The publisher coordinates publication; WorkingContextStore owns durable
 WorkingContext persistence. The context coordinator coordinates existing
 @harness/context policies and @harness/orchestrator focus/prompt semantics. The
@@ -39,8 +47,9 @@ Judge plan.
            v
     packages/engine (@harness/engine)
       host-neutral tools, capability composition, trace recorder,
-      Screen workflow, conversation context preparation, WorkingContext
-      publication/reconciliation, and Workspace/Document workflows
+      Screen workflow, conversation context preparation and Conversation
+      Response orchestration, WorkingContext publication/reconciliation, and
+      Workspace/Document workflows
            | coordinates
            v
     packages/*
@@ -90,7 +99,7 @@ authorize. Tools execute. Domain packages own truth. Database persists.
 The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
-authority. UA boundaries beyond the selected UA6 slice remain provisional and
+authority. UA boundaries beyond the selected UA7 slice remain provisional and
 must be selected after a fresh source audit before each slice.
 
 ## Model runtime — Q1 / Q2
@@ -448,8 +457,41 @@ Document extraction, identity, chunking, and retrieval semantics, and the
 supplied DocumentStore remains persistence authority. Engine workflows do not
 load Turns, access the host filesystem, render CLI output, or duplicate
 Document/domain behavior. `/attach` remains CLI-local path/file-system
-ingestion. UA boundaries beyond UA6 remain provisional and require a fresh
+ingestion. UA boundaries beyond UA7 remain provisional and require a fresh
 source audit before selection.
+
+## UA7 - Host-neutral Conversation Response Orchestration Extraction
+
+UA7 moves only host-neutral conversational response orchestration from CLI to
+`packages/engine`. The CLI still creates and settles the conversation Turn;
+the engine coordinates the current context coordinator, MainFinHarnessAgent,
+and successful ModelCall provenance persistence through the supplied
+ResearchSessionStore contract.
+
+```text
+CLI creates conversation Turn
+        ↓
+@harness/engine conversation response workflow
+        ↓
+ConversationContextCoordinator
+        ↓
+MainFinHarnessAgent
+        ↓
+ResearchSessionStore.recordModelCall
+        ↓
+CLI transcript/event projection + Turn settlement
+```
+
+Natural-language conversation still creates no `ResearchExecution`. The
+workflow is distinct from Turn lifecycle, `ConversationController`, UI event
+presentation, context policy, and model runtime authority. Engine does not own
+`ConversationController` or `AgentEvent` presentation. CLI retains Turn
+creation/settlement, transcript and journal projection, AgentEvent projection,
+streaming display, cancellation presentation, provider composition, Session
+lifecycle, and the trigger for WorkingContext publication after a settled
+Turn. Context selection, budgeting, snapshot creation, MainFinHarnessAgent
+behavior, runtime routing, and model provenance fields keep their existing
+authorities and semantics.
 
 ## Core boundaries and invariants
 

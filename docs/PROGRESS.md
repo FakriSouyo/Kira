@@ -1,6 +1,6 @@
 # Kira Progress
 
-Last updated: 2026-09-24
+Last updated: 2026-09-25
 
 ## Current state
 
@@ -11,7 +11,8 @@ Last updated: 2026-09-24
 - UA3 Host-neutral Screen Workflow Extraction is complete on master.
 - UA4 Host-neutral Conversation Context Preparation Extraction is complete on master.
 - UA5 Host-neutral WorkingContext Publication Extraction is complete on master.
-- UA6 Host-neutral Workspace + Document Workflows Extraction is the selected current UA slice implemented in the current source.
+- UA6 Host-neutral Workspace + Document Workflows Extraction is complete on master.
+- UA7 Host-neutral Conversation Response Orchestration Extraction is the selected current UA slice implemented in the current source.
 - Later UA slices require fresh source audit.
 - KB Internal Kira Identity Migration follows UA, then U Research Composition.
 

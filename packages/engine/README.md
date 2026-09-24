@@ -57,7 +57,21 @@ persistence authority. `/attach` stays in CLI because local path resolution,
 file access, and raw Attachment import are host-specific; engine does not access
 the host filesystem or implement persistence.
 
-The engine does not create providers or databases, or own Judge workflows,
-Session lifecycle, CLI events, or persistence authority. Judge orchestration,
-model invocation and streaming, provider composition, and event presentation
-remain in CLI.
+## Conversation Response Workflow
+
+`conversationRespondWorkflow` and `conversationStreamWorkflow` prepare
+conversational context with the supplied `ConversationContextCoordinator`,
+invoke the supplied `MainFinHarnessAgent`, and persist successful external
+model-call metadata through `ResearchSessionStore.recordModelCall`. The
+streaming workflow yields chunks in order and leaves presentation to its host.
+Both workflows accept the current dependencies per call so provider, model,
+and Session rebinding remains owned by the CLI composition.
+
+The engine does not create providers or databases, or own conversation Turn
+lifecycle, `ConversationController`, `AgentEvent` presentation, context policy,
+model runtime authority, or persistence implementation. The CLI owns Turn
+creation and settlement, transcript/journal and event projection, streaming
+display, cancellation presentation, provider composition, Session lifecycle,
+and the WorkingContext publication trigger after Turn settlement. Natural-
+language conversation remains one Turn with zero `ResearchExecution`.
+Judge orchestration and its workflow event presentation remain in CLI.
