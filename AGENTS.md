@@ -17,15 +17,16 @@ roadmap or historical design document.
 
 ## Architecture boundary
 
-apps/cli remains more than a thin host adapter. It still owns substantial Judge,
-Session/repl, conversation/context, WorkingContext, provider, and event
-orchestration, and is scheduled for extraction in UA.
-packages/engine (@harness/engine) currently owns the extracted financial,
-Attachment, and Document tool definitions and capability composition, plus
-the host-neutral WorkflowTraceRecorder using a host-supplied trace store and
-the Screen application workflow. UA is incomplete; do not assume broader engine
-APIs exist. Do not put new reusable application/core behavior in CLI when a
-host-neutral boundary is clearly required.
+apps/cli remains more than a thin host adapter. It owns command dispatch,
+Session/repl lifecycle, Judge workflows/checkpointing, MainFinHarnessAgent
+invocation/streaming, WorkingContext publication, provider composition, CLI
+event adaptation, and ConversationController.
+packages/engine (@harness/engine) owns financial, Attachment, and Document
+capability composition, WorkflowTraceRecorder, Screen workflow, and conversation
+context preparation. Conversation context preparation uses host-supplied stores;
+their persistence implementations remain outside engine. UA is incomplete; do
+not assume broader engine APIs exist. Do not put new reusable application/core
+behavior in CLI when a host-neutral boundary is clearly required.
 
 The future engine coordinates existing authorities. It must not replace
 Evidence, Claims, capability authorization, ToolRuntime, database, providers,

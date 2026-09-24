@@ -8,31 +8,28 @@ It is not a chronological implementation diary. The canonical roadmap is
 ## Current architecture facts
 
 apps/cli still owns significant application/runtime composition. It owns the CLI
-host, command dispatch, Session/repl orchestration, Judge workflow/nodes and
-checkpointing, conversation/context and WorkingContext publication, provider
-composition, and CLI event adaptation. It remains more than a thin host
-adapter.
+host, command dispatch, Session/repl lifecycle, Judge workflow/nodes and
+checkpointing, MainFinHarnessAgent invocation/streaming, WorkingContext
+publication, provider composition, CLI event adaptation, and
+ConversationController. It remains more than a thin host adapter.
 
 packages/engine (package name @harness/engine) owns the extracted host-neutral
-financial, Attachment, and Document tool definitions and capability
-composition, `WorkflowTraceRecorder`, and the Screen application workflow. The
-recorder translates `WorkflowEvent` and subagent results into existing durable
-trace writes through a host-supplied Session trace store; it does not own
-persistence. The capability factory receives the existing FinancialDataProvider,
-AttachmentStore, DocumentStore, and trusted Session ID, then returns the
-capability Gateway and Judge plan. The CLI owns `/screen` argument parsing and
-rendering; the engine owns Screen workflow behavior. The engine does not create
-providers or databases, or own Judge workflow execution, Session lifecycle,
-conversation, context, WorkingContext publication, or CLI event adaptation. UA
-extraction is not complete.
+financial, Attachment, and Document tool definitions and capability composition,
+WorkflowTraceRecorder, Screen application workflow, and conversation context
+preparation. The context coordinator receives supplied WorkingContextStore,
+ArtifactStore, and ContextSnapshotStore contracts; persistence implementations
+remain outside engine. It coordinates existing @harness/context policies and
+@harness/orchestrator focus/prompt semantics. The capability factory receives
+the existing FinancialDataProvider, AttachmentStore, DocumentStore, and trusted
+Session ID, then returns the capability Gateway and Judge plan.
 
     apps/cli
-      CLI host + significant remaining application/runtime orchestration
+      CLI host + lifecycle, model/provider composition, and presentation
            | consumes
            v
     packages/engine (@harness/engine)
-      host-neutral financial, Attachment, and Document tools
-      + capability composition + WorkflowTraceRecorder + Screen workflow
+      host-neutral tools, capability composition, trace recorder,
+      Screen workflow, and conversation context preparation
            | coordinates
            v
     packages/*
@@ -82,7 +79,7 @@ authorize. Tools execute. Domain packages own truth. Database persists.
 The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
-authority. UA boundaries beyond the selected UA3 slice remain provisional and
+authority. UA boundaries beyond the selected UA4 slice remain provisional and
 must be selected after a fresh source audit before each slice.
 
 ## Model runtime — Q1 / Q2
@@ -378,6 +375,18 @@ conversation/context, WorkingContext publication, provider composition, and
 CLI event adaptation remain outside engine. UA3 does not complete engine
 extraction; boundaries beyond UA3 remain provisional and require fresh source
 audit before selection.
+
+## UA4 — Host-neutral Conversation Context Preparation Extraction
+
+UA4 moves the existing conversation context preparation coordinator from CLI
+into packages/engine. It coordinates focus-aware retrieval, selection,
+assembly, budgeting, and post-budget snapshot persistence through supplied
+WorkingContextStore, ArtifactStore, and ContextSnapshotStore interfaces.
+Context policy remains in @harness/context, and focus/prompt rendering
+semantics remain in @harness/orchestrator; concrete persistence stays in
+persistence packages. Session/Turn lifecycle, model invocation and streaming,
+ModelCall persistence, provider composition, WorkingContext publication, and
+CLI event adaptation remain in CLI.
 
 ## Core boundaries and invariants
 

@@ -59,11 +59,12 @@ T5 Judge Integration + Release Integrity
 KA Kira Identity Surface + Documentation Governance
 UA1 Host-neutral Capability Runtime Extraction
 UA2 Host-neutral Workflow Trace Extraction
+UA3 Host-neutral Screen Workflow Extraction
 
 CURRENT
 
 UA Kira Engine Extraction
-UA3 Host-neutral Screen Workflow Extraction
+UA4 Host-neutral Conversation Context Preparation Extraction
 
 THEN
 
@@ -100,17 +101,18 @@ boundaries established by earlier milestones.
 
 ## UA slice selection
 
-**Selected slice:** UA3 — Host-neutral Screen Workflow Extraction.
+**Selected slice:** UA4 — Host-neutral Conversation Context Preparation
+Extraction.
 
-UA1 — Host-neutral Capability Runtime Extraction and UA2 — Host-neutral
-Workflow Trace Extraction are complete on master. UA3 moves the existing
-host-neutral Screen application workflow into packages/engine (@harness/engine).
-The CLI retains Screen argument parsing and rendering; the workflow invokes the
-existing authorized `financial.screen` capability and preserves the current
-filtering, provider order, and ten-result limit. UA3 does not complete engine
-extraction.
+UA1 — Host-neutral Capability Runtime Extraction, UA2 — Host-neutral Workflow
+Trace Extraction, and UA3 — Host-neutral Screen Workflow Extraction are complete
+on master. UA4 moves the existing host-neutral conversation context preparation
+coordinator into packages/engine (@harness/engine), using supplied store
+contracts while preserving context policy ownership in @harness/context and
+focus/prompt rendering semantics in @harness/orchestrator. UA4 does not complete
+engine extraction.
 
-UA4 and later slices remain provisional and unselected. Before each slice,
+UA5 and later slices remain provisional and unselected. Before each slice,
 perform a fresh source audit and review its exact scope. This roadmap does not
 lock future APIs, filenames, classes, schemas, package boundaries, or migration
 behavior.

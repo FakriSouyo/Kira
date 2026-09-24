@@ -11,8 +11,9 @@ import {
   type ContextBudgetReport,
   type ContextDiagnosticCode,
   type ContextModelCapabilities,
+  type ContextSnapshotStore,
 } from '@harness/context';
-import type { FinharnessDatabase } from '@harness/database';
+import type { ArtifactStore, WorkingContextStore } from '@harness/session-core';
 import {
   buildMainAgentPrompt,
   classifyConversationFocus,
@@ -75,19 +76,23 @@ function retrievalDiagnosticCode(reason: string, status: 'discovered' | 'skipped
 
 /** Composes the PR G pipeline once for one conversational Turn. */
 export function createConversationContextCoordinator(
-  db: FinharnessDatabase,
+  stores: {
+    readonly workingContext: WorkingContextStore;
+    readonly artifacts: ArtifactStore;
+    readonly contextSnapshots: ContextSnapshotStore;
+  },
   budgetOptions: ConversationContextBudgetOptions,
 ): ConversationContextCoordinator {
   return {
     async prepare({ sessionId, turnId, message }) {
-      const workingContext = await db.workingContext.current(sessionId);
+      const workingContext = await stores.workingContext.current(sessionId);
       if (!workingContext) return null;
 
       const focus = classifyConversationFocus(message);
       const activeTickers = new Set(workingContext.activeSubjects.map(subject => subject.ticker));
       const explicitTickers = requestedTickers(message).filter(ticker => !activeTickers.has(ticker));
       const retrieved = explicitTickers.length === 0 ? null : await retrieveArtifactCandidates({
-        artifactStore: db.artifacts,
+        artifactStore: stores.artifacts,
         query: {
           sessionId,
           subjects: explicitTickers,
@@ -98,7 +103,7 @@ export function createConversationContextCoordinator(
       const resolution = await resolveContextCandidates({
         sessionId,
         workingContext,
-        artifactStore: db.artifacts,
+        artifactStore: stores.artifacts,
         retrievedCandidates: retrieved?.candidates,
       });
       const selection = selectContextCandidates({ candidates: resolution.candidates, intent: { focus, subjects: explicitTickers.length > 0 ? explicitTickers : undefined } });
@@ -135,7 +140,7 @@ export function createConversationContextCoordinator(
       });
 
       // Persist only after budgeting so the snapshot is exactly what the model receives.
-      const snapshot = await db.contextSnapshots.save(createContextSnapshot({
+      const snapshot = await stores.contextSnapshots.save(createContextSnapshot({
         sessionId,
         turnId,
         packet: budgeted.finalPacket,

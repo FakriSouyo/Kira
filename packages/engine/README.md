@@ -23,5 +23,11 @@ authorization mechanism. `@harness/engine` owns application tool bindings,
 registrations, and grants. `@harness/tool-runtime` remains execution authority.
 Domain packages retain store, provider, and domain truth.
 
+The conversation context coordinator is an engine-owned application boundary
+that receives host-supplied WorkingContextStore, ArtifactStore, and
+ContextSnapshotStore. Context policy remains in @harness/context; focus/prompt
+rendering semantics remain in @harness/orchestrator, and concrete persistence
+remains in persistence packages.
+
 The engine does not create providers or databases, or own Judge workflows,
 Session lifecycle, CLI events, or persistence authority.

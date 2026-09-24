@@ -8,8 +8,10 @@
   "dependencies": {
     "@harness/capability": "workspace:*",
     "@harness/command-core": "workspace:*",
+    "@harness/context": "workspace:*",
     "@harness/document": "workspace:*",
     "@harness/financial-data": "workspace:*",
+    "@harness/orchestrator": "workspace:*",
     "@harness/schemas": "workspace:*",
     "@harness/session-core": "workspace:*",
     "@harness/subagent-core": "workspace:*",
