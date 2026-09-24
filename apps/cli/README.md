@@ -1,23 +1,47 @@
-# @harness/cli
+# Kira CLI host
 
-REPL interaktif — satu-satunya UI harness. Jalankan: `pnpm finharness` (tambah `--mock-sectors --mock-llm` untuk offline, `--home <dir>` untuk data dir kustom).
+This workspace package is still named @harness/cli internally; that package
+namespace is scheduled for KB. Kira's canonical CLI command is pnpm kira.
+pnpm finharness remains as a compatibility script alias.
 
-| Modul | Isi |
+## Current responsibility
+
+The CLI is Kira's first host. Today apps/cli owns substantially more than
+terminal presentation: it composes configuration, database stores, model and
+financial providers, capabilities, command workflows, Session lifecycle,
+conversation context, and the REPL. UA Kira Engine Extraction is the next
+architecture slice after KA.
+
+Do not add new reusable application/core behavior to this host when a
+host-neutral boundary is clearly required. UA design remains source-audited
+slice by slice; no engine package or API exists yet.
+
+## Source map
+
+| Area | Current responsibility |
 |---|---|
-| `index.ts` | Entry: parse arg → `loadConfig` → `openDb` → `createHarnessSession` → REPL; slash commands remain workflow-owned and natural language uses `MainFinHarnessAgent` |
-| `config.ts` | `loadConfig` — prioritas **env → `.credentials.json` → `config.json` → default**; `FinharnessConfig`; custom provider via `base_url`/`api_key` per-tier (file) atau `LLM_BASE_URL`/`LLM_API_KEY` (env, kedua tier), with optional per-tier `context_window_tokens` capability metadata. Key mentah preferensi di `.credentials.json` (`~/.finharness/.credentials.json`) — ditulis command `/auth-set` (mode 0600), bukan config.json |
-| `context.ts` | `buildContext` — wiring dua-tier LLM + Sectors API + store + validator |
-| `workflows/judgeWorkflow.ts` | Researcher → Bull → validasi → **Bear (challenge) → Bull (rebuttal)** → Judge (Phase 1 Debate ronde); lifecycle calls receive execution-scoped typed specialist context and snapshots; persist run/evidence/messages/claims/judgment; error → run `failed` + `UserFriendlyError` |
-| `workflows/screenWorkflow.ts` | `sectors.screen` → filter skor > 0 → top 10 |
-| `repl/` | `parser.ts` (slash vs natural language), `loop.ts` (tab completion, Ctrl+C, line queue), `renderer.ts` (layout §19, ANSI) |
-| `commands/` | `/judge`, `/screen`, `/auth-set`, `/help`, `/exit` + stub roadmap (challenge/compare/research/investigate) |
-| `migrate.ts` | `pnpm db:migrate` — jalankan migrasi saja |
+| src/index.ts | CLI arguments, setup decision, initial database/context/session startup |
+| src/context.ts | Application composition for database, providers, tools, capabilities, commands, and conversational agent |
+| src/repl/ | Command parsing, Session lifecycle orchestration, conversation handling, terminal rendering, and local web preview |
+| src/commands/ | Explicit product commands, including Judge, Screen, Search, attachment/document, and session controls |
+| src/workflows/ | Current command workflow definitions and Judge checkpoint/resume coordination |
+| src/runtime/ and src/ui/ | Conversation context preparation and interactive application state |
+| src/setup/ | Provider setup and terminal setup flow |
 
-Catatan:
-- CLI adalah satu-satunya tempat yang menulis DB; agent (`@harness/agent`) tetap pure.
-- Conversational follow-up pipeline: canonical Turn → capture one `SessionWorkingContext` version → deterministic focus → Resolver → Policy → Assembler → `ContextPacket` → deterministic token budget/structural compaction → final `ContextPacket` → `ContextSnapshot` → reused deterministic renderer → `MainFinHarnessAgent` → turn-owned `ModelCall.contextSnapshotId`. Context-free turns skip budgeting and snapshots; impossible required budgets fail before model invocation.
-- Ordinary follow-ups reuse prior typed artifacts without rerunning `/judge` or calling Sectors. Snapshot context is prior research state, not a fresh provider fetch; context-free model calls keep a null snapshot link.
-- `/judge` continues through the command map and WorkflowRunner; it is not rerouted through the conversational agent.
-- Lifecycle `/judge` specialist calls receive role/phase-specific context assembled from current execution Evidence and upstream typed debate outputs. The canonical Evidence zone remains shared across Bull, Bear, and Judge; no provider freshness, retrieval, history search, or cross-session context is introduced here.
-- E2E (`test/e2e.test.ts`) spawn proses CLI asli dengan mock mode dan memverifikasi output + state DB.
-- Ctrl+C saat executing = best-effort (berhenti di batas fase berikutnya) — lihat ARCHITECTURE.md → Deviations #8.
+For the full current architecture and target host boundary, see
+[ARCHITECTURE.md](../../ARCHITECTURE.md). The current dependency sequence is in
+[docs/ROADMAP.md](../../docs/ROADMAP.md), and mutable slice status is in
+[docs/PROGRESS.md](../../docs/PROGRESS.md).
+
+## Current legacy internal identities
+
+The code still exposes the exact internal symbols FinharnessConfig,
+FinharnessDatabase, and MainFinHarnessAgent, and imports packages through the
+@harness/* namespace. Those source/package identities are deferred to KB.
+Storage and configuration still use ~/.finharness, including
+~/.finharness/.credentials.json and FINHARNESS_* environment variables. These
+are current compatibility paths; Kira does not yet support ~/.kira.
+
+The current behavior and ownership for command workflows, Session → Turn →
+Execution, Context, Evidence, capabilities, ToolRuntime, and persistence are
+defined by source and summarized in ARCHITECTURE.md.

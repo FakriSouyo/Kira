@@ -13,7 +13,7 @@ export function createWebServer(db: FinharnessDatabase, opts: { port?: number } 
     try {
       if (url.pathname === '/') {
         const runs = await db.execution.listRuns({ limit: 20 });
-        const html = `<!doctype html><html><head><meta charset="utf-8"><title>Finharness · History</title></head><body><h1>History (${runs.length})</h1><ul>${runs.map((r) => `<li><a href="/api/run/${r.id}">${r.id}</a> — ${r.ticker} — ${r.status}</li>`).join('')}</ul><p><a href="/api/history">/api/history</a></p></body></html>`;
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>Kira · History</title></head><body><h1>History (${runs.length})</h1><ul>${runs.map((r) => `<li><a href="/api/run/${r.id}">${r.id}</a> — ${r.ticker} — ${r.status}</li>`).join('')}</ul><p><a href="/api/history">/api/history</a></p></body></html>`;
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(html);
         return;
       }

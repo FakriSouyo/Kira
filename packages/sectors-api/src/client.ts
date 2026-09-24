@@ -143,7 +143,7 @@ function httpError(status: number, ticker: string | null): SectorsApiError {
     return new SectorsApiError(
       'UNAUTHORIZED',
       'Sectors API rejected the API key',
-      'Check SECTORS_API_KEY in .env, ~/.finharness/.credentials.json, or /auth-set — atau gunakan --mock-sectors',
+      'Check SECTORS_API_KEY in .env, legacy ~/.finharness/.credentials.json, or /auth-set — atau gunakan --mock-sectors',
     );
   }
   if (status === 429) {

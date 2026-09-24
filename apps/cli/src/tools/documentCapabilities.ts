@@ -29,7 +29,7 @@ export function createDocumentCapabilityRegistrations(tools: DocumentTools) {
     registration(
       tools.search,
       'Search Indexed Documents',
-      'Search deterministic extracted chunks owned by the active FinHarness Session.',
+      'Search deterministic extracted chunks owned by the active Kira Session.',
     ),
   ] as const);
 }

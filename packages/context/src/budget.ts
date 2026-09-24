@@ -99,7 +99,7 @@ export class ContextBudgetError extends Error {
   readonly code = 'CONTEXT_BUDGET_EXCEEDED';
 
   constructor(readonly report: ContextBudgetReport) {
-    super(`Required FinHarness context exceeds the available budget (${report.estimatedFinalTokens} > ${report.availableContextTokens} estimated tokens)`);
+    super(`Required Kira context exceeds the available budget (${report.estimatedFinalTokens} > ${report.availableContextTokens} estimated tokens)`);
     this.name = 'ContextBudgetError';
   }
 }

@@ -1,5 +1,8 @@
 # Q1 — Model Runtime + Provider Directory Design
 
+Historical design artifact from the FinHarness era. The current project is
+Kira; this is not the current architecture authority.
+
 ## Scope and non-goals
 
 Q1 evolves `@harness/llm` into the canonical FinHarness model-runtime seam.

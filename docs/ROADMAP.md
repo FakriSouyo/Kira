@@ -1,19 +1,21 @@
-# FinHarness Roadmap
+# Kira Roadmap
 
 > Canonical future sequence. For mutable implementation status, see [PROGRESS.md](PROGRESS.md). For implemented architecture, see [ARCHITECTURE.md](../ARCHITECTURE.md).
 
 ## Product direction
 
-FinHarness is a stateful agent harness runtime with a financial-native evidence
-and research layer. Its current product direction is IDX-oriented financial
-research: explicit workflows acquire and verify data, code enforces integrity,
-and durable state makes context, evidence, artifacts, and decisions inspectable.
+Kira is a reusable financial research engine with an evidence-backed research
+layer. Its current product direction is IDX-oriented financial research:
+explicit workflows acquire and verify data, code enforces integrity, and
+durable state makes context, evidence, artifacts, and decisions inspectable.
 
-> LLMs propose. Data proves. Code verifies. Context persists. FinHarness decides.
+> LLMs propose. Data proves. Code verifies. Context persists. Kira decides.
 
-FinHarness is not a generic autonomous coding or computer-use harness. Natural
-language conversation and explicit research commands remain separate product
-boundaries.
+The CLI is Kira's first host adapter, not the engine boundary. The target is a
+shared host-neutral engine that future Desktop and Web surfaces can consume
+without reimplementing Judge, Session, Context, Evidence, capabilities, or
+lifecycle behavior. This is architecture direction; the current implementation
+still has significant application/runtime composition in apps/cli.
 
 ## Documentation status vocabulary
 
@@ -53,15 +55,24 @@ T1 Evidence Acceptance + Provenance
 T2 Claim Grounding + Durable Claim Model
 T3 Counterpoint Grounding + Durability
 T4 Claim Graph Core
-
-IMPLEMENTED IN CURRENT T5 WORKTREE, PENDING SOURCE REVIEW
-
 T5 Judge Integration + Release Integrity
 
-NEXT / FUTURE
+CURRENT
+
+KA Kira Identity Surface + Documentation Governance
+
+NEXT
+
+UA Kira Engine Extraction
+
+THEN
+
+KB Internal Kira Identity Migration
+
+THEN
 
 U Research Composition / Product Completion
-U1
+U1 Reusable Research Subgraph
 U2 /research
 U3 /compare
 U4 /challenge
@@ -79,10 +90,7 @@ Y Outcome Tracking + Reflection
 
 FUTURE PRODUCT PLATFORM
 
-Z1
-Z2
-Z3
-Z4
+Z
 ```
 
 The sequence intentionally combines architecture evolution with user-visible
@@ -90,7 +98,24 @@ research capability maturation. Discovery and design for later milestones may
 begin earlier, but production implementations must not bypass the dependency
 boundaries established by earlier milestones.
 
-## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1-T4 on master; T5 in current worktree
+## UA candidate decomposition — provisional / not yet locked design
+
+The following is a candidate decomposition for UA, not a committed slice plan:
+
+1. UA1 Engine boundary foundation
+2. UA2 Shared capability/tool composition extraction
+3. UA3 Judge application runtime extraction
+4. UA4 Session + lifecycle orchestration extraction
+5. UA5 Conversation/context/WorkingContext extraction
+6. UA6 Host-neutral event boundary
+7. UA7 Thin CLI adapter + dependency enforcement
+
+Select exact UA slices only after a fresh source audit before each slice. This
+candidate does not promise APIs, filenames, classes, schemas, or migration
+behavior. Repository architecture and current source determine each reviewed
+slice.
+
+## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1-T5 on master
 
 The following milestones are complete in the current implementation:
 
@@ -102,7 +127,7 @@ The following milestones are complete in the current implementation:
 - **R2B — Deterministic Policy + Capability Gateway:** explicit caller principals, exact-match immutable grants, deterministic policy evaluation, scoped authorized discovery, registry/policy consistency validation, and lookup-only gateway delegation to `ToolRuntime`.
 - **R2C1 — Financial Capability Composition + Screen Migration:** all eight existing financial tools registered with provider-neutral descriptors, explicit least-privilege `command.screen` authorization, and production `/screen` execution through the capability gateway.
 - **R2C2 — Judge Capability Migration + Durable Resume Semantics:** Judge financial operations execute through explicit workflow principals and the capability gateway, and Judge profiles pin a deterministic capability plan whose fingerprint participates in durable resume compatibility.
-- **S1 — Durable File / Attachment Layer:** explicit `/attach` imports one user-selected local file into immutable FinHarness-owned content-addressed storage, associates safe metadata with the canonical Session/Turn lifecycle, and keeps raw bytes outside SQLite without creating an Execution or entering model context.
+- **S1 — Durable File / Attachment Layer:** explicit `/attach` imports one user-selected local file into immutable Kira-owned content-addressed storage, associates safe metadata with the canonical Session/Turn lifecycle, and keeps raw bytes outside SQLite without creating an Execution or entering model context.
 - **S2 — Workspace + File Capability:** one application-wide capability registry/policy/gateway/runtime composes financial and raw Attachment tools; strict Session-scoped `workspace.list-attachments`, `attachment.describe`, and `attachment.read` tools are registered. S2 introduced `command.files -> workspace.list-attachments`; `/files` lists current-Session metadata with one Turn and no Execution or ModelCall.
 - **S3 — Document Understanding / Retrieval:** explicit `/doc-index` derives versioned Documents from verified Attachment bytes, and `/doc-search` returns bounded local lexical hits with citations. S3 is complete on master.
 - **T1 — Evidence Acceptance + Provenance:** versioned deterministic Evidence Policy accepts verified financial observations, persists per-Execution acceptance/provenance on `run_evidence`, preserves immutable content deduplication, and exposes typed Document search candidates without persisting them.
@@ -360,9 +385,8 @@ finally cross-surface product delivery.
 ## S — Files & Documents
 
 S is knowledge-input work. It is deliberately distinct from Evidence, Artifacts,
-Context, and Memory. S1, S2, S3, and T1-T4 are complete on master. T5 Judge
-Integration + Release Integrity is implemented in the current T5 worktree
-pending source review. U Research Composition / Product Completion is next.
+Context, and Memory. S1-S3 and T1-T5 are complete on master. The current and
+next slice sequence is maintained in the canonical high-level sequence above.
 
 ### S1 — Durable File / Attachment Layer
 
@@ -371,7 +395,7 @@ Status: **complete on master**.
 The implemented `/attach <path>` command is explicit user ingestion, not a
 Capability, ToolDefinition, agent-selected file read, workspace browser, or
 document parser. It creates one canonical Turn and no Execution. The source
-file is copied into FinHarness-owned content-addressed storage and the durable
+file is copied into Kira-owned content-addressed storage and the durable
 metadata records only the safe basename, media type, byte size, SHA-256 hash,
 attachment identity, and Session/Turn association.
 
@@ -445,7 +469,7 @@ chunks never cross pages, text chunks retain line ranges, Markdown chunks retain
 the active heading section, and every Document/Chunk has stable SHA-256
 identity and content hashes.
 
-The exact pinned PDF.js parser and FinHarness extraction/chunking pipeline
+The exact pinned PDF.js parser and current document extraction/chunking pipeline
 version participate in Document identity. One Attachment can have distinct
 derivations across versions. `textHash` records the normalized text before
 chunking; that stream is not stored separately, so read-time validation checks
@@ -504,7 +528,8 @@ T4 Claim Graph Core
 T5 Judge Integration + Release Integrity
 ```
 
-Status: **T1-T4 complete on master; T5 implemented in the current worktree pending source review; U Research Composition / Product Completion is next**.
+Status: **T1-T5 complete on master**. See the canonical high-level sequence
+above for the current and next slices.
 
 ### T1 — Evidence Acceptance + Provenance
 
@@ -641,9 +666,9 @@ public APIs are not finalized by this roadmap.
 ### `/judge` current role
 
 Current fact: `/judge` is the mature research vertical used to establish and
-validate FinHarness lifecycle, evidence, specialist-context, artifact,
+validate Kira lifecycle, evidence, specialist-context, artifact,
 workflow, model-runtime, and resumability architecture. It is not intended to
-be FinHarness's only research product. The current 15-node Judge graph remains
+be Kira's only research product. The current 15-node Judge graph remains
 source truth.
 
 ### U1 — Reusable Research Subgraph Foundation
@@ -791,7 +816,7 @@ budgeting, same-session research-context follow-up, streaming output, and
 restart-safe durable research context.
 
 Current limitation: production conversation preparation explicitly passes
-`conversationHistory: ''`. FinHarness therefore does not yet provide full
+`conversationHistory: ''`. Kira therefore does not yet provide full
 general retained multi-turn transcript injection to the model.
 
 Future Conversation 2.0 may add bounded recent turns, summaries, reference
@@ -889,8 +914,8 @@ The product-platform family is:
 
 - **Z1 — Application Host / API Boundary:** Future direction: shared runtime/business logic behind a service boundary rather than duplicated per surface. Exact transport is not locked.
 - **Z2 — Web Surface:** Future direction: a web product surface over the same canonical runtime and durable state; it does not own independent research logic.
-- **Z3 — Desktop Host + Desktop Shell:** a future host/shell around shared FinHarness application logic, without duplicating lifecycle, context, or research implementations.
-- **Z4 — Cross-Surface Integration / Final Polish:** final cross-surface integration for this roadmap generation, not a declaration that FinHarness can never receive another feature.
+- **Z3 — Desktop Host + Desktop Shell:** a future host/shell around shared Kira application logic, without duplicating lifecycle, context, or research implementations.
+- **Z4 — Cross-Surface Integration / Final Polish:** final cross-surface integration for this roadmap generation, not a declaration that Kira can never receive another feature.
 
 The desired consistency is:
 

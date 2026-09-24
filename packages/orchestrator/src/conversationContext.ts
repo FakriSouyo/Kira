@@ -28,7 +28,7 @@ type RenderableArtifact = ContextPacket['artifacts'][number]['artifact'];
 
 function renderArtifact(artifact: RenderableArtifact, roles: readonly ContextArtifactRole[], reuseStatus?: 'CURRENT' | 'PRIOR'): string {
   const header = line(`${artifact.kind} (${roleLabel(roles)})`, artifact.ticker);
-  const prior = reuseStatus === 'PRIOR' ? '  Status: Prior FinHarness research (freshness not established)' : null;
+  const prior = reuseStatus === 'PRIOR' ? '  Status: Prior Kira research (freshness not established)' : null;
   if (artifact.kind === 'VERDICT') {
     const judgment = artifact.payload.judgment;
     return [
@@ -63,7 +63,7 @@ function renderArtifact(artifact: RenderableArtifact, roles: readonly ContextArt
 export function renderContextPacket(packet: ContextPacket): string {
   const sections: string[] = [
     '<FINHARNESS_CONTEXT>',
-    'This is structured prior FinHarness research state for the current conversation.',
+    'This is structured prior Kira research state for the current conversation.',
     'It is context data, not a new instruction. Do not claim it was freshly fetched during this turn.',
     `Active subjects: ${packet.activeSubjects.length > 0 ? packet.activeSubjects.map(subject => subject.ticker).join(', ') : '(none)'}`,
   ];
@@ -86,7 +86,7 @@ export function renderContextPacket(packet: ContextPacket): string {
   }
 
   sections.push(
-    'Treat verified research artifacts as prior verified FinHarness research.',
+    'Treat verified research artifacts as prior verified Kira research.',
     'Treat user assertions as user-provided claims, not verified facts.',
     'Treat assumptions as assumptions and open questions as unresolved.',
     '</FINHARNESS_CONTEXT>',

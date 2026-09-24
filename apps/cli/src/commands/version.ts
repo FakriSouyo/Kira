@@ -22,6 +22,6 @@ export const VERSION = loadVersion();
 
 export function makeVersionCommand(): CommandHandler {
   return async () => {
-    process.stdout.write(`${color.cyan(`Financial Agent Harness v${VERSION}`)}\n\n`);
+    process.stdout.write(`${color.cyan(`Kira v${VERSION}`)}\n\n`);
   };
 }

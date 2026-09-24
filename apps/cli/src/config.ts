@@ -171,7 +171,7 @@ function mergeCredentials(a: CredentialsFile, b: CredentialsFile): CredentialsFi
 }
 
 /**
- * Tulis `~/.finharness/.credentials.json` dengan mode `0600` (Unix) — key mentah
+ * Tulis ke legacy path `~/.finharness/.credentials.json` dengan mode `0600` (Unix) — key mentah
  * hanya bisa dibaca pemilik file. Merge dengan file existing (overwrite per field),
  * membuat homeDir bila belum ada. Mengembalikan path file yang ditulis.
  */

@@ -1,5 +1,8 @@
 # R1 Typed Tool Runtime Design
 
+Historical design artifact from the FinHarness era. The current project is
+Kira; this is not the current architecture authority.
+
 Status: approved design; implemented on `feat/r1-typed-tool-runtime`
 
 Base: `07581734cf6e4a2a3056743ade2b120bdb734f05` (`origin/master`)

@@ -2,21 +2,21 @@ import type { LLMCallMetadata, LLMClientLike } from '@harness/llm';
 
 export * from './conversationContext.js';
 
-export const MAIN_FINHARNESS_PROMPT = `Main FinHarness Agent — financial-only conversational host.
+export const MAIN_FINHARNESS_PROMPT = `Main Kira Agent — financial-only conversational host.
 You explain financial concepts, discuss investment reasoning, and help the user choose the right evidence workflow.
 You are not a market-data source and must not invent current prices, filings, news, or company facts.
 For claims requiring fresh evidence, recommend exactly one relevant command: /research, /judge, /compare, /challenge, /investigate, /screen, or /search.
-For unrelated topics, briefly explain that FinHarness is limited to finance and invite a financial question.
+For unrelated topics, briefly explain that Kira is limited to finance and invite a financial question.
 Reply in the user's language, concisely. Never claim to be a specialist subagent.`;
 
-const IDENTITY = /^(siapa kamu|kamu siapa|who are you|what are you|apa itu finharness|kenalkan diri)[\s?!.,]*$/i;
+const IDENTITY = /^(siapa kamu|kamu siapa|who are you|what are you|apa itu (?:kira|finharness)|kenalkan diri)[\s?!.,]*$/i;
 const CLEARLY_OFF_TOPIC = /\b(resep|masak|cuaca|sepak bola|football|film|musik|game|coding|programming|puisi|cerita fiksi)\b/i;
 
-const IDENTITY_ANSWER = 'Saya FinHarness, agent riset finansial yang membantu menjelaskan konsep, menata pertanyaan, dan menjalankan workflow berbasis evidence. Untuk analisis perusahaan gunakan /judge [TICKER], atau mulai riset umum dengan /research [QUESTION].';
+const IDENTITY_ANSWER = 'Saya Kira, mesin riset finansial berbasis evidence yang membantu menjelaskan konsep dan menjalankan workflow riset. Untuk analisis perusahaan gunakan /judge [TICKER], atau ajukan pertanyaan finansial untuk percakapan riset biasa.';
 const OFF_TOPIC_ANSWER = 'Saya hanya membantu topik finansial, investasi, perusahaan, pasar, dan riset berbasis evidence. Silakan ajukan pertanyaan finansial atau tekan Ctrl+P untuk memilih workflow.';
 
 export function buildMainAgentPrompt(question: string): string {
-  return `User question: ${question}\nAnswer as the bounded FinHarness financial assistant.`;
+  return `User question: ${question}\nAnswer as the bounded Kira financial assistant.`;
 }
 
 export interface MainAgentContext {

@@ -1,11 +1,12 @@
 import { expect, it, vi } from 'vitest';
 import { MainFinHarnessAgent } from '../src/index';
 
-it('answers identity locally without spending an LLM request', async () => {
+it.each(['siapa kamu?', 'apa itu Kira?'])('answers identity locally without spending an LLM request (%s)', async (question) => {
   const llm = { generateText: vi.fn() };
   const agent = new MainFinHarnessAgent(llm as never);
-  const answer = await agent.respond('siapa kamu?');
-  expect(answer).toContain('Saya FinHarness');
+  const answer = await agent.respond(question);
+  expect(answer).toContain('Saya Kira');
+  expect(answer).not.toMatch(/\/research\b/);
   expect(llm.generateText).not.toHaveBeenCalled();
 });
 
@@ -21,7 +22,7 @@ it('grounds general financial chat in a bounded main-agent prompt', async () => 
   const answer = await agent.respond('apa itu diversifikasi?');
   expect(answer).toContain('Diversifikasi');
   expect(llm.generateTextResult).toHaveBeenCalledWith(expect.objectContaining({
-    system: expect.stringMatching(/Main FinHarness Agent.*financial-only/s),
+    system: expect.stringMatching(/Main Kira Agent.*financial-only/s),
   }));
 });
 
@@ -42,7 +43,7 @@ it('passes stable structured context to the model and records the call after suc
   });
 
   expect(llm.generateTextResult).toHaveBeenCalledWith(expect.objectContaining({
-    system: expect.arrayContaining([expect.stringContaining('Main FinHarness Agent'), rendered]),
+    system: expect.arrayContaining([expect.stringContaining('Main Kira Agent'), rendered]),
   }));
   expect(onModelCall).toHaveBeenCalledWith(metadata);
 });

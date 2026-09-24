@@ -1,5 +1,8 @@
 # Q2 Durable Model Selection + Production Integration
 
+Historical design artifact from the FinHarness era. The current project is
+Kira; this is not the current architecture authority.
+
 Status: approved implementation design
 
 This is a supporting design artifact for Q2. `README.md`, `ARCHITECTURE.md`,

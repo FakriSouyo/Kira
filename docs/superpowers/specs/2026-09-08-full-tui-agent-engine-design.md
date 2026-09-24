@@ -1,5 +1,8 @@
 # Full TUI and Agent Engine Design
 
+Historical design artifact from the FinHarness era. The current project is
+Kira; this is not the current architecture authority.
+
 **Status:** Approved in conversation on 2026-09-08
 
 **Scope:** Replace the current CLI presentation with the `finharness-mockup-ui` experience and extend the engine so every visible research capability is real.

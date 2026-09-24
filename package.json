@@ -1,5 +1,5 @@
 {
-  "name": "finharness",
+  "name": "kira",
   "private": true,
   "version": "0.3.1",
   "type": "module",
@@ -8,6 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "kira": "tsx apps/cli/src/index.ts",
     "finharness": "tsx apps/cli/src/index.ts",
     "cli": "tsx apps/cli/src/index.ts",
     "db:migrate": "tsx apps/cli/src/migrate.ts",

@@ -36,7 +36,7 @@ export function resolveDataDir(homeDirOverride?: string): string {
 function assertJson1(db: Database.Database): void {
   const row = db.prepare("SELECT json_valid('{\"a\":1}') AS ok").get() as { ok: number };
   if (row.ok !== 1) {
-    throw new Error('SQLite build does not have JSON1 enabled — required by finharness');
+    throw new Error('SQLite build does not have JSON1 enabled — required by Kira');
   }
 }
 
