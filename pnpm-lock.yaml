@@ -251,6 +251,9 @@ importers:
       '@harness/capability':
         specifier: workspace:*
         version: link:../capability
+      '@harness/command-core':
+        specifier: workspace:*
+        version: link:../command/core
       '@harness/document':
         specifier: workspace:*
         version: link:../document
@@ -263,12 +266,19 @@ importers:
       '@harness/session-core':
         specifier: workspace:*
         version: link:../session/core
+      '@harness/subagent-core':
+        specifier: workspace:*
+        version: link:../subagent/core
       '@harness/tool-runtime':
         specifier: workspace:*
         version: link:../tool-runtime
       zod:
         specifier: ^3.25.0
         version: 3.25.76
+    devDependencies:
+      '@harness/llm':
+        specifier: workspace:*
+        version: link:../llm
 
   packages/evidence:
     dependencies:

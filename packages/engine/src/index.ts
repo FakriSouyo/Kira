@@ -20,6 +20,11 @@ export {
   JUDGE_CAPABILITY_PRINCIPALS,
   SCREEN_CAPABILITY_PRINCIPAL,
 } from './capabilities/financial';
+export { WorkflowTraceRecorder } from './runtime/workflowTraceRecorder';
+export type {
+  TraceableWorkflowDefinition,
+  WorkflowTraceRecorderOptions,
+} from './runtime/workflowTraceRecorder';
 
 export interface EngineCapabilityRuntimeOptions {
   readonly financialData: FinancialDataProvider;

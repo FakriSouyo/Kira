@@ -7,11 +7,16 @@
   },
   "dependencies": {
     "@harness/capability": "workspace:*",
+    "@harness/command-core": "workspace:*",
     "@harness/document": "workspace:*",
     "@harness/financial-data": "workspace:*",
     "@harness/schemas": "workspace:*",
     "@harness/session-core": "workspace:*",
+    "@harness/subagent-core": "workspace:*",
     "@harness/tool-runtime": "workspace:*",
     "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@harness/llm": "workspace:*"
   }
 }

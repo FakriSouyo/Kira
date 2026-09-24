@@ -14,6 +14,7 @@ import { openDb, type FinharnessDatabase } from '@harness/database';
 import { storedClaimToClaim } from '@harness/execution';
 import { type FinancialDataProvider } from '@harness/financial-data';
 import { createExecutionProfile, createWorkflowNodeOutput } from '@harness/session-core';
+import { WorkflowTraceRecorder } from '@harness/engine';
 import { buildContext } from '../src/context';
 import { loadConfig, type FinharnessConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
@@ -24,7 +25,6 @@ import {
   planJudgeResume,
   repairJudgeProjections,
 } from '../src/workflows/judgeCheckpoint';
-import { WorkflowTraceRecorder } from '../src/runtime/workflowTraceRecorder';
 
 type Fixture = {
   dir: string;
