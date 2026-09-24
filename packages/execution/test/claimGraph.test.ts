@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { ValidationError } from '@harness/shared';
+import { createHash } from 'node:crypto';
+import { canonicalJson, ValidationError } from '@harness/shared';
 import type { StoredClaim, StoredCounterpoint } from '@harness/execution';
 import {
   buildClaimGraph,
+  CLAIM_GRAPH_CONTRACT,
+  CLAIM_GRAPH_CONTRACT_FINGERPRINT,
+  CLAIM_GRAPH_ID,
+  CLAIM_GRAPH_VERSION,
+  claimGraphFingerprint,
   claimGraphIncomingEdges,
   claimGraphOutgoingEdges,
 } from '@harness/execution';
@@ -46,6 +52,49 @@ function storedCounterpoint(
 }
 
 describe('Claim Graph projection', () => {
+  it('exposes a deterministic static Claim Graph contract fingerprint', () => {
+    expect(CLAIM_GRAPH_ID).toBe('claim-graph-v1');
+    expect(CLAIM_GRAPH_VERSION).toBe(1);
+    expect(CLAIM_GRAPH_CONTRACT).toMatchObject({
+      scope: 'execution-local',
+      nodeKinds: ['claim', 'counterpoint'],
+      relationships: [{ relation: 'targets', authority: 'Counterpoint.targetClaimId' }],
+      nodeAuthorities: { claim: 'ClaimStore', counterpoint: 'CounterpointStore' },
+    });
+    expect(CLAIM_GRAPH_CONTRACT_FINGERPRINT).toMatch(/^[a-f0-9]{64}$/);
+    expect(CLAIM_GRAPH_CONTRACT_FINGERPRINT).toBe(createHash('sha256').update(canonicalJson(CLAIM_GRAPH_CONTRACT), 'utf8').digest('hex'));
+    expect(canonicalJson(CLAIM_GRAPH_CONTRACT)).toContain('Counterpoint.targetClaimId');
+  });
+
+  it('fingerprints canonical graph semantics independently of input ordering', () => {
+    const claims = [storedClaim('claim-b'), storedClaim('claim-a')];
+    const counterpoints = [
+      storedCounterpoint('counterpoint:round-1-bear-challenge:2', 'claim-b'),
+      storedCounterpoint('counterpoint:round-1-bear-challenge:1', 'claim-a'),
+    ];
+    const graph = buildClaimGraph({ executionId, claims, counterpoints });
+    const reversed = buildClaimGraph({
+      executionId, claims: [...claims].reverse(), counterpoints: [...counterpoints].reverse(),
+    });
+
+    expect(claimGraphFingerprint(graph)).toMatch(/^[a-f0-9]{64}$/);
+    expect(claimGraphFingerprint(reversed)).toBe(claimGraphFingerprint(graph));
+  });
+
+  it('changes the graph fingerprint when a declared graph relationship changes', () => {
+    const claims = [storedClaim('claim-a'), storedClaim('claim-b')];
+    const first = buildClaimGraph({
+      executionId, claims,
+      counterpoints: [storedCounterpoint('counterpoint:round-1-bear-challenge:1', 'claim-a')],
+    });
+    const changed = buildClaimGraph({
+      executionId, claims,
+      counterpoints: [storedCounterpoint('counterpoint:round-1-bear-challenge:1', 'claim-b')],
+    });
+
+    expect(claimGraphFingerprint(changed)).not.toBe(claimGraphFingerprint(first));
+  });
+
   it('rejects blank Execution identities', () => {
     expect(() => buildClaimGraph({ executionId: '', claims: [], counterpoints: [] })).toThrow(ValidationError);
     expect(() => buildClaimGraph({ executionId: '  ', claims: [], counterpoints: [] })).toThrow(ValidationError);

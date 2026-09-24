@@ -152,6 +152,9 @@ importers:
       '@harness/command-core':
         specifier: workspace:*
         version: link:../core
+      '@harness/execution':
+        specifier: workspace:*
+        version: link:../../execution
       '@harness/financial-data':
         specifier: workspace:*
         version: link:../../financial-data
@@ -161,6 +164,9 @@ importers:
       '@harness/session-core':
         specifier: workspace:*
         version: link:../../session/core
+      '@harness/shared':
+        specifier: workspace:*
+        version: link:../../shared
       '@harness/subagent-bear':
         specifier: workspace:*
         version: link:../../subagent/bear

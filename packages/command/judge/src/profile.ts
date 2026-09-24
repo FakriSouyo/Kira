@@ -9,6 +9,7 @@ import {
   type JsonValue,
 } from '@harness/session-core';
 import { createJudgeWorkflow, type JudgeCommandContext } from './definition.js';
+import { JUDGE_RELEASE_CONTRACT, JUDGE_RELEASE_CONTRACT_FINGERPRINT } from './release.js';
 
 export const JUDGE_WORKFLOW_VERSION = 2 as const;
 
@@ -22,6 +23,10 @@ export type JudgeExecutionProfilePayload = {
   capabilityPlanFingerprint: string;
   runtimePlanFingerprint?: string;
   runtimePlan?: JsonValue;
+  /** Absent only on readable pre-T5 Judge profiles. */
+  releaseContract?: JsonValue;
+  /** Absent only on readable pre-T5 Judge profiles. */
+  releaseContractFingerprint?: string;
 } & { [key: string]: JsonValue };
 
 export type JudgeExecutionProfile = ExecutionProfile<JudgeExecutionProfilePayload>;
@@ -58,6 +63,8 @@ export function createJudgeExecutionProfile(params: {
       model: params.model,
       capabilityPlan: capabilityPlan as unknown as JsonValue,
       capabilityPlanFingerprint: capabilityPlan.fingerprint,
+      releaseContract: JUDGE_RELEASE_CONTRACT as unknown as JsonValue,
+      releaseContractFingerprint: JUDGE_RELEASE_CONTRACT_FINGERPRINT,
       ...(params.runtimePlan ? {
         runtimePlan: params.runtimePlan,
         ...(typeof params.runtimePlan === 'object' && params.runtimePlan !== null && !Array.isArray(params.runtimePlan) && typeof params.runtimePlan.runtimeFingerprint === 'string'

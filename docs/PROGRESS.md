@@ -10,10 +10,11 @@ complete on `master`.
 
 **S2 — Workspace + File Capability**, **S3 — Document Understanding /
 Retrieval**, and **T1 — Evidence Acceptance + Provenance** are complete on
-master. **T2 — Claim Grounding + Durable Claim Model** and **T3 — Counterpoint
-Grounding + Durability** are also complete on master. **T4 — Claim Graph
-Core** is implemented in the current T4 worktree pending source review; T5 is
-next/future work.
+master. **T2 — Claim Grounding + Durable Claim Model**, **T3 — Counterpoint
+Grounding + Durability**, and **T4 — Claim Graph Core** are also complete on
+master. **T5 — Judge Integration + Release Integrity** is implemented in the
+current worktree pending source review. The next roadmap family is **U —
+Research Composition / Product Completion**.
 
 The canonical future sequence and dependency rationale live in
 [`docs/ROADMAP.md`](ROADMAP.md). This document is the mutable current-status
@@ -354,7 +355,7 @@ scoring, and artifact kinds are unchanged.
 
 ### T4 — Claim Graph Core
 
-Status: **implemented in the current worktree pending source review**.
+Status: **complete on master**.
 
 The execution-local Claim Graph is a deterministic projection reconstructed
 from canonical `ClaimStore` and `CounterpointStore` rows. Nodes remain owned by
@@ -366,6 +367,21 @@ historical pre-T3 Bear Counterpoints are not fabricated. Explicit rebuttal
 relationships do not yet exist because Claim proposals do not name a target
 Counterpoint. T4 leaves Judge artifact kinds, release semantics, the 15-node
 topology, and workflow version 2 unchanged.
+
+### T5 — Judge Integration + Release Integrity
+
+Status: **implemented in the current worktree pending source review**.
+
+New lifecycle Judge profiles pin `judge-release-v1`, including the current
+Claim and Counterpoint policies, Claim Graph contract, and existing artifact
+kinds/schema. Before a current T5 Execution becomes completed, release planning
+validates final checkpoints against canonical Claim and Counterpoint stores,
+their exact policy pins, and the complete execution-local Claim Graph. Artifact
+publication remains after completion and keeps the existing v1 payloads. An
+immutable execution-scoped receipt records the graph fingerprint and the graph
+subset represented by each artifact. Startup reconstructs and repairs partial
+post-completion publication without provider or model calls. Pre-T5 profiles
+retain legacy artifact publication and do not receive fabricated receipts.
 
 ## Maintenance policy
 

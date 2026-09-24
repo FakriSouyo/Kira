@@ -460,8 +460,29 @@ proposals still do not declare a particular Counterpoint rebuttal target, so
 explicit Claim-to-Counterpoint rebuttal relationships do not yet exist.
 
 T4 does not change Judge artifacts, publication, release semantics, the
-15-node Judge graph, or workflow version 2. Graph release integrity remains
-future T5 work.
+15-node Judge graph, or workflow version 2. Graph release integrity is the
+separate T5 release boundary described below.
+
+### T5 Judge Integration + Release Integrity
+
+New lifecycle Judge profiles pin a deterministic `judge-release-v1` contract
+covering the exact Claim and Counterpoint policy fingerprints, the versioned
+Claim Graph contract, and the existing three artifact kinds at schema version
+1. After the 15-node workflow and its durable callbacks finish, but before
+settling the Execution as completed, the release planner reuses the checkpoint
+planner and requires exact checkpoint-to-store Claim and Counterpoint parity,
+current policy metadata, and a complete graph reconstructed from canonical
+stores. It does not infer semantic or rebuttal relationships.
+
+The Execution is completed only after that gate passes. The existing
+`BULL_CASE`, `BEAR_CASE`, and `VERDICT` v1 artifacts are still published after
+completion. A separate immutable execution-scoped receipt records the validated
+Claim Graph fingerprint and the graph subset represented by each artifact.
+Startup reconstructs the plan and repairs missing artifacts or receipts before
+WorkingContext publication, without model/provider calls. Historical pre-T5
+profiles retain legacy checkpoint/artifact behavior and never receive a
+fabricated T5 receipt. Judge topology, workflow version 2, artifact kinds, and
+artifact payload schemas remain unchanged.
 
 ## Context engine
 
@@ -556,9 +577,16 @@ same Execution completion and artifact publication
 On local CLI startup, abandoned `running` canonical Executions are reconciled
 to `interrupted`. The parent Turn remains `running` while it has only an
 interrupted attempt. Reconciliation does not acquire, rerun, or create a new
-Execution. Completed Judge v2 executions with missing final artifacts are
-repaired from validated final checkpoints without provider/model work;
-interrupted executions remain available for explicit `/resume` or `/continue`.
+Execution. Completed compatible historical pre-T5 Judge v2 executions may
+have missing `BULL_CASE`, `BEAR_CASE`, or `VERDICT` artifacts repaired from
+validated checkpoints; they do not receive a fabricated T5 release receipt.
+For a current T5 Judge execution, startup reconstructs and validates the release
+plan from durable checkpoints and canonical Claim/Counterpoint stores, then
+ensures `BULL_CASE`, `BEAR_CASE`, `VERDICT`, and `ClaimGraphReleaseReceipt` are
+complete and consistent. Three existing artifacts without a receipt are still
+incomplete publication. This validation and repair happens before WorkingContext
+publication and performs no provider/model calls. Interrupted executions remain
+available only for explicit `/resume` or `/continue`.
 
 The local CLI assumes the previous runtime is gone when it starts. There is no
 heartbeat, distributed lease, worker registry, or multi-process liveness claim.
@@ -570,7 +598,8 @@ Execution. The generic envelope contains execution identity, workflow ID and
 version, deterministic graph fingerprint, command, ticker, typed JSON payload,
 semantic fingerprint, and creation metadata. The Judge payload records the
 actual reasoning mode, conditional flag, researcher flags, provider, and model
-captured before provider/model work.
+captured before provider/model work. A current T5 Judge profile also pins its
+release contract and fingerprint.
 
 The profile fingerprint is canonical JSON hashed with SHA-256. It excludes
 timestamps, function source, machine paths, and environment-specific metadata.
@@ -660,9 +689,14 @@ never resumed.
 | WorkflowStep | diagnostic execution trace |
 | WorkflowNodeOutput | immutable same-Execution continuation data |
 | ExecutionProfile | immutable run configuration |
+| ClaimGraphReleaseReceipt | immutable execution-scoped provenance binding the validated Claim Graph fingerprint and per-artifact graph projections to one completed current T5 Judge release |
 
-These stores are intentionally not interchangeable. Checkpoint/resume is not
-provider-cache reuse, artifact reuse, context replay, or journal replay.
+Canonical graph truth remains `ClaimStore` + `CounterpointStore` → Claim Graph.
+`ClaimGraphReleaseReceipt` is derived release provenance, not Claim Graph
+authority, `ArtifactStore`, or `ExecutionProfile`, and does not store
+authoritative graph edges. These stores are intentionally not interchangeable.
+Checkpoint/resume is not provider-cache reuse, artifact reuse, context replay,
+or journal replay.
 
 ## Durable file attachments — S1
 
@@ -814,11 +848,16 @@ not persist Evidence or invoke Judge.
 
 Required workflow failures settle the canonical Execution as `failed`; user
 cancellation settles it as `cancelled`. Process loss is represented as
-`interrupted` and remains visible for future acquisition. Final artifact
-publication is deterministic and idempotent: a completed Judge Execution with
-valid final checkpoints can repair missing Bull, Bear, and Verdict artifacts on
-startup. Working-context updates occur only after the original Turn settles
-completed.
+`interrupted`, and interrupted runs remain available for explicit
+`/resume` or `/continue`. Final Judge publication is deterministic and
+idempotent. Compatible historical pre-T5 completed executions can repair
+missing Bull, Bear, and Verdict artifacts from validated checkpoints without
+creating a T5 receipt. Current T5 completed executions reconstruct and validate
+their release plan from durable checkpoints and canonical Claim/Counterpoint
+stores, then repair or validate the Bull, Bear, and Verdict artifacts plus the
+ClaimGraphReleaseReceipt before WorkingContext publication. This reconciliation
+performs no provider or model calls. WorkingContext publication occurs only
+after the original Turn settles as `completed`.
 
 Errors cross the CLI boundary as structured user-facing errors. Internal
 conflicts remain diagnosable without persisting secrets or exposing raw
@@ -829,9 +868,10 @@ credentials.
 The current and future milestone order is maintained in
 [`docs/ROADMAP.md`](docs/ROADMAP.md). A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2,
 S1, S2, S3, T1 Evidence Acceptance + Provenance, T2 Claim Grounding + Durable
-Claim Model, and T3 Counterpoint Grounding + Durability are complete on
-master. T4 Claim Graph Core is implemented in the current T4 worktree pending
-source review. T5 Judge Integration + Release Integrity is next/future work.
+Claim Model, T3 Counterpoint Grounding + Durability, and T4 Claim Graph Core
+are complete on master. T5 Judge Integration + Release Integrity is
+implemented in the current worktree pending source review. U Research
+Composition / Product Completion is next.
 
 R2C2 migrated the remaining Judge direct-runtime path and added durable
 capability semantic compatibility. PR P continues to restore the same

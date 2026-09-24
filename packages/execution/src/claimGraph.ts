@@ -1,4 +1,5 @@
-import { ValidationError } from '@harness/shared';
+import { createHash } from 'node:crypto';
+import { canonicalJson, ValidationError } from '@harness/shared';
 import type { StoredClaim } from './claimStore';
 import type { StoredCounterpoint } from './counterpointStore';
 
@@ -30,6 +31,72 @@ export interface ClaimGraph {
   readonly executionId: string;
   readonly nodes: readonly ClaimGraphNodeRef[];
   readonly edges: readonly ClaimGraphEdge[];
+}
+
+export const CLAIM_GRAPH_VERSION = 1 as const;
+export const CLAIM_GRAPH_ID = 'claim-graph-v1' as const;
+
+/** Static semantic description pinned by durable Judge release authority. */
+export const CLAIM_GRAPH_CONTRACT = Object.freeze({
+  id: CLAIM_GRAPH_ID,
+  version: CLAIM_GRAPH_VERSION,
+  scope: 'execution-local',
+  nodeKinds: Object.freeze(['claim', 'counterpoint'] as const),
+  relationships: Object.freeze([Object.freeze({
+    relation: 'targets',
+    from: 'counterpoint',
+    to: 'claim',
+    authority: 'Counterpoint.targetClaimId',
+  })]),
+  nodeAuthorities: Object.freeze({ claim: 'ClaimStore', counterpoint: 'CounterpointStore' }),
+} as const);
+
+export const CLAIM_GRAPH_CONTRACT_FINGERPRINT = createHash('sha256')
+  .update(canonicalJson(CLAIM_GRAPH_CONTRACT), 'utf8')
+  .digest('hex');
+
+function compareGraphNodes(left: ClaimGraphNodeRef, right: ClaimGraphNodeRef): number {
+  const kind = compareText(left.kind, right.kind);
+  if (kind !== 0) return kind;
+  if (left.executionId !== right.executionId) return compareText(left.executionId, right.executionId);
+  return left.kind === 'claim' && right.kind === 'claim'
+    ? compareText(left.claimId, right.claimId)
+    : left.kind === 'counterpoint' && right.kind === 'counterpoint'
+      ? compareText(left.counterpointId, right.counterpointId)
+      : 0;
+}
+
+function compareGraphEdges(left: ClaimGraphEdge, right: ClaimGraphEdge): number {
+  return compareText(left.relation, right.relation)
+    || compareText(left.from.executionId, right.from.executionId)
+    || compareText(left.from.counterpointId, right.from.counterpointId)
+    || compareText(left.to.executionId, right.to.executionId)
+    || compareText(left.to.claimId, right.to.claimId);
+}
+
+/** Fingerprints the canonical execution-local graph independently of input array order. */
+export function claimGraphFingerprint(graph: ClaimGraph): string {
+  if (!graph.executionId.trim() || graph.nodes.some(node => node.executionId !== graph.executionId)
+    || graph.edges.some(edge => edge.from.executionId !== graph.executionId || edge.to.executionId !== graph.executionId)) {
+    throw new ValidationError('Claim Graph fingerprint requires one execution-local graph');
+  }
+  const nodes = graph.nodes.map(node => node.kind === 'claim'
+    ? { kind: 'claim' as const, executionId: node.executionId, claimId: node.claimId }
+    : { kind: 'counterpoint' as const, executionId: node.executionId, counterpointId: node.counterpointId })
+    .sort(compareGraphNodes);
+  const edges = graph.edges.map(edge => ({
+    relation: edge.relation,
+    from: { kind: 'counterpoint' as const, executionId: edge.from.executionId, counterpointId: edge.from.counterpointId },
+    to: { kind: 'claim' as const, executionId: edge.to.executionId, claimId: edge.to.claimId },
+  })).sort(compareGraphEdges);
+  return createHash('sha256').update(canonicalJson({
+    contractId: CLAIM_GRAPH_ID,
+    contractVersion: CLAIM_GRAPH_VERSION,
+    contractFingerprint: CLAIM_GRAPH_CONTRACT_FINGERPRINT,
+    executionId: graph.executionId,
+    nodes,
+    edges,
+  }), 'utf8').digest('hex');
 }
 
 export interface BuildClaimGraphInput {

@@ -4,6 +4,7 @@
   "dependencies": {
     "@harness/capability": "workspace:*",
     "@harness/command-core": "workspace:*", "@harness/session-core": "workspace:*", "@harness/subagent-bear": "workspace:*", "@harness/subagent-bull": "workspace:*",
-    "@harness/subagent-judge": "workspace:*", "@harness/subagent-researcher": "workspace:*", "@harness/financial-data": "workspace:*", "@harness/schemas": "workspace:*"
+    "@harness/subagent-judge": "workspace:*", "@harness/subagent-researcher": "workspace:*", "@harness/financial-data": "workspace:*", "@harness/schemas": "workspace:*",
+    "@harness/execution": "workspace:*", "@harness/shared": "workspace:*"
   }
 }

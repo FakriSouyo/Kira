@@ -7,3 +7,4 @@ export * from './numericGrounding';
 export * from './counterpointPolicy';
 export * from './counterpointStore';
 export * from './claimGraph';
+export * from './claimGraphRelease';
