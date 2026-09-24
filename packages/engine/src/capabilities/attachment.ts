@@ -1,5 +1,5 @@
 import type { CapabilityGrant, CapabilityRegistration } from '@harness/capability';
-import { attachmentToolIds, type AttachmentTools } from './attachmentTools';
+import { attachmentToolIds, type AttachmentTools } from '../tools/attachment';
 
 export const ATTACHMENT_CAPABILITY_INTEGRATION_ID = 'attachment-store' as const;
 

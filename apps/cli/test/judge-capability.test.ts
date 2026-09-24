@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { financialToolIds, JUDGE_CAPABILITY_PRINCIPALS } from '@harness/engine';
 import type { AgentEvent } from '../src/repl/events';
 import type { HarnessContext } from '../src/context';
-import {
-  JUDGE_CAPABILITY_PRINCIPALS,
-} from '../src/tools/financialCapabilities';
-import { financialToolIds } from '../src/tools/financialTools';
 import { createJudgeNodeExecutors } from '../src/workflows/judgeNodes';
 
 describe('Judge capability composition', () => {

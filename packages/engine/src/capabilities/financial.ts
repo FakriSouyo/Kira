@@ -1,5 +1,5 @@
 import { createCapabilityPlan, type CapabilityPlan, type CapabilityGateway, type CapabilityRegistration, type CapabilityGrant } from '@harness/capability';
-import { financialToolIds, type FinancialTools } from './financialTools';
+import { financialToolIds, type FinancialTools } from '../tools/financial';
 
 export const FINANCIAL_CAPABILITY_INTEGRATION_ID = 'financial-data' as const;
 

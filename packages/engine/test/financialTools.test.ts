@@ -12,7 +12,7 @@ import type {
   Sentiment,
   ScreenerResult,
 } from '@harness/financial-data';
-import { createFinancialTools } from '../src/tools/financialTools';
+import { createFinancialTools } from '../src/tools/financial';
 
 const metadata = {
   providerId: 'test',

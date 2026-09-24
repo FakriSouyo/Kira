@@ -17,11 +17,14 @@ roadmap or historical design document.
 
 ## Architecture boundary
 
-apps/cli currently owns significant application/runtime composition as well
-as the CLI host. It is more than a thin adapter and is scheduled for UA Kira
-Engine Extraction. Do not place new reusable application/core behavior in the
-CLI when a host-neutral boundary is clearly required. No packages/engine or
-@kira/engine API exists yet; do not write code or docs as if it does.
+apps/cli remains more than a thin host adapter. It still owns substantial Judge,
+Session/repl, conversation/context, WorkingContext, provider, and event
+orchestration, and is scheduled for extraction in UA.
+packages/engine (@harness/engine) currently owns only the extracted financial,
+Attachment, and Document tool definitions and capability composition. UA is
+incomplete; do not assume broader engine APIs exist. Do not put new reusable
+application/core behavior in CLI when a host-neutral boundary is clearly
+required.
 
 The future engine coordinates existing authorities. It must not replace
 Evidence, Claims, capability authorization, ToolRuntime, database, providers,

@@ -1,9 +1,7 @@
 import type { ScreenerResult } from '@harness/financial-data';
 import { describe, expect, it, vi } from 'vitest';
+import { SCREEN_CAPABILITY_PRINCIPAL } from '@harness/engine';
 import type { HarnessContext } from '../src/context';
-import {
-  SCREEN_CAPABILITY_PRINCIPAL,
-} from '../src/tools/financialCapabilities';
 import { screenWorkflow } from '../src/workflows/screenWorkflow';
 
 describe('Screen capability migration', () => {

@@ -27,11 +27,13 @@ import { DocumentError, buildDocumentBundle } from '@harness/document';
 import { PROVIDERS } from '../setup/providers';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
-import { attachmentToolIds } from '../tools/attachmentTools';
-import { COMMAND_FILES_CAPABILITY_PRINCIPAL } from '../tools/attachmentCapabilities';
-import { COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL } from '../tools/attachmentCapabilities';
-import { COMMAND_DOC_SEARCH_CAPABILITY_PRINCIPAL } from '../tools/documentCapabilities';
-import { documentToolIds } from '../tools/documentTools';
+import {
+  attachmentToolIds,
+  COMMAND_FILES_CAPABILITY_PRINCIPAL,
+  COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL,
+  COMMAND_DOC_SEARCH_CAPABILITY_PRINCIPAL,
+  documentToolIds,
+} from '@harness/engine';
 
 const TICKER_RE = /^[A-Z]{2,6}$/;
 

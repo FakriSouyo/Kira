@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ToolRuntime } from '@harness/tool-runtime';
+import { createEngineCapabilityRuntime } from '@harness/engine';
 import type { FinancialDataProvider, ScreenerResult } from '@harness/financial-data';
-import { createApplicationCapabilityGateway } from '../src/tools/applicationCapabilities';
-import { createAttachmentTools } from '../src/tools/attachmentTools';
-import { createDocumentTools } from '../src/tools/documentTools';
-import { createFinancialTools } from '../src/tools/financialTools';
 import { screenWorkflow } from '../src/workflows/screenWorkflow';
 import type { HarnessContext } from '../src/context';
 
@@ -17,15 +13,14 @@ describe('Screen tool-runtime composition', () => {
     const provider = {
       screen: vi.fn(async () => rows),
     } as unknown as FinancialDataProvider;
-    const toolRuntime = new ToolRuntime();
-    const financialTools = createFinancialTools(provider);
+    const capabilityRuntime = createEngineCapabilityRuntime({
+      financialData: provider,
+      attachmentStore: {} as never,
+      documentStore: {} as never,
+      sessionId: 'test-session',
+    });
     const context = {
-      capabilityGateway: createApplicationCapabilityGateway({
-        financialTools,
-        attachmentTools: createAttachmentTools({ attachmentStore: {} as never, sessionId: 'test-session' }),
-        documentTools: createDocumentTools({ documentStore: {} as never, sessionId: 'test-session' }),
-        toolRuntime,
-      }),
+      capabilityGateway: capabilityRuntime.capabilityGateway,
     } as unknown as HarnessContext;
 
     await expect(screenWorkflow(context, ['profitable'])).resolves.toEqual({

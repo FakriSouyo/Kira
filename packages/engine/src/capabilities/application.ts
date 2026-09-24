@@ -8,15 +8,15 @@ import type { ToolRuntime } from '@harness/tool-runtime';
 import {
   createAttachmentCapabilityGrants,
   createAttachmentCapabilityRegistrations,
-} from './attachmentCapabilities';
-import { type AttachmentTools } from './attachmentTools';
-import { createDocumentCapabilityGrants, createDocumentCapabilityRegistrations } from './documentCapabilities';
-import { type DocumentTools } from './documentTools';
+} from './attachment';
+import { type AttachmentTools } from '../tools/attachment';
+import { createDocumentCapabilityGrants, createDocumentCapabilityRegistrations } from './document';
+import { type DocumentTools } from '../tools/document';
 import {
   createFinancialCapabilityGrants,
   createFinancialCapabilityRegistrations,
-} from './financialCapabilities';
-import { type FinancialTools } from './financialTools';
+} from './financial';
+import { type FinancialTools } from '../tools/financial';
 
 export interface ApplicationCapabilityOptions {
   readonly financialTools: FinancialTools;

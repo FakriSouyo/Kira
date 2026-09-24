@@ -70,6 +70,9 @@ importers:
       '@harness/document':
         specifier: workspace:*
         version: link:../../packages/document
+      '@harness/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
       '@harness/evidence':
         specifier: workspace:*
         version: link:../../packages/evidence
@@ -121,9 +124,6 @@ importers:
       '@harness/tool-runtime':
         specifier: workspace:*
         version: link:../../packages/tool-runtime
-      zod:
-        specifier: ^3.25.0
-        version: 3.25.76
 
   packages/capability:
     dependencies:
@@ -245,6 +245,30 @@ importers:
       pdfjs-dist:
         specifier: 4.10.38
         version: 4.10.38
+
+  packages/engine:
+    dependencies:
+      '@harness/capability':
+        specifier: workspace:*
+        version: link:../capability
+      '@harness/document':
+        specifier: workspace:*
+        version: link:../document
+      '@harness/financial-data':
+        specifier: workspace:*
+        version: link:../financial-data
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+      '@harness/session-core':
+        specifier: workspace:*
+        version: link:../session/core
+      '@harness/tool-runtime':
+        specifier: workspace:*
+        version: link:../tool-runtime
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
 
   packages/evidence:
     dependencies:
