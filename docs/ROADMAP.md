@@ -62,13 +62,14 @@ UA2 Host-neutral Workflow Trace Extraction
 UA3 Host-neutral Screen Workflow Extraction
 UA4 Host-neutral Conversation Context Preparation Extraction
 UA5 Host-neutral WorkingContext Publication Extraction
+UA6 Host-neutral Workspace + Document Workflows Extraction
 
 CURRENT
 
 UA Kira Engine Extraction
-UA6 Host-neutral Workspace + Document Workflows Extraction
+UA7 Host-neutral Conversation Response Orchestration Extraction
 
-UA7 and later slices remain provisional and unselected.
+UA8 and later slices remain provisional and unselected.
 
 THEN
 
@@ -105,7 +106,7 @@ boundaries established by earlier milestones.
 
 ## UA slice selection
 
-**Selected slice:** UA6 — Host-neutral Workspace + Document Workflows Extraction.
+**Selected slice:** UA7 — Host-neutral Conversation Response Orchestration Extraction.
 
 UA1 — Host-neutral Capability Runtime Extraction, UA2 — Host-neutral Workflow
 Trace Extraction, UA3 — Host-neutral Screen Workflow Extraction, and UA4 —
@@ -118,17 +119,24 @@ read and audit append callbacks. WorkingContextStore retains durable
 persistence, and ConversationController remains the production journal
 correlation path.
 
-UA6 moves the existing `/files`, `/doc-index`, and `/doc-search` application
+UA6 — Host-neutral Workspace + Document Workflows Extraction — is complete on
+master. It moved the existing `/files`, `/doc-index`, and `/doc-search` application
 orchestration into packages/engine while CLI keeps command parsing, active
 lifecycle validation, `/attach` local-path import, and rendering. The engine
 workflows retain CapabilityGateway authorization, delegate document extraction
 and retrieval to `@harness/document`, and persist indexed bundles through the
 supplied DocumentStore. UA6 does not complete engine extraction.
 
-UA7 and later slices remain provisional and unselected. Before each slice,
-perform a fresh source audit and review its exact scope. This roadmap does not
-lock future APIs, filenames, classes, schemas, package boundaries, or migration
-behavior.
+UA7 moves only the host-neutral conversation response orchestration into
+packages/engine. CLI keeps conversation Turn lifecycle, ConversationController,
+transcript/event projection, streaming presentation, provider composition,
+Session lifecycle, and the WorkingContext publication trigger. Natural-language
+conversation continues to create no ResearchExecution.
+
+UA8 and later slices remain provisional and unselected. Before each later
+slice, perform a fresh source audit and review its exact scope. This roadmap
+does not lock future APIs, filenames, classes, schemas, package boundaries, or
+migration behavior.
 
 ## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1-T5 on master
 

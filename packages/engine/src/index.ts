@@ -26,6 +26,8 @@ export type {
   ConversationContextCoordinator,
   PreparedConversationContext,
 } from './conversation/contextCoordinator.js';
+export { conversationRespondWorkflow, conversationStreamWorkflow } from './conversation/responseWorkflow.js';
+export type { ConversationResponseDependencies, ConversationResponseInput } from './conversation/responseWorkflow.js';
 export { createWorkingContextPublisher } from './session/workingContextPublisher.js';
 export type {
   WorkingContextPublisher,
