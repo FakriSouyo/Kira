@@ -18,7 +18,7 @@ import { WorkflowTraceRecorder } from '@harness/engine';
 import { buildContext } from '../src/context';
 import { loadConfig, type FinharnessConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
-import { createJudgeNodeExecutors } from '../src/workflows/judgeNodes';
+import { createJudgeNodeExecutors } from '@harness/engine';
 import {
   decodeJudgeCheckpoint,
   JudgeCheckpointWriter,
@@ -113,9 +113,23 @@ async function runPrefix(fixture: Fixture, boundary: JudgeNodeId): Promise<void>
   const decision = {};
   const payload = profile.payload as { reasoningMode: 'usual' | 'reasoning'; conditional: boolean; researchers: { market: boolean; news: boolean } };
   const executors = createJudgeNodeExecutors({
-    ctx: context, ticker: 'BBCA', runId: execution.id, events: () => {}, progress: () => {}, decision,
+    deps: {
+      capabilityGateway: context.capabilityGateway,
+      bull: context.bull,
+      bear: context.bear,
+      judge: context.judge,
+      validator: context.validator,
+      researchers: payload.researchers,
+      evidence: fixture.db.evidence,
+      financialSnapshots: fixture.db.financialSnapshots,
+      conversation: fixture.db.conversation,
+      claims: fixture.db.claims,
+      counterpoints: fixture.db.counterpoints,
+      judgments: fixture.db.judgments,
+    },
+    ticker: 'BBCA', runId: execution.id, events: () => {}, progress: () => {}, decision,
     reasoning: payload.reasoningMode === 'reasoning', conditional: payload.conditional,
-    researchers: payload.researchers, executionStartedAt: execution.createdAt,
+    executionStartedAt: execution.createdAt,
     lifecycle: { sessionId: fixture.sessionId, turnId: fixture.turnId },
     trace: { recordSubagentResult: (nodeId, result) => recorder.recordSubagentResult(nodeId, result) },
     checkpoint: (nodeId, value) => writer.completedValue(nodeId, value),
@@ -801,8 +815,22 @@ describe('PR P final acceptance hardening', () => {
     const decision = {};
     const payload = profile!.payload as { reasoningMode: 'usual' | 'reasoning'; conditional: boolean; researchers: { market: boolean; news: boolean } };
     const executors = createJudgeNodeExecutors({
-      ctx: context, ticker: 'BBCA', runId: fixture.executionId, events: () => {}, progress: () => {}, decision,
-      reasoning: payload.reasoningMode === 'reasoning', conditional: payload.conditional, researchers: payload.researchers,
+      deps: {
+        capabilityGateway: context.capabilityGateway,
+        bull: context.bull,
+        bear: context.bear,
+        judge: context.judge,
+        validator: context.validator,
+        researchers: payload.researchers,
+        evidence: fixture.db.evidence,
+        financialSnapshots: fixture.db.financialSnapshots,
+        conversation: fixture.db.conversation,
+        claims: fixture.db.claims,
+        counterpoints: fixture.db.counterpoints,
+        judgments: fixture.db.judgments,
+      },
+      ticker: 'BBCA', runId: fixture.executionId, events: () => {}, progress: () => {}, decision,
+      reasoning: payload.reasoningMode === 'reasoning', conditional: payload.conditional,
       executionStartedAt: acquired.createdAt, lifecycle: { sessionId: fixture.sessionId, turnId: fixture.turnId },
       trace: { recordSubagentResult: (nodeId, result) => recorder.recordSubagentResult(nodeId, result) },
       checkpoint: (nodeId, value) => writer.completedValue(nodeId, value),

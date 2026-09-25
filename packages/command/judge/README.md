@@ -2,8 +2,10 @@
 
 The `/judge` workflow **definition** — the executable truth for scheduling.
 `WorkflowRunner` (in `@harness/command-core`) runs these 15 nodes in dependency
-order; the CLI composition layer (`apps/cli/src/workflows/judgeNodes.ts`) binds
-one adapter per node and owns every persistence side effect.
+order; `@harness/engine` binds one host-neutral Judge node runtime adapter per
+node and coordinates persistence through supplied store contracts. The CLI
+continues to own Judge lifecycle, runner, checkpoint/resume/release, and event
+composition.
 
 ## Graph (reconciled with production behavior, PR C)
 
@@ -30,10 +32,10 @@ one adapter per node and owns every persistence side effect.
 - `JudgeNodeExecutors` requires an adapter for **every** declared node id, so an
   unbound node cannot silently become metadata.
 - `createJudgeCommandContext` is the only channel through which nodes receive
-  dependency outputs and expose the arbitration decision; the adapter factory in
-  the CLI is exhaustive by type, and `apps/cli/test/judge-workflow-parity.test.ts`
+  dependency outputs and expose the arbitration decision; the engine adapter
+  factory is exhaustive by type, and `apps/cli/test/judge-workflow-parity.test.ts`
   asserts that adapters read only declared inputs.
-- `researcher`-owned nodes are executed by the CLI evidence collector (Sectors API
-  + evidence store) — they never invoke an LLM. Only `bull`, `bear`, and `judge`
-  call a model.
+- `researcher`-owned nodes are executed by the engine Judge runtime through the
+  supplied CapabilityGateway and Evidence store — they never invoke an LLM. Only
+  `bull`, `bear`, and `judge` call a model.
 

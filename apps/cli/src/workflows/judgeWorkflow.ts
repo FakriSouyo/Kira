@@ -9,16 +9,24 @@ import {
 import { WorkflowRunner, WorkflowStepError, type WorkflowEvent } from '@harness/command-core';
 import { mapToUserFriendly, UserFriendlyError } from '@harness/shared';
 import { FinancialDataVerificationError } from '@harness/financial-data';
-import { WorkflowTraceRecorder } from '@harness/engine';
+import {
+  assertNotAborted,
+  createJudgeNodeExecutors,
+  WorkflowTraceRecorder,
+  type BearChallengeResponse,
+  type BullAnalysisResponse,
+  type ChallengeTurn,
+  type CollectedSources,
+  type JudgeProgress,
+  type JudgeTurn,
+  type SynthesisTurn,
+  type ThesisTurn,
+} from '@harness/engine';
 import type { SkillReference } from '@harness/subagent-core';
 import type { AgentEvent, UiWorkflowStepStatus } from '../repl/events';
 import type { HarnessContext } from '../context';
-import {
-  assertNotAborted, createJudgeNodeExecutors,
-  type BearChallengeResponse, type BullAnalysisResponse, type ChallengeTurn, type CollectedSources,
-  type JudgeProgress, type JudgeTurn, type SynthesisTurn, type ThesisTurn,
-} from './judgeNodes';
 import { ensureJudgeArtifacts, JudgeCheckpointWriter, planJudgeResume, prepareJudgeReleasePlan, publishJudgeRelease, repairJudgeProjections, type JudgeReleasePlan, type JudgeResumePlan } from './judgeCheckpoint';
+import { projectFinancialToolEvent } from '../tools/financialToolEvents';
 
 /**
  * Hasil lengkap /judge — dipakai renderer output conversational.
@@ -47,7 +55,7 @@ export interface JudgeArtifacts {
   conditionalUsed?: boolean;
 }
 
-export type { JudgeProgress, JudgeProgressPhase, BullAnalysisResponse, BearChallengeResponse } from './judgeNodes';
+export type { JudgeProgress, JudgeProgressPhase, BullAnalysisResponse, BearChallengeResponse } from '@harness/engine';
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -112,7 +120,7 @@ function value<T>(values: Readonly<Record<string, unknown>>, nodeId: string): T 
  * the shared Agent-Events stream, persists the workflow trace, settles the
  * Execution exactly once, and returns the artifacts to render.
  *
- * Financial orchestration lives entirely in the node adapters (`judgeNodes.ts`);
+ * Financial orchestration lives in the engine Judge node runtime;
  * there is no second, manual execution path.
  *
  * Degradasi enrichment (addendum §24-A.5): kegagalan Market/News → kategori
@@ -237,7 +245,23 @@ export async function judgeWorkflow(
     const restoredRound1Bear = restoredValue<ChallengeTurn>('round-1-bear-challenge');
     const restoredConditionalBear = restoredValue<ChallengeTurn>('conditional-bear-rechallenge');
     const executors = createJudgeNodeExecutors({
-      ctx, ticker, runId: run.id, events, progress, decision, reasoning, conditional, researchers,
+      deps: {
+        capabilityGateway: ctx.capabilityGateway,
+        bull: ctx.bull,
+        bear: ctx.bear,
+        judge: ctx.judge,
+        validator: ctx.validator,
+        researchers,
+        evidence: ctx.db.evidence,
+        financialSnapshots: ctx.db.financialSnapshots,
+        conversation: ctx.db.conversation,
+        claims: ctx.db.claims,
+        counterpoints: ctx.db.counterpoints,
+        judgments: ctx.db.judgments,
+      },
+      ticker, runId: run.id, events,
+      onToolEvent: event => projectFinancialToolEvent(event, { ticker, emit: events }),
+      progress, decision, reasoning, conditional,
       executionStartedAt: run.createdAt,
       lifecycle: opts.lifecycle,
       checkpoint: checkpointWriter

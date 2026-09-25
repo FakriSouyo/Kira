@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { financialToolIds, JUDGE_CAPABILITY_PRINCIPALS } from '@harness/engine';
+import { createJudgeNodeExecutors, financialToolIds, JUDGE_CAPABILITY_PRINCIPALS, type JudgeNodeRuntimeDependencies } from '@harness/engine';
+import type { ToolRuntimeEvent } from '@harness/tool-runtime';
 import type { AgentEvent } from '../src/repl/events';
-import type { HarnessContext } from '../src/context';
-import { createJudgeNodeExecutors } from '../src/workflows/judgeNodes';
+import { projectFinancialToolEvent } from '../src/tools/financialToolEvents';
 
 describe('Judge capability composition', () => {
   it('uses explicit Judge principals and preserves financial tool event projection', async () => {
@@ -10,7 +10,7 @@ describe('Judge capability composition', () => {
       _principal: { id: string },
       capabilityId: string,
       _input: unknown,
-      options?: { onEvent?: (event: unknown) => unknown },
+      options?: { onEvent?: (event: ToolRuntimeEvent) => unknown },
     ) => {
       await options?.onEvent?.({ type: 'tool.started', toolId: capabilityId });
       await options?.onEvent?.({ type: 'tool.completed', toolId: capabilityId, durationMs: 1 });
@@ -20,16 +20,19 @@ describe('Judge capability composition', () => {
       };
     });
     const events: AgentEvent[] = [];
-    const context = {
+    const deps = {
       capabilityGateway: { invoke },
+      bull: {}, bear: {}, judge: {}, validator: {},
       researchers: { market: true, news: true },
-    } as unknown as HarnessContext;
+      evidence: {}, financialSnapshots: {}, conversation: {}, claims: {}, counterpoints: {}, judgments: {},
+    } as unknown as JudgeNodeRuntimeDependencies;
 
     const executors = createJudgeNodeExecutors({
-      ctx: context,
+      deps,
       ticker: 'BBCA',
       runId: 'run_judge_capability',
       events: (event) => events.push(event),
+      onToolEvent: event => projectFinancialToolEvent(event, { ticker: 'BBCA', emit: event => events.push(event) }),
       progress: () => {},
       decision: {},
       reasoning: false,

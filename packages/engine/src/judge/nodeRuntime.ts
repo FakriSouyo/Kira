@@ -1,5 +1,6 @@
 import type { BearCounterpointContext, BearLLMOutput, BearProposalResponse, GroundedCounterpoint, BullProposalOutput, Claim, Evidence, Judgment } from '@harness/schemas';
 import { ClaimPolicy, CounterpointPolicy, storedClaimToClaim, storedCounterpointToCounterpoint } from '@harness/execution';
+import type { ClaimValidator, ClaimStore, CounterpointStore, JudgmentStore } from '@harness/execution';
 import type { JudgeNodeExecutors, JudgeNodeId, JudgeRoundDecision } from '@harness/command-judge';
 import type { SubagentResult, SubagentResultLike } from '@harness/subagent-core';
 import { assembleSpecialistContext, type SpecialistContextPacket, type SpecialistPhase, type SpecialistRole } from '@harness/context';
@@ -18,20 +19,33 @@ import {
   type QuarterlyFinancials,
   type Sentiment,
   type PresentFinancialObservation,
+  type FinancialSnapshotStore,
 } from '@harness/financial-data';
-import { createFinancialEvidenceCandidate, EVIDENCE_POLICY } from '@harness/evidence';
+import { createFinancialEvidenceCandidate, EVIDENCE_POLICY, type EvidenceStore } from '@harness/evidence';
+import type { ConversationStore } from '@harness/conversation';
 import { buildEvidenceZone, normalizeJudgmentScore, stanceForScore, UserFriendlyError, ValidationError } from '@harness/shared';
-import type { CapabilityPrincipal } from '@harness/capability';
-import { financialToolIds, JUDGE_CAPABILITY_PRINCIPALS } from '@harness/engine';
-import type { AgentEvent } from '../repl/events';
-import type { HarnessContext } from '../context';
-import { projectFinancialToolEvent } from '../tools/financialToolEvents';
+import type { CapabilityGateway, CapabilityPrincipal } from '@harness/capability';
+import type { ToolRuntimeEvent } from '@harness/tool-runtime';
+import type { BearAgent } from '@harness/subagent-bear';
+import type { BullAgent } from '@harness/subagent-bull';
+import type { JudgeAgent } from '@harness/subagent-judge';
+import { financialToolIds } from '../tools/financial';
+import { JUDGE_CAPABILITY_PRINCIPALS } from '../capabilities/financial';
 
-/** Phase shown by progress renderers; the composition layer re-exports it for events.ts. */
+/** Phase reported through the host-neutral JudgeProgress callback. */
 export type JudgeProgressPhase = 'researcher' | 'bull' | 'bear' | 'judge';
 export type JudgeProgress = (phase: JudgeProgressPhase, line: string) => void;
 
-/** Public, renderer-ready responses. `messageId` matches the persisted conversation message. */
+/** Narrow host-neutral events emitted while Judge nodes execute. */
+export type JudgeNodeEvent =
+  | { type: 'phase'; phase: JudgeProgressPhase; label: string }
+  | { type: 'agent.start'; agent: 'bull' | 'bear' | 'judge' | 'researcher' }
+  | { type: 'agent.text'; agent: 'bull' | 'bear' | 'judge' | 'researcher'; text: string }
+  | { type: 'agent.complete'; agent: 'bull' | 'bear' | 'judge' | 'researcher' }
+  | { type: 'evidence.found'; id: string; source: string }
+  | { type: 'command.output'; text: string };
+
+/** Public node responses. `messageId` matches the persisted conversation message. */
 export interface BullAnalysisResponse extends BullProposalOutput { messageId: string }
 export type BearChallengeResponse = BearProposalResponse | (BearLLMOutput & { messageId: string });
 
@@ -40,20 +54,36 @@ export interface JudgeNodeTrace {
   recordSubagentResult(nodeId: string, result: SubagentResult<unknown>): Promise<void>;
 }
 
-/** Everything the adapters need from the CLI composition layer. */
-export interface JudgeRunDeps {
-  ctx: HarnessContext;
+/** Existing domain and specialist authorities supplied by a host composition. */
+export interface JudgeNodeRuntimeDependencies {
+  capabilityGateway: Pick<CapabilityGateway, 'invoke'>;
+  bull: Pick<BullAgent, 'analyze' | 'rebuttal'>;
+  bear: Pick<BearAgent, 'challenge'>;
+  judge: Pick<JudgeAgent, 'evaluate'>;
+  validator: Pick<ClaimValidator, 'assertSeenEvidence' | 'validate' | 'validateChallenge'>;
+  researchers: { market: boolean; news: boolean };
+  evidence: EvidenceStore;
+  financialSnapshots: FinancialSnapshotStore;
+  conversation: ConversationStore;
+  claims: ClaimStore;
+  counterpoints: CounterpointStore;
+  judgments: JudgmentStore;
+}
+
+/** Host-neutral execution inputs and callbacks for the Judge node runtime. */
+export interface JudgeNodeRuntimeOptions {
+  deps: JudgeNodeRuntimeDependencies;
   ticker: string;
   runId: string;
-  events: (event: AgentEvent) => void;
+  events: (event: JudgeNodeEvent) => void;
+  /** Raw ToolRuntime events are projected into host presentation events by the caller. */
+  onToolEvent?: (event: ToolRuntimeEvent) => void;
   progress: JudgeProgress;
   /** Written by the round-1 verdict node, read by `enabled` predicates of the conditional nodes. */
   decision: JudgeRoundDecision;
   /** Reasoning mode always runs the arbitration round; `--conditional` opens it for a neutral verdict. */
   reasoning: boolean;
   conditional: boolean;
-  /** Immutable profile flags for resumed executions; fresh runs use ctx.researchers. */
-  researchers?: { market: boolean; news: boolean };
   executionStartedAt?: string;
   trace?: JudgeNodeTrace;
   /** Semantic checkpoint commit before model-node projections are written. */
@@ -126,7 +156,7 @@ export function assertNotAborted(signal?: AbortSignal): void {
 
 /** Emit public, auditable text without exposing private chain-of-thought. */
 function emitPublicText(
-  events: (event: AgentEvent) => void,
+  events: (event: JudgeNodeEvent) => void,
   agent: 'bull' | 'bear' | 'judge' | 'researcher',
   text: string,
   targetChunks = 1,
@@ -165,12 +195,12 @@ function challengeContent(response: BearChallengeResponse, counterpoints: readon
  * Node adapters for `/judge`. Each entry performs exactly the work (fetch,
  * persistence, validation, event emission) the manual pipeline performed at that
  * stage; `WorkflowRunner` owns ordering, required/optional semantics, and
- * cancellation. All model authority stays in the subagents and every persistence
- * side effect stays in this composition layer.
+ * cancellation. Model authority stays in the supplied subagents, and persistence
+ * remains owned by the supplied domain stores.
  */
-export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors {
-  const { ctx, ticker, runId, events, progress, decision } = deps;
-  const researchers = deps.researchers ?? ctx.researchers;
+export function createJudgeNodeExecutors(deps: JudgeNodeRuntimeOptions): JudgeNodeExecutors {
+  const { deps: ctx, ticker, runId, events, progress, decision } = deps;
+  const researchers = ctx.researchers;
 
   const invokeFinancialTool = async <TOutput>(
     principal: CapabilityPrincipal,
@@ -180,7 +210,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
   ): Promise<TOutput> => {
     const result = await ctx.capabilityGateway.invoke(principal, capabilityId, input, {
       signal,
-      onEvent: event => projectFinancialToolEvent(event, { ticker, emit: events }),
+      onEvent: deps.onToolEvent,
     });
     return result.value as TOutput;
   };
@@ -197,7 +227,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
     if (!decision.accepted) {
       throw new UserFriendlyError('EVIDENCE_REJECTED', `Evidence candidate was rejected: ${decision.reason}`, 'Verify the financial source and try again.');
     }
-    const persisted = await ctx.db.evidence.accept({
+    const persisted = await ctx.evidence.accept({
       runId, ticker, source: decision.source, data: decision.data, acceptance: decision,
     });
     events({ type: 'evidence.found', id: persisted.id, source: persisted.source });
@@ -252,7 +282,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
     phase: 'EVALUATION' | 'RESOLUTION';
     roundNumber: number;
   }) => {
-    const conversation = await ctx.db.conversation.getByRun(runId);
+    const conversation = await ctx.conversation.getByRun(runId);
     const discussion = conversation.map((message) => ({ agent: message.agent, type: message.messageType, content: message.content }));
     const availableCategories = { marketMomentum: params.selection.marketAvailable, risk: params.selection.newsAvailable };
     const context = specialistContext({
@@ -275,7 +305,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
     const current = turn.counterpoints.filter((point): point is GroundedCounterpoint => 'counterpointId' in point);
     if (current.length === 0) return turn.counterpoints;
     if (current.length !== turn.counterpoints.length) throw new Error('Judge challenge mixes historical and current Counterpoints');
-    const stored = (await ctx.db.counterpoints.getByRun(runId)).filter(point => point.sourceNodeId === sourceNodeId);
+    const stored = (await ctx.counterpoints.getByRun(runId)).filter(point => point.sourceNodeId === sourceNodeId);
     const byId = new Map(stored.map(point => [point.counterpointId, point]));
     if (current.length !== byId.size) throw new Error(`Current Counterpoint projection is incomplete for ${sourceNodeId}`);
     return current.map(point => {
@@ -497,11 +527,11 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
           observations,
           materializedEvidenceIds: evidenceIds,
         });
-        const persisted = await ctx.db.financialSnapshots.save(snapshot);
+        const persisted = await ctx.financialSnapshots.save(snapshot);
         financialSnapshotId = persisted.snapshotId;
       }
 
-      await ctx.db.conversation.addMessage({
+      await ctx.conversation.addMessage({
         runId, messageId: `researcher_${runId}`, agent: 'researcher', messageType: 'observation',
         content: `I retrieved the evidence for ${ticker} and stored it for this run.`,
         evidenceIds, sequenceOrder: 0, metadata: { marketAvailable, newsAvailable },
@@ -539,18 +569,18 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
-      const claims = await new ClaimPolicy(ctx.db.evidence).ground({ executionId: runId, response: result.value,
+      const claims = await new ClaimPolicy(ctx.evidence).ground({ executionId: runId, response: result.value,
         allowedEvidenceIds: selection.evidenceIds, seenEvidenceIds: selection.evidenceIds });
       // Invariant §24-B.1: a claim may only cite evidence the agent actually saw.
       ctx.validator.assertSeenEvidence(claims.flatMap((claim) => claim.evidenceIds), selection.evidenceIds);
       const turn = { response, claims, result } satisfies ThesisTurn;
       await checkpoint('round-1-bull-thesis', turn);
-      await ctx.db.conversation.addMessage({
+      await ctx.conversation.addMessage({
         runId, messageId: response.messageId, agent: 'bull', messageType: 'claim', content: response.reasoning,
         evidenceIds: response.evidenceIds, sequenceOrder: 1,
         metadata: { claimCount: claims.length, seenEvidenceIds: selection.evidenceIds },
       });
-      for (const claim of claims) await ctx.db.claims.save({ runId, messageId: response.messageId, claim });
+      for (const claim of claims) await ctx.claims.save({ runId, messageId: response.messageId, claim });
       events({ type: 'agent.complete', agent: 'bull' });
       progress('bull', `✓ ${claims.length} claim(s) validated and stored`);
       await record('round-1-bull-thesis', result);
@@ -571,7 +601,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'agent.text', agent: 'bear', text: response.reasoning });
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
-      const counterpoints = await new CounterpointPolicy(ctx.db.evidence).ground({
+      const counterpoints = await new CounterpointPolicy(ctx.evidence).ground({
         executionId: runId,
         sourceNodeId: 'round-1-bear-challenge',
         response: result.value,
@@ -582,12 +612,12 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       round1BearCounterpoints = counterpoints;
       const turn = { response, counterpoints, result } satisfies ChallengeTurn;
       await checkpoint('round-1-bear-challenge', turn);
-      await ctx.db.conversation.addMessage({
+      await ctx.conversation.addMessage({
         runId, messageId: response.messageId, agent: 'bear', messageType: 'challenge',
         content: challengeContent(response, counterpoints), evidenceIds: response.evidenceIds, sequenceOrder: 2,
         metadata: { challengeCount: response.counterpoints.length, seenEvidenceIds: selection.evidenceIds },
       });
-      for (const counterpoint of counterpoints) await ctx.db.counterpoints.save({ runId, messageId: response.messageId, counterpoint });
+      for (const counterpoint of counterpoints) await ctx.counterpoints.save({ runId, messageId: response.messageId, counterpoint });
       events({ type: 'agent.complete', agent: 'bear' });
       progress('bear', `✓ ${response.counterpoints.length} challenge(s) validated`);
       await record('round-1-bear-challenge', result);
@@ -602,7 +632,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'phase', phase: 'bull', label: 'Responding to the challenges.' });
       events({ type: 'agent.start', agent: 'bull' });
       progress('bull', 'Responding to the challenges...');
-      const bullClaims: Claim[] = (await ctx.db.claims.getByRun(runId)).map(storedClaimToClaim);
+      const bullClaims: Claim[] = (await ctx.claims.getByRun(runId)).map(storedClaimToClaim);
       const bearCounterpoints = await downstreamCounterpoints('round-1-bear-challenge', challenge);
       const context = specialistContext({ role: 'BULL', phase: 'REBUTTAL', roundNumber: 1, evidence: selection.evidence, bullClaims, bearCounterpoints });
       const result = await ctx.bull.rebuttal(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bearCounterpoints });
@@ -610,19 +640,19 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
-      const validated = await new ClaimPolicy(ctx.db.evidence).ground({ executionId: runId, response: result.value,
+      const validated = await new ClaimPolicy(ctx.evidence).ground({ executionId: runId, response: result.value,
         allowedEvidenceIds: selection.evidenceIds, seenEvidenceIds: selection.evidenceIds });
       ctx.validator.assertSeenEvidence(validated.flatMap((claim) => claim.evidenceIds), selection.evidenceIds);
       // Normalisasi claimId rebuttal — UNIQUE(run_id, claim_id); prefix menandai asal claim.
       const claims = validated.map((claim, index) => ({ ...claim, claimId: `rebuttal_${index + 1}` }));
       const turn = { response, claims, result } satisfies ThesisTurn;
       await checkpoint('round-2-bull-rebuttal', turn);
-      await ctx.db.conversation.addMessage({
+      await ctx.conversation.addMessage({
         runId, messageId: response.messageId, agent: 'bull', messageType: 'response', content: response.reasoning,
         evidenceIds: response.evidenceIds, sequenceOrder: 3,
         metadata: { claimCount: claims.length, seenEvidenceIds: selection.evidenceIds },
       });
-      for (const claim of claims) await ctx.db.claims.save({ runId, messageId: response.messageId, claim });
+      for (const claim of claims) await ctx.claims.save({ runId, messageId: response.messageId, claim });
       events({ type: 'agent.complete', agent: 'bull' });
       progress('bull', `✓ ${claims.length} rebuttal claim(s) stored`);
       await record('round-2-bull-rebuttal', result);
@@ -652,8 +682,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       assertNotAborted(signal);
       const turn = { judgment, allClaims, needsExtra: judgment.stance === 'neutral', result } satisfies JudgeTurn;
       await checkpoint('evaluate-arguments', turn);
-      await ctx.db.judgments.save({ runId, judgment });
-      await ctx.db.conversation.addMessage({
+      await ctx.judgments.save({ runId, judgment });
+      await ctx.conversation.addMessage({
         runId, messageId: `judge_${runId}`, agent: 'judge', messageType: 'decision', content: judgment.summary,
         evidenceIds: [], sequenceOrder: 4,
         metadata: { score: judgment.score, stance: judgment.stance, seenEvidenceIds: selection.evidenceIds },
@@ -681,7 +711,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'agent.text', agent: 'bear', text: response.reasoning });
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
-      const counterpoints = await new CounterpointPolicy(ctx.db.evidence).ground({
+      const counterpoints = await new CounterpointPolicy(ctx.evidence).ground({
         executionId: runId,
         sourceNodeId: 'conditional-bear-rechallenge',
         response: result.value,
@@ -693,12 +723,12 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       const turn = { response, counterpoints, result } satisfies ChallengeTurn;
       await checkpoint('conditional-bear-rechallenge', turn);
       const messageId = `${response.messageId}_conditional`;
-      await ctx.db.conversation.addMessage({
+      await ctx.conversation.addMessage({
         runId, messageId, agent: 'bear', messageType: 'challenge',
         content: challengeContent(response, counterpoints), evidenceIds: response.evidenceIds, sequenceOrder: 5,
         metadata: { challengeCount: response.counterpoints.length, seenEvidenceIds: selection.evidenceIds, conditional: true },
       });
-      for (const counterpoint of counterpoints) await ctx.db.counterpoints.save({ runId, messageId, counterpoint });
+      for (const counterpoint of counterpoints) await ctx.counterpoints.save({ runId, messageId, counterpoint });
       events({ type: 'agent.complete', agent: 'bear' });
       await record('conditional-bear-rechallenge', result);
       return turn;
@@ -714,7 +744,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       events({ type: 'phase', phase: 'bull', label: 'Conditional: responding to re-challenge.' });
       events({ type: 'agent.start', agent: 'bull' });
       progress('bull', 'Conditional: responding to re-challenge...');
-      const bullClaims: Claim[] = (await ctx.db.claims.getByRun(runId)).map(storedClaimToClaim);
+      const bullClaims: Claim[] = (await ctx.claims.getByRun(runId)).map(storedClaimToClaim);
       const bearCounterpoints = await downstreamCounterpoints('conditional-bear-rechallenge', rechallenge);
       const context = specialistContext({ role: 'BULL', phase: 'REBUTTAL', roundNumber: 2, evidence: selection.evidence, bullClaims, bearCounterpoints });
       const result = await ctx.bull.rebuttal(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bearCounterpoints });
@@ -722,19 +752,19 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
-      const validated = await new ClaimPolicy(ctx.db.evidence).ground({ executionId: runId, response: result.value,
+      const validated = await new ClaimPolicy(ctx.evidence).ground({ executionId: runId, response: result.value,
         allowedEvidenceIds: selection.evidenceIds, seenEvidenceIds: selection.evidenceIds });
       ctx.validator.assertSeenEvidence(validated.flatMap((claim) => claim.evidenceIds), selection.evidenceIds);
       const claims = validated.map((claim, index) => ({ ...claim, claimId: `rebuttal_conditional_${index + 1}` }));
       const messageId = `${response.messageId}_conditional`;
       const turn = { response, claims, result } satisfies ThesisTurn;
       await checkpoint('conditional-bull-rebuttal', turn);
-      await ctx.db.conversation.addMessage({
+      await ctx.conversation.addMessage({
         runId, messageId, agent: 'bull', messageType: 'response', content: response.reasoning,
         evidenceIds: response.evidenceIds, sequenceOrder: 6,
         metadata: { claimCount: claims.length, seenEvidenceIds: selection.evidenceIds, conditional: true },
       });
-      for (const claim of claims) await ctx.db.claims.save({ runId, messageId, claim });
+      for (const claim of claims) await ctx.claims.save({ runId, messageId, claim });
       events({ type: 'agent.complete', agent: 'bull' });
       await record('conditional-bull-rebuttal', result);
       return turn;
@@ -762,8 +792,8 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
       assertNotAborted(signal);
       const turn = { judgment, allClaims, needsExtra: true, result } satisfies JudgeTurn;
       await checkpoint('resolve-conflicts', turn);
-      await ctx.db.judgments.save({ runId, judgment });
-      await ctx.db.conversation.addMessage({
+      await ctx.judgments.save({ runId, judgment });
+      await ctx.conversation.addMessage({
         runId, messageId: `judge_${runId}_conditional`, agent: 'judge', messageType: 'decision',
         content: judgment.summary, evidenceIds: [], sequenceOrder: 7,
         metadata: { score: judgment.score, stance: judgment.stance, conditional: true, seenEvidenceIds: selection.evidenceIds },
@@ -781,7 +811,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
      */
     'check-evidence': async (inputs) => {
       const selection = nodeValue<EvidenceSelection>(inputs, 'select-supporting-evidence');
-      const stored = await ctx.db.claims.getByRun(runId);
+      const stored = await ctx.claims.getByRun(runId);
       ctx.validator.assertSeenEvidence(stored.flatMap((claim) => claim.evidenceIds), selection.evidenceIds);
       const thesisTurns = [
         nodeValue<ThesisTurn>(inputs, 'round-1-bull-thesis'),
@@ -808,7 +838,7 @@ export function createJudgeNodeExecutors(deps: JudgeRunDeps): JudgeNodeExecutors
         const counterpointEvidenceIds = [...new Set(counterpoints.flatMap(point => 'evidenceIds' in point ? point.evidenceIds : []))];
         if (counterpointEvidenceIds.length > 0) {
           ctx.validator.assertSeenEvidence(counterpointEvidenceIds, selection.evidenceIds);
-          const scoped = await ctx.db.evidence.getManyByIdsForRun(runId, counterpointEvidenceIds);
+          const scoped = await ctx.evidence.getManyByIdsForRun(runId, counterpointEvidenceIds);
           if (scoped.length !== counterpointEvidenceIds.length) {
             throw new ValidationError('Current Counterpoint Evidence is outside the seen Execution scope');
           }

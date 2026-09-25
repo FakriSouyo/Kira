@@ -58,7 +58,7 @@ export interface JudgeCommandContext {
   execute(nodeId: JudgeNodeId, executor: JudgeExecutor, inputs: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<unknown>;
 }
 
-/** One node's executable adapter, supplied by the composition layer (apps/cli). */
+/** One node's executable adapter, supplied by application composition. */
 export type JudgeNodeExec = (inputs: Readonly<Record<string, unknown>>, signal?: AbortSignal) => Promise<unknown>;
 
 /** Every declared node must be bound: an unbound node cannot silently become metadata. */
@@ -116,8 +116,8 @@ export function createJudgeWorkflow(): WorkflowDefinition<JudgeCommandContext> {
 /**
  * Binds an exhaustive adapter map to the definition contract. The context is the
  * only channel through which scheduled nodes receive inputs and expose the
- * arbitration decision, so the runtime owns ordering while the composition layer
- * (apps/cli) owns persistence.
+ * arbitration decision, so the runtime owns ordering while the engine Judge
+ * runtime coordinates persistence through host-supplied domain stores.
  */
 export function createJudgeCommandContext(params: {
   reasoningMode: 'usual' | 'reasoning';

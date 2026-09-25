@@ -50,6 +50,24 @@ export { filesWorkflow } from './workflows/files.js';
 export type { FilesArtifacts } from './workflows/files.js';
 export { documentIndexWorkflow, documentSearchWorkflow } from './workflows/document.js';
 export type { DocumentSearchArtifacts } from './workflows/document.js';
+export { assertNotAborted, createJudgeNodeExecutors } from './judge/nodeRuntime.js';
+export type {
+  BearChallengeResponse,
+  BullAnalysisResponse,
+  ChallengeTurn,
+  CollectedSources,
+  EvidenceAudit,
+  EvidenceSelection,
+  JudgeNodeEvent,
+  JudgeNodeRuntimeDependencies,
+  JudgeNodeRuntimeOptions,
+  JudgeNodeTrace,
+  JudgeProgress,
+  JudgeProgressPhase,
+  JudgeTurn,
+  SynthesisTurn,
+  ThesisTurn,
+} from './judge/nodeRuntime.js';
 
 export interface EngineCapabilityRuntimeOptions {
   readonly financialData: FinancialDataProvider;
