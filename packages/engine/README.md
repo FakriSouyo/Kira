@@ -32,7 +32,7 @@ remains in persistence packages.
 The engine also owns WorkingContext publication and journal-reconciliation
 orchestration through `createWorkingContextPublisher`. It receives the existing
 WorkingContextStore, ArtifactStore, and JudgmentStore contracts, a journal read
-callback, and a host audit append callback. The CLI Session supplies the
+callback, and a host audit append callback. The fresh-Turn runner supplies the
 completed `ResearchSessionArtifacts`; the publisher does not own Session/Turn
 lifecycle or retrieve them itself. WorkingContextStore owns durable
 WorkingContext persistence. In production, ConversationController remains the
@@ -58,6 +58,16 @@ store contract remains the lifecycle persistence authority and its database
 implementation stays outside engine. ConversationController continues to own
 journal correlation and transcript/run/message projection repair.
 
+The engine coordinates the canonical lifecycle around fresh command,
+natural-language, and local-input Turns through `runSessionTurn`. It creates and
+settles the Turn through the supplied `ResearchSessionStore`, runs host-provided
+action work between narrow lifecycle callbacks, and invokes the existing
+`WorkingContextPublisher` after settlement only on normal success. Live failure
+resolution uses its own child-Execution and abort precedence and does not reuse
+restart reconciliation. ConversationController, journal and transcript
+projection, AgentEvent presentation, command parsing, response streaming, and
+special `/new`, `/resume`, and `/continue` lifecycles remain CLI-owned.
+
 `CapabilityPolicy` and `CapabilityGateway` remain authorization authority,
 `ToolRuntime` remains execution authority, `@harness/document` owns extraction,
 identity, chunking, and retrieval semantics, and `DocumentStore` remains
@@ -75,14 +85,13 @@ streaming workflow yields chunks in order and leaves presentation to its host.
 Both workflows accept the current dependencies per call so provider, model,
 and Session rebinding remains owned by the CLI composition.
 
-The engine does not create providers or databases, or own general conversation
-Turn execution lifecycle, Session switching, `/resume` and `/continue` control
-orchestration, `ConversationController`, `AgentEvent` presentation, context
-policy, model runtime authority, or persistence implementation. The CLI owns
-general Turn creation/execution lifecycle, Session switching, `/resume` and
-`/continue` control orchestration, transcript/journal and event projection,
-streaming display, cancellation presentation, provider composition, Judge
-orchestration/checkpointing, and the WorkingContext publication trigger after
-Turn settlement. Natural-language conversation remains one Turn with zero
-`ResearchExecution`. Restart lifecycle reconciliation is the engine's focused
-exception; it does not move journal mutation into engine.
+The engine does not create providers or databases, or own Session switching,
+`/new`, `/resume` and `/continue` control orchestration, `ConversationController`,
+`AgentEvent` presentation, context policy, model runtime authority, or
+persistence implementation. The CLI owns fresh-input parsing and presentation,
+transcript/journal and event projection, streaming display, cancellation
+presentation, provider composition, Judge orchestration/checkpointing, and the
+special control lifecycles above. Natural-language conversation remains one
+Turn with zero `ResearchExecution`. Restart reconciliation and fresh-Turn
+orchestration coordinate existing authorities without moving journal mutation
+into engine.

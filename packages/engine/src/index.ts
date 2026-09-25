@@ -35,6 +35,8 @@ export type {
 } from './session/workingContextPublisher.js';
 export { reconcileSessionLifecycleAfterRestart } from './session/restartReconciliation.js';
 export type { SessionRestartReconciliation } from './session/restartReconciliation.js';
+export { runSessionTurn } from './session/turnLifecycle.js';
+export type { RunSessionTurnOptions, SettledTurnStatus } from './session/turnLifecycle.js';
 export { WorkflowTraceRecorder } from './runtime/workflowTraceRecorder';
 export type {
   TraceableWorkflowDefinition,

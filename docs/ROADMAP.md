@@ -69,8 +69,9 @@ CURRENT
 UA Kira Engine Extraction
 UA7 Host-neutral Conversation Response Orchestration Extraction
 UA8 Host-neutral Session Restart Lifecycle Reconciliation Extraction
+UA9 Host-neutral Fresh-Turn Lifecycle Orchestration Extraction
 
-UA9 and later slices remain unselected until another fresh source audit.
+UA10 and later slices remain unselected until another fresh source audit.
 
 THEN
 
@@ -107,7 +108,7 @@ boundaries established by earlier milestones.
 
 ## UA slice selection
 
-**Selected slice:** UA8 — Host-neutral Session Restart Lifecycle Reconciliation Extraction.
+**Selected slice:** UA9 — Host-neutral Fresh-Turn Lifecycle Orchestration Extraction.
 
 UA1 — Host-neutral Capability Runtime Extraction, UA2 — Host-neutral Workflow
 Trace Extraction, UA3 — Host-neutral Screen Workflow Extraction, and UA4 —
@@ -144,10 +145,20 @@ projection, Judge orchestration/checkpointing, provider composition, CLI event
 projection, streaming presentation, and the WorkingContext publication
 trigger. UA8 does not complete engine extraction.
 
-UA9 and later slices remain unselected until another fresh source audit. Before
+UA10 and later slices remain unselected until another fresh source audit. Before
 each later slice, perform a fresh source audit and review its exact scope. This
 roadmap does not lock future APIs, filenames, classes, schemas, package
 boundaries, or migration behavior.
+
+UA9 extracts reusable orchestration around fresh command, natural-language,
+and local-input Turns into `packages/engine`. The engine coordinates existing
+`ResearchSessionStore` lifecycle persistence and `WorkingContextPublisher`
+publication policy through narrow host callbacks. Live failure precedence is
+specific to an executing action and remains separate from UA8 restart
+reconciliation. `/new` Session switching, `/resume`/`/continue`,
+ConversationController, journal/transcript projection, AgentEvent presentation,
+Judge orchestration/checkpointing, and provider composition remain CLI-owned.
+UA10 and later are unselected pending a fresh source audit.
 
 ## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1-T5 on master
 

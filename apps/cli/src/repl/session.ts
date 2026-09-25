@@ -1,5 +1,5 @@
 import type { FinharnessDatabase } from '@harness/database';
-import { conversationRespondWorkflow, conversationStreamWorkflow, createWorkingContextPublisher } from '@harness/engine';
+import { conversationRespondWorkflow, conversationStreamWorkflow, createWorkingContextPublisher, runSessionTurn } from '@harness/engine';
 import { UserFriendlyError } from '@harness/shared';
 import { buildContext } from '../context';
 import { loadConfig, type FinharnessConfig } from '../config';
@@ -172,39 +172,53 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
           throw error;
         }
       }
-      const turn = await db.sessions.createTurn({ sessionId: controller.snapshot.id, input, command: name });
-      let turnSettled = false;
-      try {
-        controller.beginTurn(turn.id);
-        if (name === 'new') {
+      if (name === 'new') {
+        const turn = await db.sessions.createTurn({ sessionId: controller.snapshot.id, input, command: name });
+        let turnSettled = false;
+        try {
+          controller.beginTurn(turn.id);
           await db.sessions.settleTurn(turn.id, 'completed');
           turnSettled = true;
           controller.settleTurn(turn.id, 'completed');
           const target = await controller.createNewConversation();
           await switchToPreparedSession(target.id, await prepareSession(target.id));
           return;
+        } catch (error) {
+          if (!turnSettled) {
+            const status = await terminalTurnState(turn.id, error, execution?.signal);
+            await db.sessions.settleTurn(turn.id, status);
+            turnSettled = true;
+            controller.settleTurn(turn.id, status === 'completed' ? 'completed' : status === 'stopped' ? 'cancelled' : 'failed');
+          }
+          throw error;
         }
-        controller.user(input);
-        const result = await handler(args, { ...execution, input, lifecycle: { sessionId: turn.sessionId, turnId: turn.id } });
-        if (result?.reload) await reload();
-        await db.sessions.settleTurn(turn.id, 'completed');
-        turnSettled = true;
-        await publishAfterSettledTurn(turn.id);
-        controller.settleTurn(turn.id, 'completed');
-        if (result?.suspend) {
-          const suspend = result.suspend;
-          return { ...result, suspend: async () => { try { await suspend(); } finally { await reload(); } } };
-        }
-        return result;
-      } catch (error) {
-        if (!turnSettled) {
-          const status = await terminalTurnState(turn.id, error, execution?.signal);
-          await db.sessions.settleTurn(turn.id, status);
-          turnSettled = true;
-          controller.settleTurn(turn.id, status === 'completed' ? 'completed' : status === 'stopped' ? 'cancelled' : 'failed');
-        }
-        throw error;
       }
+
+      const result = await runSessionTurn({
+        sessions: db.sessions,
+        publisher,
+        sessionId: controller.snapshot.id,
+        input,
+        command: name,
+        signal: execution?.signal,
+        isAbortError: error => error instanceof UserFriendlyError && error.code === 'ABORTED',
+        onTurnStarted: turn => controller.beginTurn(turn.id),
+        action: async turn => {
+          controller.user(input);
+          const result = await handler(args, { ...execution, input, lifecycle: { sessionId: turn.sessionId, turnId: turn.id } });
+          if (result?.reload) await reload();
+          return result;
+        },
+        onTurnSettled: turn => controller.settleTurn(
+          turn.id,
+          turn.status === 'completed' ? 'completed' : turn.status === 'stopped' ? 'cancelled' : 'failed',
+        ),
+      });
+      if (result?.suspend) {
+        const suspend = result.suspend;
+        return { ...result, suspend: async () => { try { await suspend(); } finally { await reload(); } } };
+      }
+      return result;
     });
   }
 
@@ -251,23 +265,22 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
     async recordLocalInput(text: string): Promise<void> {
       const input = controller.safeInput(text.trim());
       const command = input.replace(/^\//, '').split(/\s+/, 1)[0]?.toLowerCase() || 'local';
-      const turn = await db.sessions.createTurn({ sessionId: controller.snapshot.id, input, command });
-      let turnSettled = false;
-      try {
-        controller.beginTurn(turn.id);
-        controller.user(input);
-        await db.sessions.settleTurn(turn.id, 'completed');
-        turnSettled = true;
-        await publishAfterSettledTurn(turn.id);
-        controller.settleTurn(turn.id, 'completed');
-      } catch (error) {
-        if (!turnSettled) {
-          await db.sessions.settleTurn(turn.id, 'failed');
-          turnSettled = true;
-          controller.settleTurn(turn.id, 'failed');
-        }
-        throw error;
-      }
+      await runSessionTurn({
+        sessions: db.sessions,
+        publisher,
+        sessionId: controller.snapshot.id,
+        input,
+        command,
+        failureStatus: 'failed',
+        onTurnStarted: turn => controller.beginTurn(turn.id),
+        action: async () => {
+          controller.user(input);
+        },
+        onTurnSettled: turn => controller.settleTurn(
+          turn.id,
+          turn.status === 'completed' ? 'completed' : turn.status === 'stopped' ? 'cancelled' : 'failed',
+        ),
+      });
     },
     /**
      * Conversational routing (Audit doc C1/C2): input tanpa prefix "/" selalu
@@ -278,58 +291,63 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
     async handleNaturalLanguage(text: string, execution?: { signal?: AbortSignal }): Promise<void> {
       const question = text.trim();
       if (!question) return;
-      const turn = await db.sessions.createTurn({ sessionId: controller.snapshot.id, input: question, command: 'conversation' });
-      let turnSettled = false;
-      const id = `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-      try {
-        controller.beginTurn(turn.id);
-        controller.user(question);
-        emit({ type: 'conversation.user', id, content: question, createdAt: Date.now() });
-        emit({ type: 'conversation.start', id, mode: 'conversation' });
-        const responseDependencies = {
-          context: context.conversationContext,
-          agent: context.mainAgent,
-          sessions: db.sessions,
-        };
-        const responseInput = {
-          sessionId: turn.sessionId,
-          turnId: turn.id,
-          message: question,
-          signal: execution?.signal,
-        };
-        if (options.events) {
-          // TTY: alirkan token ke transcript conversation supaya tampil streaming.
-          for await (const chunk of conversationStreamWorkflow(responseDependencies, responseInput)) {
-            if (execution?.signal?.aborted) throw new UserFriendlyError('ABORTED', 'Response cancelled', 'Enter another message when ready.');
-            emit({ type: 'conversation.delta', id, content: chunk });
+      let id = '';
+      await runSessionTurn({
+        sessions: db.sessions,
+        publisher,
+        sessionId: controller.snapshot.id,
+        input: question,
+        command: 'conversation',
+        signal: execution?.signal,
+        isAbortError: error => error instanceof UserFriendlyError && error.code === 'ABORTED',
+        onTurnStarted: turn => {
+          id = `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+          controller.beginTurn(turn.id);
+        },
+        action: async turn => {
+          controller.user(question);
+          emit({ type: 'conversation.user', id, content: question, createdAt: Date.now() });
+          emit({ type: 'conversation.start', id, mode: 'conversation' });
+          const responseDependencies = {
+            context: context.conversationContext,
+            agent: context.mainAgent,
+            sessions: db.sessions,
+          };
+          const responseInput = {
+            sessionId: turn.sessionId,
+            turnId: turn.id,
+            message: question,
+            signal: execution?.signal,
+          };
+          if (options.events) {
+            // TTY: alirkan token ke transcript conversation supaya tampil streaming.
+            for await (const chunk of conversationStreamWorkflow(responseDependencies, responseInput)) {
+              if (execution?.signal?.aborted) throw new UserFriendlyError('ABORTED', 'Response cancelled', 'Enter another message when ready.');
+              emit({ type: 'conversation.delta', id, content: chunk });
+            }
+            emit({ type: 'conversation.complete', id });
+          } else {
+            // Non-TTY/readline: jawaban utuh, tulis langsung.
+            const answer = await conversationRespondWorkflow(responseDependencies, responseInput);
+            emit({ type: 'conversation.delta', id, content: answer });
+            emit({ type: 'conversation.complete', id });
+            rawWrite(`${controller.publicText(answer)}\n\n`);
           }
-          emit({ type: 'conversation.complete', id });
-        } else {
-          // Non-TTY/readline: jawaban utuh, tulis langsung.
-          const answer = await conversationRespondWorkflow(responseDependencies, responseInput);
-          emit({ type: 'conversation.delta', id, content: answer });
-          emit({ type: 'conversation.complete', id });
-          rawWrite(`${controller.publicText(answer)}\n\n`);
-        }
-        await db.sessions.settleTurn(turn.id, 'completed');
-        turnSettled = true;
-        await publishAfterSettledTurn(turn.id);
-        controller.settleTurn(turn.id, 'completed');
-      } catch (error) {
-        if (!turnSettled) {
-          const stopped = execution?.signal?.aborted || (error instanceof UserFriendlyError && error.code === 'ABORTED');
+        },
+        onTurnFailure: (_turn, status) => {
+          const stopped = status === 'stopped';
           emit({
             type: 'conversation.failed', id,
             error: stopped
               ? { code: 'ABORTED', message: 'Response cancelled', suggestion: 'Enter another message when ready.' }
               : { code: 'CONVERSATION_ERROR', message: 'Gagal menghasilkan respons percakapan.', suggestion: 'Coba lagi, atau gunakan /judge untuk analisis berbasis evidence.' },
           });
-          await db.sessions.settleTurn(turn.id, stopped ? 'stopped' : 'failed');
-          turnSettled = true;
-          controller.settleTurn(turn.id, stopped ? 'cancelled' : 'failed');
-        }
-        throw error;
-      }
+        },
+        onTurnSettled: turn => controller.settleTurn(
+          turn.id,
+          turn.status === 'completed' ? 'completed' : turn.status === 'stopped' ? 'cancelled' : 'failed',
+        ),
+      });
     },
     async close() { for (const fn of cleanup.splice(0).reverse()) await fn(); },
   };
