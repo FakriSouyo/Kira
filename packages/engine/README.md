@@ -66,7 +66,27 @@ action work between narrow lifecycle callbacks, and invokes the existing
 resolution uses its own child-Execution and abort precedence and does not reuse
 restart reconciliation. ConversationController, journal and transcript
 projection, AgentEvent presentation, command parsing, response streaming, and
-special `/new`, `/resume`, and `/continue` lifecycles remain CLI-owned.
+special `/new` lifecycle remains CLI-owned. CLI retains `/resume` and
+`/continue` parsing and target selection.
+
+The engine also coordinates lifecycle around an already-selected and attached
+Turn and Execution through `runAttachedSessionTurn`. It reloads the exact
+Execution from supplied Session artifacts after the host action. On normal
+return, `completed`, `cancelled`, `failed`, and `running` map to parent Turn
+statuses `completed`, `stopped`, `failed`, and `failed`; interrupted or missing
+targets release the host attachment and leave the Turn running. Normal-success
+settlement publishes WorkingContext before host settled projection. A failure
+after canonical settlement releases the host attachment once before propagating.
+If the action throws, only terminal Execution outcomes settle the Turn, with no
+normal-success publication; a running, interrupted, or missing target is
+released and remains unsettled. Pre-settlement failures retain the legacy outer
+catch reload/reconciliation behavior. It does not create or acquire lifecycle
+rows.
+CLI retains `/resume` and `/continue` argument validation, target selection,
+command input projection, and `ConversationController`; Judge retains
+compatibility validation and same-Execution acquisition/resume. Action failures
+settle a terminal parent Turn without normal-success publication and are
+rethrown.
 
 `CapabilityPolicy` and `CapabilityGateway` remain authorization authority,
 `ToolRuntime` remains execution authority, `@harness/document` owns extraction,
@@ -86,12 +106,13 @@ Both workflows accept the current dependencies per call so provider, model,
 and Session rebinding remains owned by the CLI composition.
 
 The engine does not create providers or databases, or own Session switching,
-`/new`, `/resume` and `/continue` control orchestration, `ConversationController`,
+`/new`, `/resume` and `/continue` parsing/target selection, ConversationController,
 `AgentEvent` presentation, context policy, model runtime authority, or
 persistence implementation. The CLI owns fresh-input parsing and presentation,
 transcript/journal and event projection, streaming display, cancellation
-presentation, provider composition, Judge orchestration/checkpointing, and the
-special control lifecycles above. Natural-language conversation remains one
-Turn with zero `ResearchExecution`. Restart reconciliation and fresh-Turn
-orchestration coordinate existing authorities without moving journal mutation
-into engine.
+presentation, provider composition, Judge orchestration/checkpointing, and
+control-command input projection. Judge validates compatibility and acquires
+the same interrupted Execution. Natural-language conversation remains one Turn
+with zero `ResearchExecution`. Restart reconciliation, fresh-Turn orchestration,
+and attached-Turn orchestration coordinate existing authorities without
+moving journal mutation into engine.

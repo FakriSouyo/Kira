@@ -18,8 +18,9 @@ roadmap or historical design document.
 ## Architecture boundary
 
 apps/cli remains more than a thin host adapter. It owns command dispatch,
-Session switching, `/new`, `/resume` and `/continue` control orchestration,
-Judge workflows/checkpointing, provider composition, CLI event projection and
+Session switching, `/new`, `/resume` and `/continue` argument validation and
+target selection, control-command input projection, Judge workflow/checkpoint
+integration, provider composition, CLI event projection and
 streaming presentation, and ConversationController. It also owns journal
 correlation/causation when audit events are appended.
 packages/engine (@harness/engine) owns financial, Attachment, and Document
@@ -27,8 +28,8 @@ capability composition, WorkflowTraceRecorder, Screen workflow, conversation
 context preparation and Conversation Response orchestration, WorkingContext
 publication/reconciliation orchestration, and the host-neutral
 Workspace/Document application workflows for `/files`, `/doc-index`, and
-`/doc-search`, plus host-neutral Session restart lifecycle reconciliation and
-fresh-Turn lifecycle orchestration through `ResearchSessionStore` and
+`/doc-search`, plus host-neutral Session restart, fresh-Turn, and attached-Turn
+lifecycle orchestration through `ResearchSessionStore` and
 `WorkingContextPublisher`. The conversation workflow prepares context, invokes
 MainFinHarnessAgent, and persists successful ModelCall provenance through
 supplied contracts. These engine boundaries use host-supplied store contracts
@@ -36,13 +37,25 @@ and narrow callbacks; their persistence implementations remain outside engine.
 WorkingContextStore owns durable WorkingContext persistence, and CLI's
 ConversationController remains the production journal correlation path. CLI
 still owns fresh-input parsing and presentation, special `/new` Session
-switching, `/resume` and `/continue` control orchestration, transcript/journal
-projection, Judge orchestration/checkpointing, provider composition, CLI event
-projection, streaming presentation, and local-path Attachment import. Engine
-does not own ConversationController, AgentEvent presentation, host filesystem
-access, or persistence implementation. UA is incomplete; do not assume broader
-engine APIs exist. Do not put new reusable application/core behavior in CLI
-when a host-neutral boundary is clearly required.
+switching, `/resume` and `/continue` argument validation and target selection,
+control-command input projection, transcript/journal projection, Judge command
+and checkpoint integration, provider composition, CLI event projection,
+streaming presentation, and local-path Attachment import. The Judge resume
+workflow owns compatibility validation and same-Execution acquisition/resume.
+Engine coordinates the host-neutral attached-Turn lifecycle after CLI selects
+the existing Session, Turn, and Execution. Engine does not own
+ConversationController, AgentEvent presentation, host filesystem access, or
+persistence implementation. UA is incomplete; do not assume broader engine
+APIs exist. Do not put new reusable application/core behavior in CLI when a
+host-neutral boundary is clearly required.
+
+For attached-Turn lifecycle behavior, preserve the source distinction: normal
+return maps a still-running target Execution to a failed Turn, while an action
+failure with a running target releases the attachment and leaves the Turn
+running. Interrupted or missing targets release in either path. If normal
+success has already settled the canonical Turn and a later reload, publication,
+or host projection fails, release the host attachment once before propagating.
+Pre-settlement failures retain the legacy outer-catch reconciliation behavior.
 
 The future engine coordinates existing authorities. It must not replace
 Evidence, Claims, capability authorization, ToolRuntime, database, providers,

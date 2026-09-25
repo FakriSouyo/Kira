@@ -1,5 +1,5 @@
 import type { FinharnessDatabase } from '@harness/database';
-import { conversationRespondWorkflow, conversationStreamWorkflow, createWorkingContextPublisher, runSessionTurn } from '@harness/engine';
+import { conversationRespondWorkflow, conversationStreamWorkflow, createWorkingContextPublisher, runAttachedSessionTurn, runSessionTurn } from '@harness/engine';
 import { UserFriendlyError } from '@harness/shared';
 import { buildContext } from '../context';
 import { loadConfig, type FinharnessConfig } from '../config';
@@ -99,11 +99,6 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
       artifacts: startupArtifacts,
     });
   }
-  /** Reconciles context audit events from durable versions after a failed append. */
-  const publishAfterSettledTurn = async (turnId: string) => {
-    const artifacts = await db.sessions.getSessionArtifacts(controller.snapshot.id);
-    return await publisher.publishAfterSettledTurn({ sessionId: controller.snapshot.id, turnId, artifacts });
-  };
   const switchToPreparedSession = async (sessionId: string, prepared: PreparedContext) => {
     const previousSessionId = controller.snapshot.id;
     try {
@@ -148,29 +143,21 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
         const target = await resolveControlExecution(name, args);
         const lifecycle = { sessionId: target.sessionId, turnId: target.turnId };
         controller.attachTurn(target.turnId, target.id);
-        let turnSettled = false;
-        try {
-          controller.user(input);
-          const result = await handler(args, { ...execution, input, lifecycle, resume: { executionId: target.id, turnId: target.turnId } });
-          const after = (await db.sessions.getSessionArtifacts(target.sessionId)).executions.find(candidate => candidate.id === target.id);
-          if (after && after.status !== 'interrupted') {
-            const status = after.status === 'completed' ? 'completed' : after.status === 'cancelled' ? 'stopped' : 'failed';
-            await db.sessions.settleTurn(target.turnId, status);
-            turnSettled = true;
-            await publishAfterSettledTurn(target.turnId);
-            controller.settleTurn(target.turnId, status === 'completed' ? 'completed' : status === 'stopped' ? 'cancelled' : 'failed');
-          } else controller.releaseAttachedTurn();
-          return result;
-        } catch (error) {
-          const after = (await db.sessions.getSessionArtifacts(target.sessionId)).executions.find(candidate => candidate.id === target.id);
-          if (!turnSettled && after && after.status !== 'interrupted' && after.status !== 'running') {
-            const status = after.status === 'completed' ? 'completed' : after.status === 'cancelled' ? 'stopped' : 'failed';
-            await db.sessions.settleTurn(target.turnId, status);
-            turnSettled = true;
-            controller.settleTurn(target.turnId, status === 'completed' ? 'completed' : status === 'stopped' ? 'cancelled' : 'failed');
-          } else controller.releaseAttachedTurn();
-          throw error;
-        }
+        return await runAttachedSessionTurn({
+          sessions: db.sessions,
+          publisher,
+          ...lifecycle,
+          executionId: target.id,
+          action: async () => {
+            controller.user(input);
+            return await handler(args, { ...execution, input, lifecycle, resume: { executionId: target.id, turnId: target.turnId } });
+          },
+          onTurnReleased: () => controller.releaseAttachedTurn(),
+          onTurnSettled: (turn, status) => controller.settleTurn(
+            turn.id,
+            status === 'stopped' ? 'cancelled' : status,
+          ),
+        });
       }
       if (name === 'new') {
         const turn = await db.sessions.createTurn({ sessionId: controller.snapshot.id, input, command: name });

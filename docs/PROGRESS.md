@@ -14,10 +14,11 @@ Last updated: 2026-09-25
 - UA6 Host-neutral Workspace + Document Workflows Extraction is complete on master.
 - UA7 Host-neutral Conversation Response Orchestration Extraction is complete on master.
 - UA8 Host-neutral Session Restart Lifecycle Reconciliation Extraction is complete on master.
-- UA9 Host-neutral Fresh-Turn Lifecycle Orchestration Extraction is the selected current slice implemented in this branch.
-- UA10 and later slices remain unselected until another fresh source audit.
-- Engine owns fresh-Turn lifecycle orchestration for ordinary command, natural-language, and local-input Turns through `ResearchSessionStore` and `WorkingContextPublisher`.
-- CLI still owns `/new` Session switching, `/resume` and `/continue` control orchestration, ConversationController, journal/transcript projection, Judge orchestration/checkpointing, provider composition, CLI event projection, streaming presentation, and reload/suspend behavior.
+- UA9 Host-neutral Fresh-Turn Lifecycle Orchestration Extraction is complete on master.
+- UA10 Host-neutral Attached-Turn Lifecycle Orchestration Extraction is the selected current slice.
+- UA11 and later slices remain unselected until a fresh source audit.
+- Engine owns fresh-Turn lifecycle orchestration for ordinary command, natural-language, and local-input Turns, plus attached-Turn lifecycle orchestration after the host selects an existing target. Both coordinate through `ResearchSessionStore` and `WorkingContextPublisher`.
+- CLI still owns `/new` Session switching, `/resume` and `/continue` argument validation and target selection, ConversationController, journal/transcript and AgentEvent projection, Judge orchestration/checkpointing, provider composition, streaming presentation, and reload/suspend behavior. Judge owns compatibility validation and same-Execution acquisition/resume.
 - KB Internal Kira Identity Migration follows UA, then U Research Composition.
 
 The canonical dependency sequence and future design boundaries live in
