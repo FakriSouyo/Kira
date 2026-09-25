@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { projectConversation, type ConversationEvent, type ConversationSession, type ResearchSession } from '@harness/session-core';
 import type { FinharnessDatabase } from '@harness/database';
+import { reconcileSessionLifecycleAfterRestart } from '@harness/engine';
 import type { AgentEvent } from '../repl/events';
 import type { FinharnessConfig } from '../config';
 
@@ -81,33 +82,18 @@ export class ConversationController {
     this.currentRun = undefined; this.assistantId = undefined; this.activeTurn = undefined;
 
     // Canonical lifecycle wins over an incomplete projection after process loss.
-    const artifacts = await this.db.sessions.getSessionArtifacts(id);
-    const executions = new Map(artifacts.executions.map(execution => [execution.id, execution]));
+    const reconciliation = await reconcileSessionLifecycleAfterRestart(this.db.sessions, id);
+    const executions = new Map(reconciliation.executions.map(execution => [execution.id, execution]));
     const origins = new Map(entries
       .filter(entry => entry.payload.type === 'message.added' || entry.payload.type === 'run.started')
       .map(entry => [entry.payload.id, entry]));
     const lastByTurn = new Map<string, (typeof entries)[number]>();
     for (const entry of entries) if (entry.payload.turnId) lastByTurn.set(entry.payload.turnId, entry);
-    for (const execution of executions.values()) {
-      if (execution.status === 'running') {
-        executions.set(execution.id, await this.db.sessions.interruptExecution(execution.id));
-      }
-    }
-    const settledTurns: Array<{ id: string; state: 'completed' | 'failed' | 'cancelled' }> = [];
-    for (const turn of artifacts.turns) {
-      if (turn.status !== 'running') continue;
-      const attempts = [...executions.values()].filter(execution => execution.turnId === turn.id);
-      const status = attempts.some(execution => execution.status === 'completed')
-        ? 'completed' as const
-        : attempts.some(execution => execution.status === 'failed')
-          ? 'failed' as const
-          : attempts.some(execution => execution.status === 'interrupted')
-            ? null
-            : 'stopped' as const;
-      if (status === null) continue;
-      await this.db.sessions.settleTurn(turn.id, status);
-      settledTurns.push({ id: turn.id, state: status === 'stopped' ? 'cancelled' : status });
-    }
+    const settledTurns = reconciliation.settledTurns.map(turn => {
+      if (turn.status === 'stopped') return { id: turn.id, state: 'cancelled' as const };
+      if (turn.status === 'completed' || turn.status === 'failed') return { id: turn.id, state: turn.status };
+      throw new Error(`Turn ${turn.id} was not settled during restart reconciliation`);
+    });
 
     // A previous process cannot still stream into this conversation. Retain partial content,
     // but close projected blocks using the canonical terminal state when one exists.

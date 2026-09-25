@@ -90,8 +90,10 @@ describe('PR O durable resumability foundation', () => {
 
     const controller = await ConversationController.create(db, config, () => {});
     const artifacts = await db.sessions.getSessionArtifacts(session.id);
-    expect(artifacts.executions[0]).toMatchObject({ status: 'interrupted', completedAt: null });
-    expect(artifacts.turns[0]).toMatchObject({ status: 'running', completedAt: null });
+    expect(artifacts.executions[0]).toMatchObject({
+      id: execution.id, status: 'interrupted', completedAt: null, resumeGeneration: execution.resumeGeneration,
+    });
+    expect(artifacts.turns[0]).toMatchObject({ id: turn.id, status: 'running', completedAt: null });
     expect(controller.snapshot.blocks).toContainEqual(expect.objectContaining({ id: execution.id, kind: 'run', state: 'running' }));
     expect(db.journal.read(session.id).some(entry => entry.payload.type === 'run.settled' || entry.payload.type === 'turn.settled')).toBe(false);
   });

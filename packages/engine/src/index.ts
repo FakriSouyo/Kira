@@ -33,6 +33,8 @@ export type {
   WorkingContextPublisher,
   WorkingContextPublishStatus,
 } from './session/workingContextPublisher.js';
+export { reconcileSessionLifecycleAfterRestart } from './session/restartReconciliation.js';
+export type { SessionRestartReconciliation } from './session/restartReconciliation.js';
 export { WorkflowTraceRecorder } from './runtime/workflowTraceRecorder';
 export type {
   TraceableWorkflowDefinition,

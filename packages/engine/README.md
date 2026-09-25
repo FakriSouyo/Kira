@@ -50,6 +50,14 @@ for `document.search`; Session scoping, ranking, and limits remain in the
 existing capability tool and document domain. The workflows preserve
 cancellation signals and propagate failures.
 
+The engine also coordinates canonical Session lifecycle reconciliation after a
+process restart. It loads Session artifacts through the supplied
+`ResearchSessionStore`, interrupts abandoned running Executions, and settles
+eligible running Turns using the existing lifecycle outcome precedence. The
+store contract remains the lifecycle persistence authority and its database
+implementation stays outside engine. ConversationController continues to own
+journal correlation and transcript/run/message projection repair.
+
 `CapabilityPolicy` and `CapabilityGateway` remain authorization authority,
 `ToolRuntime` remains execution authority, `@harness/document` owns extraction,
 identity, chunking, and retrieval semantics, and `DocumentStore` remains
@@ -67,11 +75,14 @@ streaming workflow yields chunks in order and leaves presentation to its host.
 Both workflows accept the current dependencies per call so provider, model,
 and Session rebinding remains owned by the CLI composition.
 
-The engine does not create providers or databases, or own conversation Turn
-lifecycle, `ConversationController`, `AgentEvent` presentation, context policy,
-model runtime authority, or persistence implementation. The CLI owns Turn
-creation and settlement, transcript/journal and event projection, streaming
-display, cancellation presentation, provider composition, Session lifecycle,
-and the WorkingContext publication trigger after Turn settlement. Natural-
-language conversation remains one Turn with zero `ResearchExecution`.
-Judge orchestration and its workflow event presentation remain in CLI.
+The engine does not create providers or databases, or own general conversation
+Turn execution lifecycle, Session switching, `/resume` and `/continue` control
+orchestration, `ConversationController`, `AgentEvent` presentation, context
+policy, model runtime authority, or persistence implementation. The CLI owns
+general Turn creation/execution lifecycle, Session switching, `/resume` and
+`/continue` control orchestration, transcript/journal and event projection,
+streaming display, cancellation presentation, provider composition, Judge
+orchestration/checkpointing, and the WorkingContext publication trigger after
+Turn settlement. Natural-language conversation remains one Turn with zero
+`ResearchExecution`. Restart lifecycle reconciliation is the engine's focused
+exception; it does not move journal mutation into engine.
