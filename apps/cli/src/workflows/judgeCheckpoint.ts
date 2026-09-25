@@ -55,15 +55,15 @@ import type { ExecutionProfile, ResearchExecution } from '@harness/session-core'
 import type { JudgeCommandContext, JudgeNodeId } from '@harness/command-judge';
 import type {
   BearChallengeResponse,
+  BullAnalysisResponse,
+  ChallengeTurn,
   CollectedSources,
   EvidenceSelection,
-  JudgeTurn,
-  ThesisTurn,
-  ChallengeTurn,
-  SynthesisTurn,
   JudgeProgress,
-} from './judgeNodes';
-import type { BullAnalysisResponse } from './judgeNodes';
+  JudgeTurn,
+  SynthesisTurn,
+  ThesisTurn,
+} from '@harness/engine';
 
 export interface JudgeCheckpointWriterOptions {
   db: FinharnessDatabase;

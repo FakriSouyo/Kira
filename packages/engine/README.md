@@ -115,10 +115,31 @@ parsing/target selection, ConversationController, `AgentEvent` presentation,
 context policy, model runtime authority, or persistence implementation. The CLI
 owns fresh-input parsing and presentation, `/new` Session creation, runtime
 rebinding and switching, transcript/journal and event projection, streaming
-display, cancellation presentation, provider composition, Judge
-orchestration/checkpointing, and control-command input projection. Judge
+display, cancellation presentation, provider composition, Judge Execution
+lifecycle and WorkflowRunner composition, checkpoint/resume/release, trace
+composition, and control-command input projection. Judge
 validates compatibility and acquires the same interrupted Execution.
 Natural-language conversation remains one Turn
 with zero `ResearchExecution`. Restart reconciliation, fresh-Turn orchestration,
 and attached-Turn orchestration coordinate existing authorities without
 moving journal mutation into engine.
+
+## Judge Node Runtime
+
+`createJudgeNodeExecutors` owns the host-neutral Judge node application logic:
+financial capability invocation and verification, Evidence acceptance,
+FinancialSnapshot materialization, Evidence selection, Bull/Bear/Judge calls,
+Claim and Counterpoint grounding, conversation persistence, and deterministic
+evidence and verdict gates. It receives the existing specialist and
+CapabilityGateway contracts plus supplied Evidence, FinancialSnapshot,
+Conversation, Claim, Counterpoint, and Judgment stores. Those contracts remain
+the authorities; the engine does not open or wrap a database.
+
+The runtime emits a narrow `JudgeNodeEvent`, keeps `JudgeProgress` as a supplied
+callback, forwards raw ToolRuntime events through `onToolEvent`, and receives
+checkpoint and trace callbacks from its host. The CLI adapts ToolRuntime events
+to its existing `tool.start` / `tool.complete` events and retains Judge
+Execution lifecycle, `WorkflowRunner` composition, checkpoint/resume/release,
+trace recorder composition, and workflow/session/verdict `AgentEvent`
+projection. The 15-node graph, workflow version, capability plan, checkpoint
+format, resume rules, and release contract remain unchanged.

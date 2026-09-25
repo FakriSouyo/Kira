@@ -254,12 +254,21 @@ importers:
       '@harness/command-core':
         specifier: workspace:*
         version: link:../command/core
+      '@harness/command-judge':
+        specifier: workspace:*
+        version: link:../command/judge
       '@harness/context':
         specifier: workspace:*
         version: link:../context
+      '@harness/conversation':
+        specifier: workspace:*
+        version: link:../conversation
       '@harness/document':
         specifier: workspace:*
         version: link:../document
+      '@harness/evidence':
+        specifier: workspace:*
+        version: link:../evidence
       '@harness/execution':
         specifier: workspace:*
         version: link:../execution
@@ -275,9 +284,21 @@ importers:
       '@harness/session-core':
         specifier: workspace:*
         version: link:../session/core
+      '@harness/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@harness/subagent-bear':
+        specifier: workspace:*
+        version: link:../subagent/bear
+      '@harness/subagent-bull':
+        specifier: workspace:*
+        version: link:../subagent/bull
       '@harness/subagent-core':
         specifier: workspace:*
         version: link:../subagent/core
+      '@harness/subagent-judge':
+        specifier: workspace:*
+        version: link:../subagent/judge
       '@harness/tool-runtime':
         specifier: workspace:*
         version: link:../tool-runtime

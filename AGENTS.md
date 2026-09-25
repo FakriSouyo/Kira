@@ -20,8 +20,9 @@ roadmap or historical design document.
 apps/cli remains more than a thin host adapter. It owns command dispatch,
 Session switching and new-Session creation/configuration for `/new`, plus
 `/resume` and `/continue` argument validation and target selection,
-control-command input projection, Judge workflow/checkpoint integration,
-provider composition, CLI event projection and streaming presentation, and
+control-command input projection, Judge Execution lifecycle and WorkflowRunner
+composition, checkpoint/resume/release and trace wiring, provider composition,
+CLI event projection and streaming presentation, and
 ConversationController. It also owns journal
 correlation/causation when audit events are appended.
 packages/engine (@harness/engine) owns financial, Attachment, and Document
@@ -31,6 +32,9 @@ publication/reconciliation orchestration, and the host-neutral
 Workspace/Document application workflows for `/files`, `/doc-index`, and
 `/doc-search`, plus host-neutral Session restart and attached-Turn lifecycle
 orchestration through `ResearchSessionStore` and `WorkingContextPublisher`.
+The Judge node application runtime coordinates the existing CapabilityGateway,
+specialist runtimes, and supplied Evidence, FinancialSnapshot, Conversation,
+Claim, Counterpoint, and Judgment stores.
 `runSessionTurn` owns canonical fresh-Turn lifecycle orchestration for ordinary
 commands, natural language, local input, and the old-Session Turn for `/new`.
 The conversation workflow prepares context, invokes
@@ -42,10 +46,11 @@ ConversationController remains the production journal correlation path. CLI
 still owns fresh-input parsing and presentation, `/new` Session creation,
 configuration/provider/model rebinding and switching, `/resume` and `/continue`
 argument validation and target selection,
-control-command input projection, transcript/journal projection, Judge command
-and checkpoint integration, provider composition, CLI event projection,
-streaming presentation, and local-path Attachment import. The Judge resume
-workflow owns compatibility validation and same-Execution acquisition/resume.
+control-command input projection, transcript/journal projection, Judge
+Execution lifecycle and WorkflowRunner composition, checkpoint/resume/release,
+trace composition, provider composition, CLI event projection, streaming
+presentation, and local-path Attachment import. The Judge resume workflow owns
+compatibility validation and same-Execution acquisition/resume.
 Engine coordinates the host-neutral attached-Turn lifecycle after CLI selects
 the existing Session, Turn, and Execution. Engine does not own
 ConversationController, AgentEvent presentation, host filesystem access, or

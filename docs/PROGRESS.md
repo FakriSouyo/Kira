@@ -16,10 +16,12 @@ Last updated: 2026-09-25
 - UA8 Host-neutral Session Restart Lifecycle Reconciliation Extraction is complete on master.
 - UA9 Host-neutral Fresh-Turn Lifecycle Orchestration Extraction is complete on master.
 - UA10 Host-neutral Attached-Turn Lifecycle Orchestration Extraction is complete on master.
-- UA11 Special `/new` Turn Lifecycle Convergence is the selected current slice.
-- UA12 and later slices remain unselected until a fresh source audit.
+- UA11 Special `/new` Turn Lifecycle Convergence is complete on master.
+- UA12 Host-neutral Judge Node Runtime Extraction is the selected current slice.
+- UA13 and later slices remain unselected until a fresh source audit.
 - Engine owns canonical fresh-Turn lifecycle orchestration for ordinary commands, natural-language conversation, local input, and the old-Session `/new` Turn through `runSessionTurn`, plus attached-Turn lifecycle orchestration after the host selects an existing target. The runner uses `ResearchSessionStore`; its normal success path uses `WorkingContextPublisher`, while `/new` explicitly opts out of success publication and its publication-only artifact reload.
-- CLI still owns `/new` Session creation, configuration/provider/model rebinding, ConversationController switching, journal reconciliation and prepared-context commit, `/resume` and `/continue` argument validation and target selection, journal/transcript and AgentEvent projection, Judge orchestration/checkpointing, provider composition, streaming presentation, and reload/suspend behavior. Judge owns compatibility validation and same-Execution acquisition/resume.
+- Engine owns the host-neutral Judge node runtime and coordinates supplied CapabilityGateway, specialist, and domain store contracts.
+- CLI still owns `/new` Session creation, configuration/provider/model rebinding, ConversationController switching, journal reconciliation and prepared-context commit, `/resume` and `/continue` argument validation and target selection, Judge Execution lifecycle and WorkflowRunner composition, checkpoint/resume/release, trace composition, journal/transcript and AgentEvent projection, provider composition, streaming presentation, and reload/suspend behavior. Judge owns compatibility validation and same-Execution acquisition/resume.
 - KB Internal Kira Identity Migration follows UA, then U Research Composition.
 
 The canonical dependency sequence and future design boundaries live in

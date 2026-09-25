@@ -11,8 +11,9 @@ apps/cli still owns significant application/runtime composition. It owns the CLI
 host, command dispatch and parsing, Session/repl lifecycle, `/new` Session
 creation, configuration/runtime rebinding and switching, `/resume` and
 `/continue` argument validation and target selection, local-path Attachment
-import, rendering, Judge workflow/nodes and checkpointing, provider composition,
-CLI event projection, streaming
+import, rendering, Judge Execution lifecycle, WorkflowRunner composition,
+checkpoint/resume/release and trace wiring, provider composition, CLI event
+projection, streaming
 presentation, and ConversationController. The CLI consumes the
 conversation response stream and presents its chunks; host-neutral response
 orchestration is in the engine. Fresh canonical Turn lifecycle orchestration
@@ -31,7 +32,8 @@ WorkflowTraceRecorder, Screen application workflow, conversation context
 preparation and host-neutral Conversation Response orchestration, WorkingContext
 publication/reconciliation orchestration, host-neutral Workspace/Document
 workflows for `/files`, `/doc-index`, and `/doc-search`, Session restart
-lifecycle reconciliation, and fresh-Turn lifecycle orchestration through the
+lifecycle reconciliation, the host-neutral Judge node application runtime,
+and fresh-Turn lifecycle orchestration through the
 existing `ResearchSessionStore` and `WorkingContextPublisher` contracts, plus
 attached-Turn lifecycle orchestration around an existing Turn and Execution.
 Conversation Response
@@ -45,8 +47,9 @@ and Document workflows use the supplied CapabilityGateway and DocumentStore.
 Persistence implementations and host filesystem access remain outside engine.
 Engine does not own `/new` Session creation, configuration/runtime rebinding
 and switching, `/resume` or `/continue` parsing and target selection,
-ConversationController, AgentEvent presentation, provider composition, or Judge
-workflow/checkpointing. Judge owns compatibility validation and same-Execution
+ConversationController, AgentEvent presentation, provider composition, Judge
+Execution lifecycle, WorkflowRunner composition, checkpoint/resume/release, or
+trace composition. Judge owns compatibility validation and same-Execution
 acquisition/resume.
 The publisher coordinates publication; WorkingContextStore owns durable
 WorkingContext persistence. The context coordinator coordinates existing
@@ -114,7 +117,7 @@ authorize. Tools execute. Domain packages own truth. Database persists.
 The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
-authority. UA12 and later boundaries remain unselected and
+authority. UA13 and later boundaries remain unselected and
 must be selected after a fresh source audit before each slice.
 
 ## Model runtime — Q1 / Q2
@@ -472,7 +475,7 @@ Document extraction, identity, chunking, and retrieval semantics, and the
 supplied DocumentStore remains persistence authority. Engine workflows do not
 load Turns, access the host filesystem, render CLI output, or duplicate
 Document/domain behavior. `/attach` remains CLI-local path/file-system
-ingestion. UA12 and later boundaries remain unselected and require a fresh
+ingestion. UA13 and later boundaries remain unselected and require a fresh
 source audit before selection.
 
 ## UA7 - Host-neutral Conversation Response Orchestration Extraction
@@ -565,8 +568,8 @@ handling, Judge execution/checkpointing, `/new` Session switching, and
 `/resume`/`/continue` target selection and input projection. ResearchSessionStore
 remains lifecycle persistence authority, WorkingContextPublisher remains publication
 policy authority, and no database migration is required. UA9 did not complete
-engine extraction; UA10 is complete on master, UA11 is the selected current
-slice, and UA12+ remain unselected until another fresh source audit.
+engine extraction; UA10 and UA11 are complete on master, UA12 is the selected
+current slice, and UA13+ remain unselected until another fresh source audit.
 
 ## UA10 - Host-neutral Attached-Turn Lifecycle Orchestration Extraction
 
@@ -608,7 +611,7 @@ The runner does not create or acquire lifecycle rows, mutate `resumeGeneration`,
 or select the target. UA10 left the `/new` Turn lifecycle outside its scope;
 UA11 converges that Turn through `runSessionTurn`. UA9 lifecycle orchestration,
 UA8 restart reconciliation, Judge workflow/checkpointing, and journal mutation
-retain their separate responsibilities. No schema migration is required. UA12
+retain their separate responsibilities. No schema migration is required. UA13
 and later remain unselected pending a fresh source audit.
 
 ## UA11 - Special `/new` Turn Lifecycle Convergence
@@ -630,6 +633,30 @@ Session creation or switching occur after the old Turn is terminal and do not
 reclassify or settle it again. Judge workflow/checkpointing, provider
 composition, persistence, and journal authority are unchanged. No schema
 migration is required.
+
+## UA12 - Host-neutral Judge Node Runtime Extraction
+
+UA12 moves the substantive Judge node application runtime from
+`apps/cli/src/workflows/judgeNodes.ts` into `packages/engine` as
+`createJudgeNodeExecutors`. The engine coordinates the existing
+CapabilityGateway, financial verification and Evidence Policy, Evidence and
+FinancialSnapshot stores, Bull/Bear/Judge specialists, Claim and Counterpoint
+Policies and stores, conversation and judgment stores, and deterministic
+evidence and verdict gates. It receives narrow host-supplied contracts and
+does not depend on `HarnessContext`, `FinharnessDatabase`, or CLI modules.
+
+The runtime emits a narrow `JudgeNodeEvent`, forwards raw ToolRuntime events
+through a supplied callback, and retains supplied progress, checkpoint, trace,
+and optional lifecycle metadata boundaries. The CLI adapts ToolRuntime events
+to its existing `tool.start` / `tool.complete` presentation events. The CLI
+retains Judge Execution creation/settlement, direct legacy-run support,
+ExecutionProfile creation, resume validation and same-Execution acquisition,
+WorkflowRunner and trace-recorder composition, checkpoint persistence,
+release planning/publication, workflow/session/verdict AgentEvent projection,
+and artifact assembly. The graph, workflow version, capability plan,
+checkpoint format, resume compatibility, release contract, artifact kinds,
+provider order, and database schema remain unchanged. UA12 does not complete
+engine extraction; UA13 and later remain unselected until a fresh source audit.
 
 ## Core boundaries and invariants
 
@@ -898,8 +925,9 @@ profile gates, and composition-owned adapters. The runner:
 - emits workflow lifecycle events for projection and trace persistence.
 
 The production `/judge` definition has 15 stable nodes. Financial retrieval,
-Evidence policy, model calls, and persistence adapters remain outside the
-generic runner and are supplied by the command composition layer.
+Evidence policy, model calls, and persistence are coordinated by the engine
+Judge node runtime through supplied contracts; the CLI supplies those contracts
+and composes the node runtime with `WorkflowRunner`.
 
 ## Durable resumability and Judge resume — PR O / PR P
 

@@ -8,7 +8,7 @@ import { createJudgeWorkflow, JUDGE_NODE_IDS } from '@harness/command-judge';
 import { buildContext } from '../src/context';
 import { loadConfig } from '../src/config';
 import { judgeWorkflow } from '../src/workflows/judgeWorkflow';
-import { createJudgeNodeExecutors } from '../src/workflows/judgeNodes';
+import { createJudgeNodeExecutors } from '@harness/engine';
 import type { AgentEvent } from '../src/repl/events';
 
 type StepEvent = Extract<AgentEvent, { type: 'workflow.step' }>;
@@ -499,7 +499,21 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
   it('binds adapters that read only the inputs their graph declares', async () => {
     const context = ctx();
     const executors = createJudgeNodeExecutors({
-      ctx: context, ticker: 'BBCA', runId: 'run_probe',
+      deps: {
+        capabilityGateway: context.capabilityGateway,
+        bull: context.bull,
+        bear: context.bear,
+        judge: context.judge,
+        validator: context.validator,
+        researchers: context.researchers,
+        evidence: context.db.evidence,
+        financialSnapshots: context.db.financialSnapshots,
+        conversation: context.db.conversation,
+        claims: context.db.claims,
+        counterpoints: context.db.counterpoints,
+        judgments: context.db.judgments,
+      },
+      ticker: 'BBCA', runId: 'run_probe',
       events: () => {}, progress: () => {}, decision: {}, reasoning: false, conditional: false,
     });
     const violations: string[] = [];

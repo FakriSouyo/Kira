@@ -13,7 +13,7 @@ import { createExecutionProfile, createWorkflowNodeOutput } from '@harness/sessi
 import { buildContext } from '../src/context';
 import { loadConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
-import { createJudgeNodeExecutors } from '../src/workflows/judgeNodes';
+import { createJudgeNodeExecutors } from '@harness/engine';
 import { decodeJudgeCheckpoint, JudgeCheckpointWriter } from '../src/workflows/judgeCheckpoint';
 import { resumeJudgeRun } from '../src/workflows/judgeWorkflow';
 
@@ -91,7 +91,20 @@ describe('PR P same-Execution Judge resume', () => {
     const prefix = { ...definition, nodes: definition.nodes.slice(0, 7) };
     const writer = new JudgeCheckpointWriter({ db, execution, profile, definition });
     const executors = createJudgeNodeExecutors({
-      ctx: context,
+      deps: {
+        capabilityGateway: context.capabilityGateway,
+        bull: context.bull,
+        bear: context.bear,
+        judge: context.judge,
+        validator: context.validator,
+        researchers: config.researchers,
+        evidence: db.evidence,
+        financialSnapshots: db.financialSnapshots,
+        conversation: db.conversation,
+        claims: db.claims,
+        counterpoints: db.counterpoints,
+        judgments: db.judgments,
+      },
       ticker: 'BBCA',
       runId: execution.id,
       events: () => {},
@@ -99,7 +112,6 @@ describe('PR P same-Execution Judge resume', () => {
       decision,
       reasoning: false,
       conditional: false,
-      researchers: config.researchers,
       executionStartedAt: execution.createdAt,
       lifecycle: { sessionId: session.id, turnId: turn.id },
     });
