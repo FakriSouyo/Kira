@@ -123,6 +123,7 @@ describe('runSessionTurn', () => {
 
     await run(dependencies);
 
+    expect(dependencies.sessions.getSessionArtifacts).toHaveBeenCalledTimes(1);
     expect(dependencies.publisher.publishAfterSettledTurn).toHaveBeenCalledTimes(1);
     expect(dependencies.publisher.publishAfterSettledTurn).toHaveBeenCalledWith({
       sessionId: runningTurn.sessionId,
@@ -142,6 +143,10 @@ describe('runSessionTurn', () => {
       order.push(`settleTurn:${status}`);
       return { ...runningTurn, status, completedAt: 'settled' };
     });
+    vi.mocked(dependencies.sessions.getSessionArtifacts).mockImplementation(async () => {
+      order.push('getSessionArtifacts');
+      return dependencies.artifacts;
+    });
     vi.mocked(dependencies.publisher.publishAfterSettledTurn).mockImplementation(async () => {
       order.push('publishAfterSettledTurn');
       return { status: 'skipped', version: null };
@@ -154,8 +159,43 @@ describe('runSessionTurn', () => {
     });
 
     expect(order).toEqual([
-      'createTurn', 'onTurnStarted', 'action', 'settleTurn:completed',
+      'createTurn', 'onTurnStarted', 'action', 'settleTurn:completed', 'getSessionArtifacts',
       'publishAfterSettledTurn', 'onTurnSettled',
+    ]);
+  });
+
+  it('skips success artifact reload and publication when explicitly disabled', async () => {
+    const order: string[] = [];
+    const dependencies = lifecycleDependencies();
+    vi.mocked(dependencies.sessions.createTurn).mockImplementation(async params => {
+      order.push('createTurn');
+      return { ...runningTurn, ...params };
+    });
+    vi.mocked(dependencies.sessions.settleTurn).mockImplementation(async (_id, status) => {
+      order.push(`settleTurn:${status}`);
+      return { ...runningTurn, status, completedAt: 'settled' };
+    });
+    const onTurnStarted = vi.fn(() => { order.push('onTurnStarted'); });
+    const action = vi.fn(async () => { order.push('action'); return 'result'; });
+    const onTurnSettled = vi.fn(() => { order.push('onTurnSettled'); });
+
+    await expect(run(dependencies, {
+      publishAfterSuccess: false,
+      onTurnStarted,
+      action,
+      onTurnSettled,
+    })).resolves.toBe('result');
+
+    expect(dependencies.sessions.createTurn).toHaveBeenCalledTimes(1);
+    expect(onTurnStarted).toHaveBeenCalledTimes(1);
+    expect(action).toHaveBeenCalledTimes(1);
+    expect(dependencies.sessions.settleTurn).toHaveBeenCalledTimes(1);
+    expect(dependencies.sessions.settleTurn).toHaveBeenCalledWith(runningTurn.id, 'completed');
+    expect(dependencies.sessions.getSessionArtifacts).not.toHaveBeenCalled();
+    expect(dependencies.publisher.publishAfterSettledTurn).not.toHaveBeenCalled();
+    expect(onTurnSettled).toHaveBeenCalledTimes(1);
+    expect(order).toEqual([
+      'createTurn', 'onTurnStarted', 'action', 'settleTurn:completed', 'onTurnSettled',
     ]);
   });
 
@@ -173,6 +213,7 @@ describe('runSessionTurn', () => {
 
     await expect(run(dependencies, {
       failureStatus: 'failed',
+      publishAfterSuccess: false,
       action: async () => { throw new Error('local projection failed'); },
     })).rejects.toThrow('local projection failed');
 
@@ -185,9 +226,15 @@ describe('runSessionTurn', () => {
     const controller = new AbortController();
     controller.abort();
 
-    await expect(run(dependencies, { signal: controller.signal, action: async () => { throw new Error('cancel'); } })).rejects.toThrow('cancel');
+    await expect(run(dependencies, {
+      signal: controller.signal,
+      publishAfterSuccess: false,
+      action: async () => { throw new Error('cancel'); },
+    })).rejects.toThrow('cancel');
 
     expect(dependencies.sessions.settleTurn).toHaveBeenCalledWith(runningTurn.id, 'stopped');
+    expect(dependencies.sessions.getSessionArtifacts).toHaveBeenCalledTimes(1);
+    expect(dependencies.publisher.publishAfterSettledTurn).not.toHaveBeenCalled();
   });
 
   it('settles a host-classified abort error as stopped', async () => {
@@ -195,11 +242,14 @@ describe('runSessionTurn', () => {
     const error = { code: 'ABORTED' };
 
     await expect(run(dependencies, {
+      publishAfterSuccess: false,
       isAbortError: candidate => candidate === error,
       action: async () => { throw error; },
     })).rejects.toBe(error);
 
     expect(dependencies.sessions.settleTurn).toHaveBeenCalledWith(runningTurn.id, 'stopped');
+    expect(dependencies.sessions.getSessionArtifacts).toHaveBeenCalledTimes(1);
+    expect(dependencies.publisher.publishAfterSettledTurn).not.toHaveBeenCalled();
   });
 
   it('lets a completed child Execution win over abort and failure outcomes', async () => {
@@ -211,11 +261,13 @@ describe('runSessionTurn', () => {
 
     await expect(run(dependencies, {
       signal: controller.signal,
+      publishAfterSuccess: false,
       isAbortError: () => true,
       action: async () => { throw new Error('later action failed'); },
     })).rejects.toThrow('later action failed');
 
     expect(dependencies.sessions.settleTurn).toHaveBeenCalledWith(runningTurn.id, 'completed');
+    expect(dependencies.sessions.getSessionArtifacts).toHaveBeenCalledTimes(1);
     expect(dependencies.publisher.publishAfterSettledTurn).not.toHaveBeenCalled();
   });
 
@@ -230,9 +282,14 @@ describe('runSessionTurn', () => {
   it('settles from a failed child Execution when no completed or cancelled child exists', async () => {
     const dependencies = lifecycleDependencies([execution('failed')]);
 
-    await expect(run(dependencies, { action: async () => { throw new Error('action failed'); } })).rejects.toThrow('action failed');
+    await expect(run(dependencies, {
+      publishAfterSuccess: false,
+      action: async () => { throw new Error('action failed'); },
+    })).rejects.toThrow('action failed');
 
     expect(dependencies.sessions.settleTurn).toHaveBeenCalledWith(runningTurn.id, 'failed');
+    expect(dependencies.sessions.getSessionArtifacts).toHaveBeenCalledTimes(1);
+    expect(dependencies.publisher.publishAfterSettledTurn).not.toHaveBeenCalled();
   });
 
   it('does not publish a completed Turn that was settled through the failure path', async () => {
@@ -241,6 +298,19 @@ describe('runSessionTurn', () => {
     await expect(run(dependencies, { action: async () => { throw new Error('action failed after execution'); } }))
       .rejects.toThrow('action failed after execution');
 
+    expect(dependencies.sessions.settleTurn).toHaveBeenCalledWith(runningTurn.id, 'completed');
+    expect(dependencies.publisher.publishAfterSettledTurn).not.toHaveBeenCalled();
+  });
+
+  it('does not publish after success opt-out when failure resolution finds a completed child Execution', async () => {
+    const dependencies = lifecycleDependencies([execution('completed')]);
+
+    await expect(run(dependencies, {
+      publishAfterSuccess: false,
+      action: async () => { throw new Error('action failed after execution'); },
+    })).rejects.toThrow('action failed after execution');
+
+    expect(dependencies.sessions.getSessionArtifacts).toHaveBeenCalledTimes(1);
     expect(dependencies.sessions.settleTurn).toHaveBeenCalledWith(runningTurn.id, 'completed');
     expect(dependencies.publisher.publishAfterSettledTurn).not.toHaveBeenCalled();
   });
@@ -315,6 +385,19 @@ describe('runSessionTurn', () => {
 
     expect(dependencies.sessions.settleTurn).toHaveBeenCalledTimes(1);
     expect(dependencies.sessions.settleTurn).toHaveBeenCalledWith(runningTurn.id, 'completed');
+  });
+
+  it('does not settle a completed Turn twice when the post-settlement callback fails without publication', async () => {
+    const dependencies = lifecycleDependencies();
+    const error = new Error('host settlement projection failed');
+    const onTurnSettled = vi.fn(async () => { throw error; });
+
+    await expect(run(dependencies, { publishAfterSuccess: false, onTurnSettled })).rejects.toBe(error);
+
+    expect(dependencies.sessions.settleTurn).toHaveBeenCalledTimes(1);
+    expect(dependencies.sessions.settleTurn).toHaveBeenCalledWith(runningTurn.id, 'completed');
+    expect(dependencies.sessions.getSessionArtifacts).not.toHaveBeenCalled();
+    expect(dependencies.publisher.publishAfterSettledTurn).not.toHaveBeenCalled();
   });
 
   it('completes a natural-language Turn with zero Executions', async () => {

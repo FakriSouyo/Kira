@@ -18,26 +18,30 @@ roadmap or historical design document.
 ## Architecture boundary
 
 apps/cli remains more than a thin host adapter. It owns command dispatch,
-Session switching, `/new`, `/resume` and `/continue` argument validation and
-target selection, control-command input projection, Judge workflow/checkpoint
-integration, provider composition, CLI event projection and
-streaming presentation, and ConversationController. It also owns journal
+Session switching and new-Session creation/configuration for `/new`, plus
+`/resume` and `/continue` argument validation and target selection,
+control-command input projection, Judge workflow/checkpoint integration,
+provider composition, CLI event projection and streaming presentation, and
+ConversationController. It also owns journal
 correlation/causation when audit events are appended.
 packages/engine (@harness/engine) owns financial, Attachment, and Document
 capability composition, WorkflowTraceRecorder, Screen workflow, conversation
 context preparation and Conversation Response orchestration, WorkingContext
 publication/reconciliation orchestration, and the host-neutral
 Workspace/Document application workflows for `/files`, `/doc-index`, and
-`/doc-search`, plus host-neutral Session restart, fresh-Turn, and attached-Turn
-lifecycle orchestration through `ResearchSessionStore` and
-`WorkingContextPublisher`. The conversation workflow prepares context, invokes
+`/doc-search`, plus host-neutral Session restart and attached-Turn lifecycle
+orchestration through `ResearchSessionStore` and `WorkingContextPublisher`.
+`runSessionTurn` owns canonical fresh-Turn lifecycle orchestration for ordinary
+commands, natural language, local input, and the old-Session Turn for `/new`.
+The conversation workflow prepares context, invokes
 MainFinHarnessAgent, and persists successful ModelCall provenance through
 supplied contracts. These engine boundaries use host-supplied store contracts
 and narrow callbacks; their persistence implementations remain outside engine.
 WorkingContextStore owns durable WorkingContext persistence, and CLI's
 ConversationController remains the production journal correlation path. CLI
-still owns fresh-input parsing and presentation, special `/new` Session
-switching, `/resume` and `/continue` argument validation and target selection,
+still owns fresh-input parsing and presentation, `/new` Session creation,
+configuration/provider/model rebinding and switching, `/resume` and `/continue`
+argument validation and target selection,
 control-command input projection, transcript/journal projection, Judge command
 and checkpoint integration, provider composition, CLI event projection,
 streaming presentation, and local-path Attachment import. The Judge resume

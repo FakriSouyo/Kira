@@ -71,16 +71,6 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
     onCleanup: (fn) => cleanup.push(fn),
     getReasoningMode: () => reasoningMode,
   });
-  const terminalTurnState = async (turnId: string, error: unknown, signal?: AbortSignal) => {
-    const artifacts = await db.sessions.getSessionArtifacts(controller.snapshot.id);
-    const executions = artifacts.executions.filter(execution => execution.turnId === turnId);
-    if (executions.some(execution => execution.status === 'completed')) return 'completed' as const;
-    if (executions.some(execution => execution.status === 'cancelled')) return 'stopped' as const;
-    if (executions.some(execution => execution.status === 'failed')) return 'failed' as const;
-    return signal?.aborted || (error instanceof UserFriendlyError && error.code === 'ABORTED')
-      ? 'stopped' as const
-      : 'failed' as const;
-  };
   const commands = new Map<string, CommandHandler>();
   const publisher = createWorkingContextPublisher({
     workingContext: db.workingContext,
@@ -160,25 +150,25 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
         });
       }
       if (name === 'new') {
-        const turn = await db.sessions.createTurn({ sessionId: controller.snapshot.id, input, command: name });
-        let turnSettled = false;
-        try {
-          controller.beginTurn(turn.id);
-          await db.sessions.settleTurn(turn.id, 'completed');
-          turnSettled = true;
-          controller.settleTurn(turn.id, 'completed');
-          const target = await controller.createNewConversation();
-          await switchToPreparedSession(target.id, await prepareSession(target.id));
-          return;
-        } catch (error) {
-          if (!turnSettled) {
-            const status = await terminalTurnState(turn.id, error, execution?.signal);
-            await db.sessions.settleTurn(turn.id, status);
-            turnSettled = true;
-            controller.settleTurn(turn.id, status === 'completed' ? 'completed' : status === 'stopped' ? 'cancelled' : 'failed');
-          }
-          throw error;
-        }
+        await runSessionTurn({
+          sessions: db.sessions,
+          publisher,
+          sessionId: controller.snapshot.id,
+          input,
+          command: name,
+          signal: execution?.signal,
+          publishAfterSuccess: false,
+          isAbortError: error => error instanceof UserFriendlyError && error.code === 'ABORTED',
+          onTurnStarted: turn => controller.beginTurn(turn.id),
+          action: async () => undefined,
+          onTurnSettled: turn => controller.settleTurn(
+            turn.id,
+            turn.status === 'completed' ? 'completed' : turn.status === 'stopped' ? 'cancelled' : 'failed',
+          ),
+        });
+        const target = await controller.createNewConversation();
+        await switchToPreparedSession(target.id, await prepareSession(target.id));
+        return;
       }
 
       const result = await runSessionTurn({
