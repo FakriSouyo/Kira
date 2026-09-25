@@ -63,15 +63,16 @@ UA3 Host-neutral Screen Workflow Extraction
 UA4 Host-neutral Conversation Context Preparation Extraction
 UA5 Host-neutral WorkingContext Publication Extraction
 UA6 Host-neutral Workspace + Document Workflows Extraction
-
-CURRENT
-
-UA Kira Engine Extraction
 UA7 Host-neutral Conversation Response Orchestration Extraction
 UA8 Host-neutral Session Restart Lifecycle Reconciliation Extraction
 UA9 Host-neutral Fresh-Turn Lifecycle Orchestration Extraction
 
-UA10 and later slices remain unselected until another fresh source audit.
+CURRENT
+
+UA Kira Engine Extraction
+UA10 Host-neutral Attached-Turn Lifecycle Orchestration Extraction
+
+UA11 and later slices remain unselected until another fresh source audit.
 
 THEN
 
@@ -108,7 +109,7 @@ boundaries established by earlier milestones.
 
 ## UA slice selection
 
-**Selected slice:** UA9 — Host-neutral Fresh-Turn Lifecycle Orchestration Extraction.
+**Selected slice:** UA10 — Host-neutral Attached-Turn Lifecycle Orchestration Extraction.
 
 UA1 — Host-neutral Capability Runtime Extraction, UA2 — Host-neutral Workflow
 Trace Extraction, UA3 — Host-neutral Screen Workflow Extraction, and UA4 —
@@ -145,7 +146,7 @@ projection, Judge orchestration/checkpointing, provider composition, CLI event
 projection, streaming presentation, and the WorkingContext publication
 trigger. UA8 does not complete engine extraction.
 
-UA10 and later slices remain unselected until another fresh source audit. Before
+UA11 and later slices remain unselected until another fresh source audit. Before
 each later slice, perform a fresh source audit and review its exact scope. This
 roadmap does not lock future APIs, filenames, classes, schemas, package
 boundaries, or migration behavior.
@@ -155,10 +156,30 @@ and local-input Turns into `packages/engine`. The engine coordinates existing
 `ResearchSessionStore` lifecycle persistence and `WorkingContextPublisher`
 publication policy through narrow host callbacks. Live failure precedence is
 specific to an executing action and remains separate from UA8 restart
-reconciliation. `/new` Session switching, `/resume`/`/continue`,
-ConversationController, journal/transcript projection, AgentEvent presentation,
-Judge orchestration/checkpointing, and provider composition remain CLI-owned.
-UA10 and later are unselected pending a fresh source audit.
+reconciliation. `/new` Session switching, `/resume`/`/continue` target selection
+and input projection, ConversationController, journal/transcript projection,
+AgentEvent presentation, Judge orchestration/checkpointing, and provider
+composition remain CLI-owned. ResearchSessionStore remains lifecycle
+persistence authority, and WorkingContextPublisher remains publication policy
+authority. UA9 is complete on master; UA10 is the selected current slice and
+UA11+ remain unselected pending a fresh source audit.
+
+UA10 extracts the reusable lifecycle around an already-selected existing Turn
+and Execution into `packages/engine`. `runAttachedSessionTurn` reloads the
+canonical target Execution after the host action. On normal return, completed,
+cancelled, failed, and running executions map to completed, stopped, failed,
+and failed Turns; interrupted or missing executions release the attachment.
+Normal-success settlement publishes WorkingContext and then projects the
+settled Turn to the host. Failures after canonical settlement release the host
+attachment once before propagating. Action failures reconcile terminal state
+without normal-success publication; running, interrupted, or missing executions
+release the attachment and the action error is rethrown. Pre-settlement failures
+retain the source outer-catch reload/reconciliation behavior. UA10 does not
+select targets, create or acquire Turn/Execution rows, or move Judge
+compatibility validation and same-Execution acquisition out of the Judge
+resume workflow. `/new`, Judge workflow/checkpointing, ConversationController,
+and journal mutation remain outside the engine boundary. UA11 and later remain
+unselected pending a fresh source audit.
 
 ## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1-T5 on master
 
