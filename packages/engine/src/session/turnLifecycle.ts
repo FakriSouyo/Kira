@@ -15,6 +15,8 @@ export interface RunSessionTurnOptions<Result> {
   readonly input: string;
   readonly command: string;
   readonly signal?: AbortSignal;
+  /** Set false when a successful Turn must not reload artifacts or publish WorkingContext. */
+  readonly publishAfterSuccess?: boolean;
   /** Allows host-local input lifecycles to retain their fixed failure status. */
   readonly failureStatus?: SettledTurnStatus;
   /** Host-owned classification for errors that represent cancellation. */
@@ -34,6 +36,7 @@ export async function runSessionTurn<Result>({
   input,
   command,
   signal,
+  publishAfterSuccess,
   failureStatus,
   isAbortError,
   onTurnStarted,
@@ -49,8 +52,10 @@ export async function runSessionTurn<Result>({
     const result = await action(turn);
     const settledTurn = await sessions.settleTurn(turn.id, 'completed');
     turnSettled = true;
-    const artifacts = await sessions.getSessionArtifacts(sessionId);
-    await publisher.publishAfterSettledTurn({ sessionId, turnId: turn.id, artifacts });
+    if (publishAfterSuccess !== false) {
+      const artifacts = await sessions.getSessionArtifacts(sessionId);
+      await publisher.publishAfterSettledTurn({ sessionId, turnId: turn.id, artifacts });
+    }
     await onTurnSettled(settledTurn);
     return result;
   } catch (error) {

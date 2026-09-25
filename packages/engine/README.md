@@ -62,11 +62,15 @@ The engine coordinates the canonical lifecycle around fresh command,
 natural-language, and local-input Turns through `runSessionTurn`. It creates and
 settles the Turn through the supplied `ResearchSessionStore`, runs host-provided
 action work between narrow lifecycle callbacks, and invokes the existing
-`WorkingContextPublisher` after settlement only on normal success. Live failure
+`WorkingContextPublisher` after settlement only on normal success by default.
+Callers may explicitly opt out of both the success-path Session artifact reload
+and WorkingContext publication; the failure resolver still reads artifacts
+when needed. `/new` uses this opt-out for its old-Session Turn, then CLI creates
+and switches to the new Session after canonical completion. Live failure
 resolution uses its own child-Execution and abort precedence and does not reuse
 restart reconciliation. ConversationController, journal and transcript
 projection, AgentEvent presentation, command parsing, response streaming, and
-special `/new` lifecycle remains CLI-owned. CLI retains `/resume` and
+`/new` Session creation/switching remain CLI-owned. CLI retains `/resume` and
 `/continue` parsing and target selection.
 
 The engine also coordinates lifecycle around an already-selected and attached
@@ -106,13 +110,15 @@ Both workflows accept the current dependencies per call so provider, model,
 and Session rebinding remains owned by the CLI composition.
 
 The engine does not create providers or databases, or own Session switching,
-`/new`, `/resume` and `/continue` parsing/target selection, ConversationController,
-`AgentEvent` presentation, context policy, model runtime authority, or
-persistence implementation. The CLI owns fresh-input parsing and presentation,
-transcript/journal and event projection, streaming display, cancellation
-presentation, provider composition, Judge orchestration/checkpointing, and
-control-command input projection. Judge validates compatibility and acquires
-the same interrupted Execution. Natural-language conversation remains one Turn
+`/new` Session creation/configuration/switching, `/resume` and `/continue`
+parsing/target selection, ConversationController, `AgentEvent` presentation,
+context policy, model runtime authority, or persistence implementation. The CLI
+owns fresh-input parsing and presentation, `/new` Session creation, runtime
+rebinding and switching, transcript/journal and event projection, streaming
+display, cancellation presentation, provider composition, Judge
+orchestration/checkpointing, and control-command input projection. Judge
+validates compatibility and acquires the same interrupted Execution.
+Natural-language conversation remains one Turn
 with zero `ResearchExecution`. Restart reconciliation, fresh-Turn orchestration,
 and attached-Turn orchestration coordinate existing authorities without
 moving journal mutation into engine.

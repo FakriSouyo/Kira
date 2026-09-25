@@ -8,16 +8,18 @@ It is not a chronological implementation diary. The canonical roadmap is
 ## Current architecture facts
 
 apps/cli still owns significant application/runtime composition. It owns the CLI
-host, command dispatch and parsing, Session/repl lifecycle, special `/new`
-Session switching, `/resume` and `/continue` argument validation and target
-selection, local-path Attachment import, rendering, Judge workflow/nodes
-and checkpointing, provider composition, CLI event projection, streaming
+host, command dispatch and parsing, Session/repl lifecycle, `/new` Session
+creation, configuration/runtime rebinding and switching, `/resume` and
+`/continue` argument validation and target selection, local-path Attachment
+import, rendering, Judge workflow/nodes and checkpointing, provider composition,
+CLI event projection, streaming
 presentation, and ConversationController. The CLI consumes the
 conversation response stream and presents its chunks; host-neutral response
 orchestration is in the engine. Fresh canonical Turn lifecycle orchestration
-for ordinary commands, natural-language input, and local input is in the
-engine. The engine also coordinates attached-Turn lifecycle after CLI selects
-an existing Session, Turn, and Execution. The CLI remains more than a thin host
+for ordinary commands, natural-language input, local input, and the old-Session
+Turn for `/new` is in the engine through `runSessionTurn`. The engine also
+coordinates attached-Turn lifecycle after CLI selects an existing Session,
+Turn, and Execution. The CLI remains more than a thin host
 adapter, and ConversationController remains the production journal
 correlation/causation path for audit appends and host projection. Restart
 settlement of canonical Turns belongs to the host-neutral engine reconciliation
@@ -41,10 +43,11 @@ receives supplied WorkingContextStore, ArtifactStore, and JudgmentStore
 contracts, a journal read callback, and a host audit append callback. Workspace
 and Document workflows use the supplied CapabilityGateway and DocumentStore.
 Persistence implementations and host filesystem access remain outside engine.
-Engine does not own `/new` Session switching, `/resume` or `/continue` parsing
-and target selection, ConversationController, AgentEvent presentation, provider
-composition, or Judge workflow/checkpointing. Judge owns compatibility
-validation and same-Execution acquisition/resume.
+Engine does not own `/new` Session creation, configuration/runtime rebinding
+and switching, `/resume` or `/continue` parsing and target selection,
+ConversationController, AgentEvent presentation, provider composition, or Judge
+workflow/checkpointing. Judge owns compatibility validation and same-Execution
+acquisition/resume.
 The publisher coordinates publication; WorkingContextStore owns durable
 WorkingContext persistence. The context coordinator coordinates existing
 @harness/context policies and @harness/orchestrator focus/prompt semantics. The
@@ -111,7 +114,7 @@ authorize. Tools execute. Domain packages own truth. Database persists.
 The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
-authority. UA11 and later boundaries remain unselected and
+authority. UA12 and later boundaries remain unselected and
 must be selected after a fresh source audit before each slice.
 
 ## Model runtime — Q1 / Q2
@@ -469,7 +472,7 @@ Document extraction, identity, chunking, and retrieval semantics, and the
 supplied DocumentStore remains persistence authority. Engine workflows do not
 load Turns, access the host filesystem, render CLI output, or duplicate
 Document/domain behavior. `/attach` remains CLI-local path/file-system
-ingestion. UA11 and later boundaries remain unselected and require a fresh
+ingestion. UA12 and later boundaries remain unselected and require a fresh
 source audit before selection.
 
 ## UA7 - Host-neutral Conversation Response Orchestration Extraction
@@ -562,8 +565,8 @@ handling, Judge execution/checkpointing, `/new` Session switching, and
 `/resume`/`/continue` target selection and input projection. ResearchSessionStore
 remains lifecycle persistence authority, WorkingContextPublisher remains publication
 policy authority, and no database migration is required. UA9 did not complete
-engine extraction; UA10 is the selected current slice and UA11+ remain
-unselected until another fresh source audit.
+engine extraction; UA10 is complete on master, UA11 is the selected current
+slice, and UA12+ remain unselected until another fresh source audit.
 
 ## UA10 - Host-neutral Attached-Turn Lifecycle Orchestration Extraction
 
@@ -602,10 +605,31 @@ Judge compatibility validation/acquisition remains workflow-owned
 ```
 
 The runner does not create or acquire lifecycle rows, mutate `resumeGeneration`,
-or select the target. `/new`, UA9 `runSessionTurn`, UA8 restart reconciliation,
-Judge workflow/checkpointing, and journal mutation retain their separate
-responsibilities. No schema migration is required. UA11 and later remain
-unselected pending a fresh source audit.
+or select the target. UA10 left the `/new` Turn lifecycle outside its scope;
+UA11 converges that Turn through `runSessionTurn`. UA9 lifecycle orchestration,
+UA8 restart reconciliation, Judge workflow/checkpointing, and journal mutation
+retain their separate responsibilities. No schema migration is required. UA12
+and later remain unselected pending a fresh source audit.
+
+## UA11 - Special `/new` Turn Lifecycle Convergence
+
+UA11 moves only the old-Session Turn lifecycle for `/new` onto the existing
+`runSessionTurn` engine primitive. The CLI creates the new Session only after
+the old Turn has canonically settled and its ConversationController projection
+has completed. The engine caller explicitly disables success publication for
+this Turn, so success does not reload Session artifacts for publication or call
+`WorkingContextPublisher`. The runner's default success behavior remains
+unchanged for ordinary commands, natural-language conversation, and local
+input.
+
+The CLI retains new Session creation, configuration/provider/model rebinding,
+ConversationController switching, journal reconciliation, and prepared-context
+commit. The new Session continues to use the configured/default model selection
+rather than copying the prior Session's user selection. Failures during
+Session creation or switching occur after the old Turn is terminal and do not
+reclassify or settle it again. Judge workflow/checkpointing, provider
+composition, persistence, and journal authority are unchanged. No schema
+migration is required.
 
 ## Core boundaries and invariants
 
