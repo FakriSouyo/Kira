@@ -68,8 +68,9 @@ CURRENT
 
 UA Kira Engine Extraction
 UA7 Host-neutral Conversation Response Orchestration Extraction
+UA8 Host-neutral Session Restart Lifecycle Reconciliation Extraction
 
-UA8 and later slices remain provisional and unselected.
+UA9 and later slices remain unselected until another fresh source audit.
 
 THEN
 
@@ -106,7 +107,7 @@ boundaries established by earlier milestones.
 
 ## UA slice selection
 
-**Selected slice:** UA7 — Host-neutral Conversation Response Orchestration Extraction.
+**Selected slice:** UA8 — Host-neutral Session Restart Lifecycle Reconciliation Extraction.
 
 UA1 — Host-neutral Capability Runtime Extraction, UA2 — Host-neutral Workflow
 Trace Extraction, UA3 — Host-neutral Screen Workflow Extraction, and UA4 —
@@ -127,16 +128,26 @@ workflows retain CapabilityGateway authorization, delegate document extraction
 and retrieval to `@harness/document`, and persist indexed bundles through the
 supplied DocumentStore. UA6 does not complete engine extraction.
 
-UA7 moves only the host-neutral conversation response orchestration into
-packages/engine. CLI keeps conversation Turn lifecycle, ConversationController,
-transcript/event projection, streaming presentation, provider composition,
-Session lifecycle, and the WorkingContext publication trigger. Natural-language
-conversation continues to create no ResearchExecution.
+UA7 — Host-neutral Conversation Response Orchestration Extraction — is complete
+on master. It moved only host-neutral conversation response orchestration into
+packages/engine. Natural-language conversation continues to create no
+ResearchExecution.
 
-UA8 and later slices remain provisional and unselected. Before each later
-slice, perform a fresh source audit and review its exact scope. This roadmap
-does not lock future APIs, filenames, classes, schemas, package boundaries, or
-migration behavior.
+UA8 moves only the existing canonical Session/Turn/Execution restart lifecycle
+reconciliation from `ConversationController.restore()` into packages/engine.
+The engine coordinates through `ResearchSessionStore`; durable persistence
+remains outside engine, while ConversationController retains journal
+correlation/causation and conversation projection repair. After UA8, CLI still
+owns general Turn execution lifecycle, Session switching, `/resume` and
+`/continue` control orchestration, ConversationController, journal/transcript
+projection, Judge orchestration/checkpointing, provider composition, CLI event
+projection, streaming presentation, and the WorkingContext publication
+trigger. UA8 does not complete engine extraction.
+
+UA9 and later slices remain unselected until another fresh source audit. Before
+each later slice, perform a fresh source audit and review its exact scope. This
+roadmap does not lock future APIs, filenames, classes, schemas, package
+boundaries, or migration behavior.
 
 ## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1-T5 on master
 
