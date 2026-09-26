@@ -72,9 +72,9 @@ UA11 Special `/new` Turn Lifecycle Convergence
 CURRENT
 
 UA Kira Engine Extraction
-UA13 Host-neutral Judge Checkpoint + Resume Core Extraction
+UA14 Host-neutral Judge Resume Projection Repair Extraction
 
-UA14 and later slices remain unselected until another fresh source audit.
+UA15 and later slices remain unselected until another fresh source audit.
 
 THEN
 
@@ -111,7 +111,7 @@ boundaries established by earlier milestones.
 
 ## UA slice selection
 
-**Selected slice:** UA13 — Host-neutral Judge Checkpoint + Resume Core Extraction.
+**Selected slice:** UA14 — Host-neutral Judge Resume Projection Repair Extraction.
 
 UA1 — Host-neutral Capability Runtime Extraction, UA2 — Host-neutral Workflow
 Trace Extraction, UA3 — Host-neutral Screen Workflow Extraction, and UA4 —
@@ -148,7 +148,7 @@ projection, Judge orchestration/checkpointing, provider composition, CLI event
 projection, streaming presentation, and the WorkingContext publication
 trigger. UA8 does not complete engine extraction.
 
-UA14 and later slices remain unselected until another fresh source audit. Before
+UA15 and later slices remain unselected until another fresh source audit. Before
 each later slice, perform a fresh source audit and review its exact scope. This
 roadmap does not lock future APIs, filenames, classes, schemas, package
 boundaries, or migration behavior.
@@ -163,8 +163,8 @@ and input projection, ConversationController, journal/transcript projection,
 AgentEvent presentation, Judge orchestration/checkpointing, and provider
 composition remain CLI-owned. ResearchSessionStore remains lifecycle
 persistence authority, and WorkingContextPublisher remains publication policy
-authority. UA9-UA12 are complete on master; UA13 is the selected/current
-implementation state pending source review, and UA14+ remain unselected pending
+authority. UA9-UA13 are complete on master; UA14 is the selected/current
+implementation state pending source review, and UA15+ remain unselected pending
 a fresh source audit.
 
 UA10 extracts the reusable lifecycle around an already-selected existing Turn
@@ -183,7 +183,7 @@ compatibility validation and same-Execution acquisition out of the Judge
 resume workflow; UA13 later moved checkpoint compatibility planning into engine
 while keeping acquisition in CLI. `/new` Turn lifecycle, Judge workflow/checkpointing,
 ConversationController, and journal mutation remain outside the engine boundary.
-UA14 and later remain unselected pending a fresh source audit.
+UA15 and later remain unselected pending a fresh source audit.
 
 UA11 converges only the old-Session `/new` Turn onto `runSessionTurn`. The
 caller explicitly opts out of success-path WorkingContext publication and its
@@ -192,9 +192,9 @@ CLI creates the new Session, prepares configured/default runtime context,
 switches the ConversationController, reconciles the journal, and commits the
 prepared context. The prior Session's user-selected model is not copied. Judge,
 provider composition, persistence, and journal authority remain unchanged; no
-schema migration is required. UA11 is complete on master; UA12 is complete on
-master; UA13 is the selected/current completed implementation state pending
-source review, and UA14+ remain unselected pending a fresh source audit.
+schema migration is required. UA11, UA12, and UA13 are complete on master;
+UA14 is the selected/current implementation state pending source review, and
+UA15+ remain unselected pending a fresh source audit.
 
 ## UA12 — Host-neutral Judge Node Runtime Extraction
 
@@ -234,10 +234,35 @@ repair, release planning/publication, startup release repair, and AgentEvent
 projection. It calls engine planning before acquiring the interrupted
 Execution. UA13 does not move the Judge workflow shell or alter checkpoint
 payloads, workflow graph/version, capability semantics, release contract,
-artifact kinds, database schema, or resumeGeneration ownership. UA12 is
-complete on master; UA13 is the selected/current completed implementation state
-in this source-review worktree, pending the source-review gate. UA14+ remain
+artifact kinds, database schema, or resumeGeneration ownership. UA12 and UA13
+are complete on master; UA14 is the selected/current implementation state in
+this source-review worktree, pending the source-review gate. UA15+ remain
 unselected until a fresh source audit.
+
+## UA14 — Host-neutral Judge Resume Projection Repair Extraction
+
+UA14 moves `checkpointMessage` and `repairJudgeProjections` from the CLI Judge
+checkpoint module into `packages/engine/src/judge/projectionRepair.ts`. Engine
+replays already-validated Judge checkpoint outputs into existing WorkflowStep,
+Conversation, Claim, Counterpoint, Judgment, and ModelCall store authorities.
+It receives only narrow supplied operations: trace step get/save and ModelCall
+list/record, Conversation `addMessage`, Claim `save` and legacy checkpoint
+repair, Counterpoint `save`, and Judgment `save`. ModelCall step lookup remains
+a projection-specific trace contract; `ResearchSessionStore` is unchanged.
+
+Projection repair reuses `auditFromPayload` and
+`parseCheckpointCounterpoints` from UA13. Current and historical Claim/Bear
+behavior, deterministic step and ModelCall identities, Conversation message
+IDs/order, ModelCall attempt one, null replay cost/currency, and idempotency are
+preserved. The CLI adapts its concrete stores into those narrow contracts and
+keeps Execution lifecycle, same-Execution acquisition, WorkflowRunner and trace
+composition, release planning/publication, startup release repair, and
+AgentEvent projection. Resume ordering remains plan, acquire, repair, then
+WorkflowRunner. No checkpoint format, workflow graph/version, release contract,
+schema, migration, or provider behavior changes. UA12 and UA13 are complete on
+master; UA14 is the selected/current implementation state in this
+source-review worktree, pending approval. UA15+ remain unselected pending a
+fresh source audit.
 
 ## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1-T5 on master
 

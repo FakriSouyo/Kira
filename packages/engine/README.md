@@ -118,7 +118,7 @@ owns fresh-input parsing and presentation, `/new` Session creation, runtime
 rebinding and switching, transcript/journal and event projection, streaming
 display, cancellation presentation, provider composition, Judge Execution
 lifecycle and WorkflowRunner composition, same-Execution acquisition,
-projection repair, release planning/publication and startup repair, trace
+release planning/publication and startup repair, trace
 composition, and control-command input projection. The engine plans and
 validates the restore frontier; CLI acquires the same interrupted Execution
 only after that plan succeeds.
@@ -165,8 +165,30 @@ Execution and ticker scope, and checks ContextSnapshot Session/Turn ownership.
 It does not import `FinharnessDatabase`, `@harness/database`, or CLI modules.
 
 The CLI still owns Execution lifecycle and same-Execution acquisition, resume
-target selection, WorkflowRunner and trace composition, projection repair,
-release publication and startup release repair, and AgentEvent projection.
-Resume compatibility planning completes before acquisition. The same Execution
-is resumed, and `resumeGeneration` remains owned by the existing execution
-store/acquisition flow.
+target selection, WorkflowRunner and trace composition, release publication
+and startup release repair, and AgentEvent projection. Resume compatibility
+planning completes before acquisition. The same Execution is resumed, and
+`resumeGeneration` remains owned by the existing execution store/acquisition
+flow.
+
+## Judge Resume Projection Repair
+
+`repairJudgeProjections` and its `JudgeProjectionRepairStores` contract live in
+`src/judge/projectionRepair.ts`. The engine replays validated checkpoint outputs
+into existing WorkflowStep, Conversation, Claim, Counterpoint, Judgment, and
+ModelCall authorities. It receives only step get/save and ModelCall list/record
+operations, Conversation `addMessage`, Claim `save` and legacy checkpoint
+repair, Counterpoint `save`, and Judgment `save`. The projection-specific
+`listModelCallsForStep` operation is supplied through the narrow trace contract;
+the canonical `ResearchSessionStore` interface is unchanged.
+
+The repair path reuses `auditFromPayload` and `parseCheckpointCounterpoints`
+from the checkpoint/resume core. It preserves current and historical Claim/Bear
+behavior, message identities/order, deterministic step and ModelCall IDs,
+attempt one, null replay cost/currency, and idempotency. It replays durable
+checkpoint state and has no model, provider, tool-runtime, CLI, or concrete
+database dependency. CLI wraps its stores into the narrow contract and retains
+resume-target validation, same-Execution acquisition, `WorkflowRunner` and trace
+composition, release planning/publication, startup release repair, and
+`AgentEvent` projection. Resume remains ordered: plan, acquire, repair, then
+`WorkflowRunner`.

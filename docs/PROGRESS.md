@@ -18,12 +18,14 @@ Last updated: 2026-09-26
 - UA10 Host-neutral Attached-Turn Lifecycle Orchestration Extraction is complete on master.
 - UA11 Special `/new` Turn Lifecycle Convergence is complete on master.
 - UA12 Host-neutral Judge Node Runtime Extraction is complete on master.
-- UA13 Host-neutral Judge Checkpoint + Resume Core Extraction is the selected and implemented current state in this source-review worktree; it is not yet on master.
-- UA14 and later slices remain unselected until a fresh source audit.
+- UA13 Host-neutral Judge Checkpoint + Resume Core Extraction is complete on master.
+- UA14 Host-neutral Judge Resume Projection Repair Extraction is the selected and implemented current state in this source-review worktree; it is not yet on master.
+- UA15 and later slices remain unselected until a fresh source audit.
 - Engine owns canonical fresh-Turn lifecycle orchestration for ordinary commands, natural-language conversation, local input, and the old-Session `/new` Turn through `runSessionTurn`, plus attached-Turn lifecycle orchestration after the host selects an existing target. The runner uses `ResearchSessionStore`; its normal success path uses `WorkingContextPublisher`, while `/new` explicitly opts out of success publication and its publication-only artifact reload.
 - Engine owns the host-neutral Judge node runtime and coordinates supplied CapabilityGateway, specialist, and domain store contracts.
 - Engine owns Judge checkpoint encoding/decoding, dependency fingerprints, resume compatibility planning, and restore-frontier derivation through supplied WorkflowNodeOutput, FinancialSnapshot, Evidence, and ContextSnapshot stores.
-- CLI still owns `/new` Session creation, configuration/provider/model rebinding, ConversationController switching, journal reconciliation and prepared-context commit, `/resume` and `/continue` argument validation and target selection, Judge Execution lifecycle, same-Execution acquisition, WorkflowRunner and trace composition, projection repair, release planning/publication and startup release repair, journal/transcript and AgentEvent projection, provider composition, streaming presentation, and reload/suspend behavior. Resume planning completes before acquisition.
+- Engine owns durable Judge resume projection repair for WorkflowStep, Conversation, Claim, Counterpoint, Judgment, and ModelCall projections through narrow host-supplied stores.
+- CLI still owns `/new` Session creation, configuration/provider/model rebinding, ConversationController switching, journal reconciliation and prepared-context commit, `/resume` and `/continue` argument validation and target selection, Judge Execution lifecycle, same-Execution acquisition, WorkflowRunner and trace composition, release planning/publication and startup release repair, journal/transcript and AgentEvent projection, provider composition, streaming presentation, and reload/suspend behavior. Resume planning completes before acquisition; projection repair follows same-Execution acquisition and precedes WorkflowRunner.
 - KB Internal Kira Identity Migration follows UA, then U Research Composition.
 
 The canonical dependency sequence and future design boundaries live in
