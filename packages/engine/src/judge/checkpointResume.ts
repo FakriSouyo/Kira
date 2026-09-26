@@ -49,6 +49,11 @@ export interface JudgeCheckpointStores {
   contextSnapshots: Pick<ContextSnapshotStore, 'getById'>;
 }
 
+/** Read-only checkpoint inputs required when validating a completed Judge release. */
+export type JudgeCheckpointReadStores =
+  Pick<JudgeCheckpointStores, 'financialSnapshots' | 'evidence' | 'contextSnapshots'>
+  & { workflowNodeOutputs: Pick<JudgeCheckpointStores['workflowNodeOutputs'], 'listNodeOutputsForExecution'> };
+
 export interface JudgeCheckpointWriterOptions {
   stores: Pick<JudgeCheckpointStores, 'workflowNodeOutputs' | 'financialSnapshots'>;
   execution: ResearchExecution;
@@ -440,7 +445,7 @@ export interface JudgeCheckpointRuntimeIdentity {
 }
 
 export interface JudgeCheckpointPlanningOptions {
-  stores: JudgeCheckpointStores;
+  stores: JudgeCheckpointReadStores;
   execution: ResearchExecution;
   profile: ExecutionProfile;
   definition: WorkflowDefinition<JudgeCommandContext>;
@@ -534,7 +539,7 @@ export async function planJudgeCheckpoint(params: JudgeCheckpointPlanningOptions
 
 /** Validates durable Judge outputs and active capability authority before acquisition. */
 export async function planJudgeResume(params: {
-  stores: JudgeCheckpointStores;
+  stores: JudgeCheckpointReadStores;
   execution: ResearchExecution;
   profile: ExecutionProfile;
   definition: WorkflowDefinition<JudgeCommandContext>;

@@ -14,6 +14,8 @@ import {
   createJudgeNodeExecutors,
   JudgeCheckpointWriter,
   planJudgeResume,
+  prepareJudgeReleasePlan,
+  publishJudgeRelease,
   repairJudgeProjections,
   WorkflowTraceRecorder,
   type BearChallengeResponse,
@@ -23,6 +25,7 @@ import {
   type JudgeCheckpointStores,
   type JudgeProjectionRepairStores,
   type JudgeProgress,
+  type JudgeReleasePlan,
   type JudgeResumePlan,
   type JudgeTurn,
   type SynthesisTurn,
@@ -31,7 +34,7 @@ import {
 import type { SkillReference } from '@harness/subagent-core';
 import type { AgentEvent, UiWorkflowStepStatus } from '../repl/events';
 import type { HarnessContext } from '../context';
-import { ensureJudgeArtifacts, prepareJudgeReleasePlan, publishJudgeRelease, type JudgeReleasePlan } from './judgeCheckpoint';
+import { createJudgeReleaseStores, ensureJudgeArtifacts } from './judgeCheckpoint';
 import { projectFinancialToolEvent } from '../tools/financialToolEvents';
 
 /**
@@ -332,7 +335,7 @@ export async function judgeWorkflow(
 
     if (opts.lifecycle && profile && (!resumePlan || resumePlan.releaseKind === 'current')) {
       releasePlan = await prepareJudgeReleasePlan({
-        db: ctx.db,
+        stores: createJudgeReleaseStores(ctx.db),
         execution: run as unknown as import('@harness/session-core').ResearchExecution,
         profile,
       });
@@ -347,7 +350,7 @@ export async function judgeWorkflow(
     if (opts.lifecycle) {
       const saved = releasePlan
         ? (await publishJudgeRelease({
-          db: ctx.db,
+          stores: createJudgeReleaseStores(ctx.db),
           execution: completed as unknown as import('@harness/session-core').ResearchExecution,
           profile: profile!,
           plan: releasePlan,

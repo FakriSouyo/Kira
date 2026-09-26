@@ -118,7 +118,7 @@ owns fresh-input parsing and presentation, `/new` Session creation, runtime
 rebinding and switching, transcript/journal and event projection, streaming
 display, cancellation presentation, provider composition, Judge Execution
 lifecycle and WorkflowRunner composition, same-Execution acquisition,
-release planning/publication and startup repair, trace
+startup release reconciliation and historical repair, trace
 composition, and control-command input projection. The engine plans and
 validates the restore frontier; CLI acquires the same interrupted Execution
 only after that plan succeeds.
@@ -142,10 +142,13 @@ The runtime emits a narrow `JudgeNodeEvent`, keeps `JudgeProgress` as a supplied
 callback, forwards raw ToolRuntime events through `onToolEvent`, and receives
 checkpoint and trace callbacks from its host. The CLI adapts ToolRuntime events
 to its existing `tool.start` / `tool.complete` events and retains Judge
-Execution lifecycle, `WorkflowRunner` composition, release planning/publication,
-trace recorder composition, and workflow/session/verdict `AgentEvent`
-projection. The 15-node graph, workflow version, capability plan, checkpoint
-format, resume rules, and release contract remain unchanged.
+Execution lifecycle and `WorkflowRunner` composition. Current release
+preparation, parity validation, artifact construction, receipt construction,
+and publication are owned by the host-neutral release core described below.
+The CLI still supplies stores, settles the Execution between prepare and
+publish, composes traces, and projects workflow/session/verdict
+`AgentEvent` values. The 15-node graph, workflow version, capability plan,
+checkpoint format, resume rules, and release contract remain unchanged.
 
 ## Judge Checkpoint + Resume Core
 
@@ -153,23 +156,45 @@ format, resume rules, and release contract remain unchanged.
 `decodeJudgeCheckpoint`, and the shared `planJudgeCheckpoint` primitive live in
 `src/judge/checkpointResume.ts`. The module owns payload encoding and decoding,
 WorkflowNodeOutput coordination, compatibility checks, and sequential
-graph-order restore-frontier derivation. Release planning in the CLI reuses the
-same engine planning and decoding implementation rather than keeping a second
-checkpoint validator.
+graph-order restore-frontier derivation. Current release preparation reuses
+this engine planning and decoding implementation. CLI startup reconciliation
+and historical artifact reconstruction remain host orchestration.
 
-The engine receives only `save` and `listNodeOutputsForExecution` for
-WorkflowNodeOutput; `getById` for FinancialSnapshot and ContextSnapshot; and
-`getManyByIdsForRun` for Evidence. It re-verifies financial observations,
-validates snapshot ownership and fingerprints, restores Evidence within the
-Execution and ticker scope, and checks ContextSnapshot Session/Turn ownership.
-It does not import `FinharnessDatabase`, `@harness/database`, or CLI modules.
+The checkpoint writer receives WorkflowNodeOutput `save` and
+`listNodeOutputsForExecution`, plus FinancialSnapshot `getById`. Read-only
+checkpoint planning receives WorkflowNodeOutput
+`listNodeOutputsForExecution`, FinancialSnapshot and ContextSnapshot `getById`,
+and Evidence `getManyByIdsForRun`. The engine re-verifies financial
+observations, validates snapshot ownership and fingerprints, restores Evidence
+within the Execution and ticker scope, and checks ContextSnapshot Session/Turn
+ownership. It does not import `FinharnessDatabase`, `@harness/database`, or CLI
+modules.
 
 The CLI still owns Execution lifecycle and same-Execution acquisition, resume
-target selection, WorkflowRunner and trace composition, release publication
-and startup release repair, and AgentEvent projection. Resume compatibility
-planning completes before acquisition. The same Execution is resumed, and
-`resumeGeneration` remains owned by the existing execution store/acquisition
-flow.
+target selection, WorkflowRunner and trace composition, startup release
+reconciliation, historical repair, and AgentEvent projection. Resume
+compatibility planning completes before acquisition. The same Execution is
+resumed, and `resumeGeneration` remains owned by the existing execution
+store/acquisition flow.
+
+## Judge Current Release Core
+
+`prepareJudgeReleasePlan`, `publishJudgeRelease`, and the
+`JudgeReleaseStores` contract live in `src/judge/release.ts`. The engine
+validates the complete current checkpoint set; restores release values; checks
+durable Claim and Counterpoint parity against their current policies; compares
+the stored Claim Graph with the graph rebuilt from those stores; constructs the
+BULL_CASE, BEAR_CASE, and VERDICT graph projections; and builds the immutable
+release receipt. The same exported artifact builder is used by CLI historical
+reconstruction so payload semantics remain canonical.
+
+`JudgeReleaseStores` contains only read-only checkpoint inputs, Claim and
+Counterpoint reads, Claim Graph reads, artifact writes, and receipt writes. The
+engine does not settle Executions or receive a concrete database object. The
+CLI owns Execution lifecycle and preserves this order for new current releases:
+prepare the release, settle the Execution as completed, then publish. CLI also
+owns startup release reconciliation and pre-T5 artifact repair; historical
+profiles continue without fabricated current release receipts.
 
 ## Judge Resume Projection Repair
 
@@ -189,6 +214,7 @@ attempt one, null replay cost/currency, and idempotency. It replays durable
 checkpoint state and has no model, provider, tool-runtime, CLI, or concrete
 database dependency. CLI wraps its stores into the narrow contract and retains
 resume-target validation, same-Execution acquisition, `WorkflowRunner` and trace
-composition, release planning/publication, startup release repair, and
-`AgentEvent` projection. Resume remains ordered: plan, acquire, repair, then
+composition, startup release reconciliation, historical artifact repair, and
+`AgentEvent` projection. Current release planning and publication live in the
+engine. Resume remains ordered: plan, acquire, repair, then
 `WorkflowRunner`.
