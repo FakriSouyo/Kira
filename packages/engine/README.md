@@ -118,7 +118,7 @@ owns fresh-input parsing and presentation, `/new` Session creation, runtime
 rebinding and switching, transcript/journal and event projection, streaming
 display, cancellation presentation, provider composition, Judge Execution
 lifecycle and WorkflowRunner composition, same-Execution acquisition,
-startup release reconciliation and historical repair, trace
+startup invocation timing, concrete Judge release store adaptation, trace
 composition, and control-command input projection. The engine plans and
 validates the restore frontier; CLI acquires the same interrupted Execution
 only after that plan succeeds.
@@ -157,8 +157,10 @@ checkpoint format, resume rules, and release contract remain unchanged.
 `src/judge/checkpointResume.ts`. The module owns payload encoding and decoding,
 WorkflowNodeOutput coordination, compatibility checks, and sequential
 graph-order restore-frontier derivation. Current release preparation reuses
-this engine planning and decoding implementation. CLI startup reconciliation
-and historical artifact reconstruction remain host orchestration.
+this engine planning and decoding implementation. At the UA13 boundary, CLI
+startup reconciliation and historical artifact reconstruction remained host
+orchestration; UA16 moves those Judge-specific semantics into engine while
+leaving startup invocation timing and concrete store adaptation in CLI.
 
 The checkpoint writer receives WorkflowNodeOutput `save` and
 `listNodeOutputsForExecution`, plus FinancialSnapshot `getById`. Read-only
@@ -171,8 +173,8 @@ ownership. It does not import `FinharnessDatabase`, `@harness/database`, or CLI
 modules.
 
 The CLI still owns Execution lifecycle and same-Execution acquisition, resume
-target selection, WorkflowRunner and trace composition, startup release
-reconciliation, historical repair, and AgentEvent projection. Resume
+target selection, WorkflowRunner and trace composition, startup invocation
+timing, concrete release store adaptation, and AgentEvent projection. Resume
 compatibility planning completes before acquisition. The same Execution is
 resumed, and `resumeGeneration` remains owned by the existing execution
 store/acquisition flow.
@@ -185,16 +187,45 @@ validates the complete current checkpoint set; restores release values; checks
 durable Claim and Counterpoint parity against their current policies; compares
 the stored Claim Graph with the graph rebuilt from those stores; constructs the
 BULL_CASE, BEAR_CASE, and VERDICT graph projections; and builds the immutable
-release receipt. The same exported artifact builder is used by CLI historical
-reconstruction so payload semantics remain canonical.
+release receipt. The same exported artifact builder is used by the engine's
+historical reconstruction so payload semantics remain canonical.
 
 `JudgeReleaseStores` contains only read-only checkpoint inputs, Claim and
 Counterpoint reads, Claim Graph reads, artifact writes, and receipt writes. The
 engine does not settle Executions or receive a concrete database object. The
 CLI owns Execution lifecycle and preserves this order for new current releases:
-prepare the release, settle the Execution as completed, then publish. CLI also
-owns startup release reconciliation and pre-T5 artifact repair; historical
-profiles continue without fabricated current release receipts.
+prepare the release, settle the Execution as completed, then publish. Completed
+release reconciliation and historical artifact reconstruction live in
+`src/judge/releaseReconciliation.ts`; they receive supplied stores and never
+re-run Judge. The CLI owns the concrete database-to-store adapter and decides
+when startup calls reconciliation. Historical profiles continue without
+fabricated current release receipts.
+
+## Judge Completed Release Reconciliation
+
+`reconcileCompletedJudgeReleases` scans supplied Session artifacts, selects
+completed Judge-v2 Executions with supported profiles, and reconciles durable
+release state without invoking `WorkflowRunner`, creating or acquiring an
+Execution, or calling providers/models. Current profiles reuse
+`prepareJudgeReleasePlan` and `publishJudgeRelease`, so checkpoint,
+Claim/Counterpoint, Claim Graph, artifact, and receipt integrity stays with the
+existing authorities. Historical profiles retain the no-op rule for three
+existing artifacts; otherwise the engine validates and decodes checkpoints and
+rebuilds the artifacts through `buildJudgeArtifactEnvelopes`, without
+publishing a current T5 receipt or fabricating modern Claim/Counterpoint
+metadata.
+
+`JudgeReleaseReconciliationStores` composes `JudgeReleaseStores` with Session
+artifact and ExecutionProfile reads plus Artifact and release-receipt lookups.
+It does not widen the UA15 current release contract.
+`reconstructHistoricalJudgeArtifacts` also has a smaller
+`JudgeHistoricalArtifactStores` contract for the legacy workflow publication
+fallback. Concrete store implementations remain outside engine.
+
+Startup remains CLI orchestration. It invokes Judge release reconciliation
+before reloading Session artifacts for WorkingContext publication, then
+continues journal reconciliation. The engine does not own general Session
+startup or invocation timing.
 
 ## Judge Resume Projection Repair
 
@@ -214,7 +245,7 @@ attempt one, null replay cost/currency, and idempotency. It replays durable
 checkpoint state and has no model, provider, tool-runtime, CLI, or concrete
 database dependency. CLI wraps its stores into the narrow contract and retains
 resume-target validation, same-Execution acquisition, `WorkflowRunner` and trace
-composition, startup release reconciliation, historical artifact repair, and
-`AgentEvent` projection. Current release planning and publication live in the
-engine. Resume remains ordered: plan, acquire, repair, then
-`WorkflowRunner`.
+composition, startup invocation timing, release store adaptation, and
+`AgentEvent` projection. Current release planning/publication and completed
+release reconciliation live in the engine. Resume remains ordered: plan,
+acquire, repair, then `WorkflowRunner`.

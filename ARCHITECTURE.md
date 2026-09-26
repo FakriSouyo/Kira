@@ -12,8 +12,8 @@ host, command dispatch and parsing, Session/repl lifecycle, `/new` Session
 creation, configuration/runtime rebinding and switching, `/resume` and
 `/continue` argument validation and target selection, local-path Attachment
 import, rendering, Judge Execution lifecycle, WorkflowRunner composition,
-same-Execution acquisition, the CLI-to-engine release store adapter, startup
-release reconciliation and historical artifact repair,
+same-Execution acquisition, Judge release/reconciliation database-to-store
+adapters, and startup invocation timing,
 trace wiring, provider composition, CLI event
 projection, streaming
 presentation, and ConversationController. The CLI consumes the
@@ -36,7 +36,9 @@ publication/reconciliation orchestration, host-neutral Workspace/Document
 workflows for `/files`, `/doc-index`, and `/doc-search`, Session restart
 lifecycle reconciliation, the host-neutral Judge node application runtime,
 Judge checkpoint/resume core, durable Judge resume projection repair, and the
-current Judge release core through narrow host-supplied store contracts,
+current Judge release core and completed Judge release reconciliation,
+including historical artifact reconstruction, through narrow host-supplied
+store contracts,
 and fresh-Turn lifecycle orchestration through the
 existing `ResearchSessionStore` and `WorkingContextPublisher` contracts, plus
 attached-Turn lifecycle orchestration around an existing Turn and Execution.
@@ -53,11 +55,13 @@ Engine does not own `/new` Session creation, configuration/runtime rebinding
 and switching, `/resume` or `/continue` parsing and target selection,
 ConversationController, AgentEvent presentation, provider composition, Judge
 Execution lifecycle, WorkflowRunner composition, same-Execution acquisition,
-startup release reconciliation, historical artifact repair, or trace
+general Session startup and reconciliation invocation timing, or trace
 composition. Engine owns host-neutral Judge checkpoint encoding and decoding,
 resume compatibility planning, restore-frontier derivation, durable resume
-projection repair, and current release planning/publication through supplied
-stores. The CLI acquires the same interrupted Execution only after engine
+projection repair, current release planning/publication, completed-release
+reconciliation, and historical artifact reconstruction through supplied
+stores. The CLI adapts concrete database stores and decides when startup invokes
+reconciliation. It acquires the same interrupted Execution only after engine
 planning succeeds and keeps prepare, settle, publish ordering for a new release.
 The publisher coordinates publication; WorkingContextStore owns durable
 WorkingContext persistence. The context coordinator coordinates existing
@@ -76,7 +80,7 @@ Judge plan.
       Response orchestration, WorkingContext publication/reconciliation,
       Workspace/Document workflows, Session restart reconciliation,
       Judge checkpoint/resume core, resume projection repair,
-      current Judge release core,
+      current Judge release core and completed release reconciliation,
       fresh-Turn and attached-Turn lifecycle
       orchestration
            | coordinates
@@ -128,8 +132,9 @@ authorize. Tools execute. Domain packages own truth. Database persists.
 The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
-authority. UA15 is the current implemented source-review slice. Later UA
-boundaries remain unselected and require a fresh source audit before selection.
+authority. UA15 is complete on master. UA16 is implemented in the current
+isolated source-review worktree; source review is pending and it has not merged.
+Later UA boundaries remain unselected pending another fresh source audit.
 
 ## Model runtime — Q1 / Q2
 
@@ -579,7 +584,7 @@ handling, Judge execution/checkpointing, `/new` Session switching, and
 `/resume`/`/continue` target selection and input projection. ResearchSessionStore
 remains lifecycle persistence authority, WorkingContextPublisher remains publication
 policy authority, and no database migration is required. UA9 did not complete
-engine extraction; UA10-UA14 are complete on master. UA15 is the current
+engine extraction; UA10-UA15 are complete on master. UA16 is the current
 implemented source-review slice; later UA boundaries remain unselected until
 another fresh source audit.
 
@@ -683,13 +688,14 @@ operations. It preserves financial observation re-verification,
 execution-scoped Evidence restoration, snapshot identity checks,
 capability/model/runtime compatibility, and historical/current Bear decoding.
 
-The CLI retains Execution lifecycle, resume target selection and
+At the UA13 boundary, the CLI retained Execution lifecycle, resume target selection and
 same-Execution acquisition, WorkflowRunner and trace composition, projection
-repair, release planning/publication, startup release repair, and AgentEvent
-projection. Engine planning completes before CLI acquisition. UA13 does not
+repair, release planning/publication, startup release reconciliation, and
+historical artifact reconstruction. Engine planning completes before CLI
+acquisition. UA13 did not
 move the Judge workflow shell, change checkpoint payloads, graph/version,
 capability plan, release contract, artifact kinds, persistence schema, or
-resumeGeneration ownership. UA12-UA14 are complete on master. UA15 is the
+resumeGeneration ownership. UA12-UA15 are complete on master. UA16 is the
 current implemented source-review slice; later UA boundaries remain unselected
 pending a fresh source audit.
 
@@ -733,18 +739,43 @@ graph projections, builds the `JudgeReleasePlan` and immutable release receipt,
 then publishes artifacts and the receipt through supplied stores. Artifact
 envelope construction is shared with CLI historical reconstruction.
 
-CLI retains the database-to-store adapter, Execution lifecycle,
-`WorkflowRunner` and trace composition, startup release reconciliation,
-historical artifact repair, and AgentEvent projection. Release ordering remains
+At the UA15 boundary, CLI retained the database-to-store adapter, Execution
+lifecycle, `WorkflowRunner` and trace composition, startup release
+reconciliation, historical artifact repair, and AgentEvent projection. UA16
+moves reconciliation and historical reconstruction semantics into engine
+through separate supplied-store contracts; CLI retains the adapter and startup
+invocation timing. Release ordering remains
 `prepare release -> settle Execution completed -> publish release`; the engine
 does not settle Executions. Pre-T5 historical profiles continue to reconstruct
 artifacts without a fabricated current release receipt.
 
-UA15 changes no workflow graph or version, capability plan, release contract,
-Claim or Counterpoint Policy, schema, migration, or artifact kind. UA14 is
-complete on master. UA15 is implemented in the current isolated
-source-review worktree; source review is pending and the slice has not merged.
-Later UA boundaries remain unselected pending a fresh source audit.
+UA15 changed no workflow graph or version, capability plan, release contract,
+Claim or Counterpoint Policy, schema, migration, or artifact kind. UA14 and UA15
+are complete on master.
+
+## UA16 - Host-neutral Judge Release Reconciliation Extraction
+
+UA16 moves completed Judge release reconciliation and historical artifact
+reconstruction from `apps/cli/src/workflows/judgeCheckpoint.ts` into
+`packages/engine/src/judge/releaseReconciliation.ts`. The engine scans supplied
+Session artifacts, selects completed Judge-v2 Executions, loads their profiles,
+and validates or repairs their existing release state without re-running Judge.
+Current profiles reuse `prepareJudgeReleasePlan` and `publishJudgeRelease` from
+the current release core. Historical profiles reuse checkpoint planning and
+decoding plus the canonical artifact builder, and do not receive a fabricated
+current receipt or modern Claim/Counterpoint metadata.
+
+The reconciliation contract composes the existing current release stores with
+Session and ExecutionProfile reads and Artifact/receipt lookups. The CLI keeps
+the concrete database-to-store adapter and chooses when startup invokes the
+engine operation. Startup ordering remains reconciliation, Session artifact
+reload, then WorkingContext publication and journal reconciliation. Execution
+lifecycle, workflow composition, providers, and presentation remain CLI-owned.
+UA16 changes no schema, migration, workflow graph/version, capability plan,
+release contract, or artifact kinds. UA15 is complete on master. UA16 is
+implemented in the current isolated source-review worktree; source review is
+pending and it has not merged. Later UA slices remain unselected pending a
+fresh source audit.
 
 ## Core boundaries and invariants
 

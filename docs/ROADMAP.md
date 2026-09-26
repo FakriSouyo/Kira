@@ -71,11 +71,12 @@ UA11 Special `/new` Turn Lifecycle Convergence
 UA12 Host-neutral Judge Node Runtime Extraction
 UA13 Host-neutral Judge Checkpoint + Resume Core Extraction
 UA14 Host-neutral Judge Resume Projection Repair Extraction
+UA15 Host-neutral Judge Current Release Core Extraction
 
 CURRENT
 
 UA Kira Engine Extraction
-UA15 Host-neutral Judge Current Release Core Extraction
+UA16 Host-neutral Judge Release Reconciliation Extraction
 
 Later UA slices remain unselected until another fresh source audit.
 
@@ -114,7 +115,7 @@ boundaries established by earlier milestones.
 
 ## UA slice selection
 
-**Selected slice:** UA15 — Host-neutral Judge Current Release Core Extraction.
+**Selected slice:** UA16 — Host-neutral Judge Release Reconciliation Extraction.
 
 UA1 — Host-neutral Capability Runtime Extraction, UA2 — Host-neutral Workflow
 Trace Extraction, UA3 — Host-neutral Screen Workflow Extraction, and UA4 —
@@ -166,9 +167,10 @@ and input projection, ConversationController, journal/transcript projection,
 AgentEvent presentation, Judge orchestration/checkpointing, and provider
 composition remain CLI-owned. ResearchSessionStore remains lifecycle
 persistence authority, and WorkingContextPublisher remains publication policy
-authority. UA14 is complete on master. UA15 is implemented in the current
-isolated source-review worktree; source review is pending and the slice has not
-merged. Later UA boundaries remain unselected pending a fresh source audit.
+authority. UA14 and UA15 are complete on master. UA16 is implemented in the
+current isolated source-review worktree; source review is pending and the slice
+has not merged. Later UA boundaries remain unselected pending a fresh source
+audit.
 
 UA10 extracts the reusable lifecycle around an already-selected existing Turn
 and Execution into `packages/engine`. `runAttachedSessionTurn` reloads the
@@ -195,10 +197,10 @@ CLI creates the new Session, prepares configured/default runtime context,
 switches the ConversationController, reconciles the journal, and commits the
 prepared context. The prior Session's user-selected model is not copied. Judge,
 provider composition, persistence, and journal authority remain unchanged; no
-schema migration is required. UA14 is complete on master. UA15 is implemented
-in the current isolated source-review worktree; source review is pending and the
-slice has not merged. Later UA boundaries remain unselected pending a fresh
-source audit.
+schema migration is required. UA14 and UA15 are complete on master. UA16 is
+implemented in the current isolated source-review worktree; source review is
+pending and the slice has not merged. Later UA boundaries remain unselected
+pending a fresh source audit.
 
 ## UA12 — Host-neutral Judge Node Runtime Extraction
 
@@ -232,16 +234,16 @@ operations and preserves financial re-verification, execution-scoped Evidence
 restoration, ContextSnapshot lifecycle checks, capability/model/runtime
 compatibility, and current plus historical Bear checkpoint decoding.
 
-The CLI retains Execution lifecycle, resume target selection and
+At the UA13 boundary, the CLI retained Execution lifecycle, resume target selection and
 same-Execution acquisition, WorkflowRunner and trace composition, projection
 repair, release planning/publication, startup release repair, and AgentEvent
-projection. It calls engine planning before acquiring the interrupted
-Execution. UA13 does not move the Judge workflow shell or alter checkpoint
+projection. UA16 later moved completed-release reconciliation and historical
+artifact reconstruction semantics into engine while preserving CLI startup
+invocation timing. UA13 did not move the Judge workflow shell or alter checkpoint
 payloads, workflow graph/version, capability semantics, release contract,
-artifact kinds, database schema, or resumeGeneration ownership. UA14 is
-complete on master. UA15 is implemented in the current isolated source-review
-worktree; source review is pending and the slice has not merged. Later UA
-boundaries remain unselected pending a fresh source audit.
+artifact kinds, database schema, or resumeGeneration ownership. UA12-UA15 are
+complete on master. UA16 is the current implemented source-review slice; later
+UA boundaries remain unselected pending a fresh source audit.
 
 ## UA14 — Host-neutral Judge Resume Projection Repair Extraction
 
@@ -261,9 +263,11 @@ IDs/order, ModelCall attempt one, null replay cost/currency, and idempotency are
 preserved. The CLI adapts its concrete stores into those narrow contracts and
 keeps Execution lifecycle, same-Execution acquisition, WorkflowRunner and trace
 composition, release planning/publication, startup release repair, and
-AgentEvent projection. UA15 later moves the current-release core while keeping
-Execution lifecycle, the prepare/settle/publish order, startup reconciliation,
-and historical repair in the CLI. Resume ordering remains plan, acquire,
+AgentEvent projection at the UA14 boundary. UA15 later moves the current-release
+core while keeping Execution lifecycle and the prepare/settle/publish order in
+the CLI. UA16 moves startup reconciliation and historical artifact
+reconstruction semantics into engine while CLI keeps startup invocation timing.
+Resume ordering remains plan, acquire,
 repair, then WorkflowRunner. No checkpoint format, workflow graph/version,
 release contract, schema, migration, or provider behavior changes. UA14 is
 complete on master.
@@ -285,14 +289,37 @@ and receipt writes. Engine receives no database object and does not settle the
 Execution. The CLI retains its database adapter and keeps lifecycle ordering:
 prepare the release, settle the Execution as completed, then publish.
 
-Artifact envelope construction is shared with the CLI's startup and historical
-reconstruction path. Startup reconciliation and historical repair remain
-CLI-owned; pre-T5 profiles continue to receive historical artifacts without a
-current release receipt. UA15 does not change the Judge graph, workflow version,
+At the UA15 boundary, artifact envelope construction was shared with the CLI's
+startup and historical reconstruction path, and startup reconciliation and
+historical repair remained CLI-owned. UA16 later moves those semantics into
+engine; pre-T5 profiles continue to receive historical artifacts without a
+current release receipt. UA15 did not change the Judge graph, workflow version,
 capability plan, release contract, Claim/Counterpoint policies, schemas,
 migrations, or artifact kinds.
 
-UA15 is implemented in the current isolated source-review worktree; source
+UA15 is complete on master.
+
+## UA16 — Host-neutral Judge Release Reconciliation Extraction
+
+UA16 moves the completed Judge release reconciliation loop and historical
+artifact reconstruction semantics from the CLI checkpoint adapter into
+`packages/engine/src/judge/releaseReconciliation.ts`. The engine scans a
+Session's durable artifacts, selects completed Judge-v2 Executions with
+supported profiles, validates current releases through the UA15 release core,
+and rebuilds historical artifacts through checkpoint planning/decoding and the
+shared canonical artifact builder. Historical repair never fabricates a T5
+receipt or modern Claim/Counterpoint metadata.
+
+`JudgeReleaseReconciliationStores` composes the current `JudgeReleaseStores`
+contract with only Session/Profile reads and Artifact/receipt lookups. The CLI
+keeps the concrete database adapter and decides when startup invokes
+reconciliation. Startup ordering remains reconciliation, Session artifact
+reload, then WorkingContext publication and journal reconciliation. Judge
+Execution lifecycle, `WorkflowRunner`, provider composition, and presentation
+remain CLI-owned. UA16 changes no workflow graph/version, capability plan,
+release contract, artifact kinds, schema, or migration.
+
+UA16 is implemented in the current isolated source-review worktree; source
 review is pending and the slice has not merged. Later UA boundaries remain
 unselected until a fresh source audit.
 

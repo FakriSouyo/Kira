@@ -100,6 +100,14 @@ export type {
   JudgeReleasePlan,
   JudgeReleaseStores,
 } from './judge/release.js';
+export {
+  reconcileCompletedJudgeReleases,
+  reconstructHistoricalJudgeArtifacts,
+} from './judge/releaseReconciliation.js';
+export type {
+  JudgeHistoricalArtifactStores,
+  JudgeReleaseReconciliationStores,
+} from './judge/releaseReconciliation.js';
 
 export interface EngineCapabilityRuntimeOptions {
   readonly financialData: FinancialDataProvider;
