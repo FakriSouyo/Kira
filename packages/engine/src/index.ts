@@ -68,6 +68,24 @@ export type {
   SynthesisTurn,
   ThesisTurn,
 } from './judge/nodeRuntime.js';
+export {
+  auditFromPayload,
+  decodeJudgeCheckpoint,
+  JudgeCheckpointWriter,
+  judgeReleaseKind,
+  parseCheckpointCounterpoints,
+  planJudgeCheckpoint,
+  planJudgeResume,
+  workflowDependencyFingerprint,
+} from './judge/checkpointResume.js';
+export type {
+  JudgeCheckpointPlanningOptions,
+  JudgeCheckpointRuntimeIdentity,
+  JudgeCheckpointStores,
+  JudgeCheckpointWriterOptions,
+  JudgeResumePlan,
+  ParsedCheckpointCounterpoints,
+} from './judge/checkpointResume.js';
 
 export interface EngineCapabilityRuntimeOptions {
   readonly financialData: FinancialDataProvider;

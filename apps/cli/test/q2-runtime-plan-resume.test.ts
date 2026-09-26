@@ -4,13 +4,22 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCapabilityPlan } from '@harness/capability';
 import { createJudgeExecutionProfile, createJudgeWorkflow, judgeWorkflowGraphFingerprint } from '@harness/command-judge';
+import { planJudgeResume, type JudgeCheckpointStores } from '@harness/engine';
 import { openDb, type FinharnessDatabase } from '@harness/database';
 import { createExecutionProfile } from '@harness/session-core';
-import { planJudgeResume } from '../src/workflows/judgeCheckpoint';
 
 let db: FinharnessDatabase;
 let dir: string;
 const capabilityPlan = createCapabilityPlan({ list: () => [] }, []);
+
+function checkpointStores(): JudgeCheckpointStores {
+  return {
+    workflowNodeOutputs: db.workflowNodeOutputs,
+    financialSnapshots: db.financialSnapshots,
+    evidence: db.evidence,
+    contextSnapshots: db.contextSnapshots,
+  };
+}
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'finharness-q2-resume-plan-'));
@@ -37,7 +46,7 @@ describe('Q2 runtime-plan resume gate', () => {
     await db.executionProfiles.save(profile);
 
     await expect(planJudgeResume({
-      db, execution, profile, definition: createJudgeWorkflow(), currentGraphFingerprint: judgeWorkflowGraphFingerprint(),
+      stores: checkpointStores(), execution, profile, definition: createJudgeWorkflow(), currentGraphFingerprint: judgeWorkflowGraphFingerprint(),
       provider: 'openrouter', model: 'qwen/qwen3', runtimePlanFingerprint: 'b'.repeat(64), capabilityPlanFingerprint: capabilityPlan.fingerprint,
     })).rejects.toMatchObject({ code: 'MODEL_MISMATCH' });
     expect((await db.sessions.getSessionArtifacts(session.id)).executions[0]).toMatchObject({ status: 'running', resumeGeneration: 0 });
@@ -56,7 +65,7 @@ describe('Q2 runtime-plan resume gate', () => {
     await db.executionProfiles.save(profile);
 
     await expect(planJudgeResume({
-      db, execution, profile, definition: createJudgeWorkflow(), currentGraphFingerprint: judgeWorkflowGraphFingerprint(),
+      stores: checkpointStores(), execution, profile, definition: createJudgeWorkflow(), currentGraphFingerprint: judgeWorkflowGraphFingerprint(),
       provider: 'openrouter', model: 'qwen/qwen3', capabilityPlanFingerprint: '0'.repeat(64),
     })).rejects.toMatchObject({
       code: 'CAPABILITY_MISMATCH',
@@ -77,7 +86,7 @@ describe('Q2 runtime-plan resume gate', () => {
     });
 
     await expect(planJudgeResume({
-      db, execution, profile, definition: createJudgeWorkflow(), currentGraphFingerprint: judgeWorkflowGraphFingerprint(),
+      stores: checkpointStores(), execution, profile, definition: createJudgeWorkflow(), currentGraphFingerprint: judgeWorkflowGraphFingerprint(),
       provider: 'wrong-provider', model: 'wrong-model', capabilityPlanFingerprint: '0'.repeat(64),
     })).rejects.toMatchObject({
       code: 'INCOMPATIBLE_CHECKPOINT',
@@ -97,7 +106,7 @@ describe('Q2 runtime-plan resume gate', () => {
     });
 
     await expect(planJudgeResume({
-      db, execution, profile, definition: createJudgeWorkflow(), currentGraphFingerprint: judgeWorkflowGraphFingerprint(),
+      stores: checkpointStores(), execution, profile, definition: createJudgeWorkflow(), currentGraphFingerprint: judgeWorkflowGraphFingerprint(),
       provider: 'openrouter', model: 'different-model', capabilityPlanFingerprint: capabilityPlan.fingerprint,
     })).rejects.toMatchObject({ code: 'MODEL_MISMATCH' });
   });
@@ -134,7 +143,7 @@ describe('Q2 runtime-plan resume gate', () => {
     const interrupted = (await db.sessions.getSessionArtifacts(session.id)).executions[0]!;
 
     await expect(planJudgeResume({
-      db, execution: interrupted, profile: persisted!, definition: createJudgeWorkflow(),
+      stores: checkpointStores(), execution: interrupted, profile: persisted!, definition: createJudgeWorkflow(),
       currentGraphFingerprint: judgeWorkflowGraphFingerprint(), provider: 'openrouter', model: 'qwen/qwen3',
       capabilityPlanFingerprint: capabilityPlan.fingerprint,
     })).rejects.toMatchObject({ code: 'INCOMPATIBLE_CHECKPOINT' });

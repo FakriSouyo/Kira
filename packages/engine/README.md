@@ -87,8 +87,9 @@ released and remains unsettled. Pre-settlement failures retain the legacy outer
 catch reload/reconciliation behavior. It does not create or acquire lifecycle
 rows.
 CLI retains `/resume` and `/continue` argument validation, target selection,
-command input projection, and `ConversationController`; Judge retains
-compatibility validation and same-Execution acquisition/resume. Action failures
+command input projection, and `ConversationController`; the checkpoint/resume
+core validates compatibility before CLI acquisition of the same interrupted
+Execution. Action failures
 settle a terminal parent Turn without normal-success publication and are
 rethrown.
 
@@ -116,9 +117,11 @@ context policy, model runtime authority, or persistence implementation. The CLI
 owns fresh-input parsing and presentation, `/new` Session creation, runtime
 rebinding and switching, transcript/journal and event projection, streaming
 display, cancellation presentation, provider composition, Judge Execution
-lifecycle and WorkflowRunner composition, checkpoint/resume/release, trace
-composition, and control-command input projection. Judge
-validates compatibility and acquires the same interrupted Execution.
+lifecycle and WorkflowRunner composition, same-Execution acquisition,
+projection repair, release planning/publication and startup repair, trace
+composition, and control-command input projection. The engine plans and
+validates the restore frontier; CLI acquires the same interrupted Execution
+only after that plan succeeds.
 Natural-language conversation remains one Turn
 with zero `ResearchExecution`. Restart reconciliation, fresh-Turn orchestration,
 and attached-Turn orchestration coordinate existing authorities without
@@ -139,7 +142,31 @@ The runtime emits a narrow `JudgeNodeEvent`, keeps `JudgeProgress` as a supplied
 callback, forwards raw ToolRuntime events through `onToolEvent`, and receives
 checkpoint and trace callbacks from its host. The CLI adapts ToolRuntime events
 to its existing `tool.start` / `tool.complete` events and retains Judge
-Execution lifecycle, `WorkflowRunner` composition, checkpoint/resume/release,
+Execution lifecycle, `WorkflowRunner` composition, release planning/publication,
 trace recorder composition, and workflow/session/verdict `AgentEvent`
 projection. The 15-node graph, workflow version, capability plan, checkpoint
 format, resume rules, and release contract remain unchanged.
+
+## Judge Checkpoint + Resume Core
+
+`JudgeCheckpointWriter`, `workflowDependencyFingerprint`, `planJudgeResume`,
+`decodeJudgeCheckpoint`, and the shared `planJudgeCheckpoint` primitive live in
+`src/judge/checkpointResume.ts`. The module owns payload encoding and decoding,
+WorkflowNodeOutput coordination, compatibility checks, and sequential
+graph-order restore-frontier derivation. Release planning in the CLI reuses the
+same engine planning and decoding implementation rather than keeping a second
+checkpoint validator.
+
+The engine receives only `save` and `listNodeOutputsForExecution` for
+WorkflowNodeOutput; `getById` for FinancialSnapshot and ContextSnapshot; and
+`getManyByIdsForRun` for Evidence. It re-verifies financial observations,
+validates snapshot ownership and fingerprints, restores Evidence within the
+Execution and ticker scope, and checks ContextSnapshot Session/Turn ownership.
+It does not import `FinharnessDatabase`, `@harness/database`, or CLI modules.
+
+The CLI still owns Execution lifecycle and same-Execution acquisition, resume
+target selection, WorkflowRunner and trace composition, projection repair,
+release publication and startup release repair, and AgentEvent projection.
+Resume compatibility planning completes before acquisition. The same Execution
+is resumed, and `resumeGeneration` remains owned by the existing execution
+store/acquisition flow.

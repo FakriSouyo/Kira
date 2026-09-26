@@ -14,17 +14,13 @@ import { openDb, type FinharnessDatabase } from '@harness/database';
 import { storedClaimToClaim } from '@harness/execution';
 import { type FinancialDataProvider } from '@harness/financial-data';
 import { createExecutionProfile, createWorkflowNodeOutput } from '@harness/session-core';
-import { WorkflowTraceRecorder } from '@harness/engine';
+import { WorkflowTraceRecorder, type JudgeCheckpointStores } from '@harness/engine';
 import { buildContext } from '../src/context';
 import { loadConfig, type FinharnessConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
 import { createJudgeNodeExecutors } from '@harness/engine';
-import {
-  decodeJudgeCheckpoint,
-  JudgeCheckpointWriter,
-  planJudgeResume,
-  repairJudgeProjections,
-} from '../src/workflows/judgeCheckpoint';
+import { decodeJudgeCheckpoint, JudgeCheckpointWriter, planJudgeResume } from '@harness/engine';
+import { repairJudgeProjections } from '../src/workflows/judgeCheckpoint';
 
 type Fixture = {
   dir: string;
@@ -37,6 +33,15 @@ type Fixture = {
 
 const reopenedDatabases: FinharnessDatabase[] = [];
 let db: FinharnessDatabase;
+
+function checkpointStores(database: FinharnessDatabase): JudgeCheckpointStores {
+  return {
+    workflowNodeOutputs: database.workflowNodeOutputs,
+    financialSnapshots: database.financialSnapshots,
+    evidence: database.evidence,
+    contextSnapshots: database.contextSnapshots,
+  };
+}
 
 const PROVIDER_METHODS: Array<keyof FinancialDataProvider> = [
   'getCompanyReport', 'getQuarterlyFinancials', 'getDailyTransaction',
@@ -109,7 +114,7 @@ async function runPrefix(fixture: Fixture, boundary: JudgeNodeId): Promise<void>
   if (!profile) throw new Error(`Profile missing for ${execution.id}`);
   const context = buildContext(fixture.db, fixture.config, { sessionId: fixture.sessionId });
   const recorder = new WorkflowTraceRecorder({ runId: execution.id, definition, store: fixture.db.sessions });
-  const writer = new JudgeCheckpointWriter({ db: fixture.db, execution, profile, definition });
+  const writer = new JudgeCheckpointWriter({ stores: checkpointStores(fixture.db), execution, profile, definition });
   const decision = {};
   const payload = profile.payload as { reasoningMode: 'usual' | 'reasoning'; conditional: boolean; researchers: { market: boolean; news: boolean } };
   const executors = createJudgeNodeExecutors({
@@ -467,7 +472,7 @@ describe('PR P final acceptance hardening', () => {
     graphFixture.db.raw.prepare('UPDATE execution_profiles SET graph_fingerprint = ?, fingerprint = ? WHERE execution_id = ?')
       .run(incompatibleProfile.graphFingerprint, incompatibleProfile.fingerprint, graphFixture.executionId);
     await expect(planJudgeResume({
-      db: graphFixture.db,
+      stores: checkpointStores(graphFixture.db),
       execution: (await sessionRows(graphFixture)).executions[0]!,
       profile: (await graphFixture.db.executionProfiles.getByExecutionId(graphFixture.executionId))!,
       definition: createJudgeWorkflow(), currentGraphFingerprint: judgeWorkflowGraphFingerprint(),
@@ -483,7 +488,7 @@ describe('PR P final acceptance hardening', () => {
     dependencyFixture.db.raw.prepare("UPDATE workflow_node_outputs SET dependency_fingerprint = ?, output_fingerprint = ? WHERE execution_id = ? AND node_id = ?")
       .run(dependencyTamper.dependencyFingerprint, dependencyTamper.outputFingerprint, dependencyFixture.executionId, 'collect-sources');
     await expect(planJudgeResume({
-      db: dependencyFixture.db,
+      stores: checkpointStores(dependencyFixture.db),
       execution: (await sessionRows(dependencyFixture)).executions[0]!,
       profile: (await dependencyFixture.db.executionProfiles.getByExecutionId(dependencyFixture.executionId))!,
       definition: createJudgeWorkflow(), currentGraphFingerprint: judgeWorkflowGraphFingerprint(),
@@ -536,7 +541,7 @@ describe('PR P final acceptance hardening', () => {
     const current = (await sessionRows(fixture)).executions[0]!;
     expect(current.resumeGeneration).toBe(1);
     const profile = await fixture.db.executionProfiles.getByExecutionId(fixture.executionId);
-    const writer = new JudgeCheckpointWriter({ db: fixture.db, execution: oldExecution, profile: profile!, definition: createJudgeWorkflow() });
+    const writer = new JudgeCheckpointWriter({ stores: checkpointStores(fixture.db), execution: oldExecution, profile: profile!, definition: createJudgeWorkflow() });
     await expect(writer.completedValue('identify-company', { outcome: 'succeeded', company: { ticker: 'BBCA', name: 'stale' }, evidence: { id: 'stale' } } as never))
       .rejects.toThrow(/stale resume generation/i);
   });
@@ -632,7 +637,7 @@ describe('PR P final acceptance hardening', () => {
     });
     expect(fixture.db.raw.prepare('SELECT COUNT(*) AS count FROM model_calls WHERE run_id = ?')
       .get(fixture.executionId)).toEqual(callsBefore);
-    const decoded = await decodeJudgeCheckpoint('round-1-bear-challenge', output, fixture.db, {
+    const decoded = await decodeJudgeCheckpoint('round-1-bear-challenge', output, checkpointStores(fixture.db), {
       id: fixture.executionId, ticker: 'BBCA',
     } as never) as { counterpoints: Array<Record<string, unknown>> };
     expect(decoded.counterpoints).toEqual(payload.counterpoints);
@@ -657,7 +662,7 @@ describe('PR P final acceptance hardening', () => {
     });
     fixture.db.raw.prepare('DELETE FROM counterpoints WHERE run_id = ?').run(fixture.executionId);
     const historical = historicalOutputs.find(output => output.nodeId === 'round-1-bear-challenge')!;
-    const decoded = await decodeJudgeCheckpoint('round-1-bear-challenge', historical, fixture.db, {
+    const decoded = await decodeJudgeCheckpoint('round-1-bear-challenge', historical, checkpointStores(fixture.db), {
       id: fixture.executionId, ticker: 'BBCA',
     } as never) as { counterpoints: Array<Record<string, unknown>> };
     expect(decoded.counterpoints[0]).toEqual(expect.objectContaining({ targetClaimId: 'claim_1' }));
@@ -714,7 +719,7 @@ describe('PR P final acceptance hardening', () => {
     const malformedOutputs = outputs.map(output => output.nodeId === 'round-1-bear-challenge' ? malformedOutput : output);
     fixture.db.raw.prepare('DELETE FROM counterpoints WHERE run_id = ?').run(fixture.executionId);
 
-    await expect(decodeJudgeCheckpoint('round-1-bear-challenge', malformedOutput, fixture.db, {
+    await expect(decodeJudgeCheckpoint('round-1-bear-challenge', malformedOutput, checkpointStores(fixture.db), {
       id: fixture.executionId, ticker: 'BBCA',
     } as never)).rejects.toThrow();
     await expect(repairJudgeProjections({
@@ -805,13 +810,13 @@ describe('PR P final acceptance hardening', () => {
     const definition = createJudgeWorkflow();
     const profile = await fixture.db.executionProfiles.getByExecutionId(fixture.executionId);
     const plan = await planJudgeResume({
-      db: fixture.db, execution: acquired, profile: profile!, definition,
+      stores: checkpointStores(fixture.db), execution: acquired, profile: profile!, definition,
       currentGraphFingerprint: judgeWorkflowGraphFingerprint(), provider: config.llm.agent.provider, model: config.llm.agent.model,
       capabilityPlanFingerprint: (profile!.payload as { capabilityPlanFingerprint: string }).capabilityPlanFingerprint,
     });
     const context = buildContext(fixture.db, config, { sessionId: fixture.sessionId });
     const recorder = new WorkflowTraceRecorder({ runId: fixture.executionId, definition, store: fixture.db.sessions });
-    const writer = new JudgeCheckpointWriter({ db: fixture.db, execution: acquired, profile: profile!, definition, initialOutputs: plan.outputs });
+    const writer = new JudgeCheckpointWriter({ stores: checkpointStores(fixture.db), execution: acquired, profile: profile!, definition, initialOutputs: plan.outputs });
     const decision = {};
     const payload = profile!.payload as { reasoningMode: 'usual' | 'reasoning'; conditional: boolean; researchers: { market: boolean; news: boolean } };
     const executors = createJudgeNodeExecutors({
