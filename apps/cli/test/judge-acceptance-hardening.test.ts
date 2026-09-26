@@ -14,13 +14,12 @@ import { openDb, type FinharnessDatabase } from '@harness/database';
 import { storedClaimToClaim } from '@harness/execution';
 import { type FinancialDataProvider } from '@harness/financial-data';
 import { createExecutionProfile, createWorkflowNodeOutput } from '@harness/session-core';
-import { WorkflowTraceRecorder, type JudgeCheckpointStores } from '@harness/engine';
+import { repairJudgeProjections, WorkflowTraceRecorder, type JudgeCheckpointStores, type JudgeProjectionRepairStores } from '@harness/engine';
 import { buildContext } from '../src/context';
 import { loadConfig, type FinharnessConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
 import { createJudgeNodeExecutors } from '@harness/engine';
 import { decodeJudgeCheckpoint, JudgeCheckpointWriter, planJudgeResume } from '@harness/engine';
-import { repairJudgeProjections } from '../src/workflows/judgeCheckpoint';
 
 type Fixture = {
   dir: string;
@@ -40,6 +39,24 @@ function checkpointStores(database: FinharnessDatabase): JudgeCheckpointStores {
     financialSnapshots: database.financialSnapshots,
     evidence: database.evidence,
     contextSnapshots: database.contextSnapshots,
+  };
+}
+
+function projectionRepairStores(database: FinharnessDatabase): JudgeProjectionRepairStores {
+  return {
+    trace: {
+      getStep: (runId, nodeId) => database.sessions.getStep(runId, nodeId),
+      saveStep: params => database.sessions.saveStep(params),
+      listModelCallsForStep: (runId, stepId) => database.sessions.listModelCallsForStep(runId, stepId),
+      recordModelCall: params => database.sessions.recordModelCall(params),
+    },
+    conversation: { addMessage: params => database.conversation.addMessage(params) },
+    claims: {
+      save: params => database.claims.save(params),
+      repairLegacyCheckpointProjection: params => database.claims.repairLegacyCheckpointProjection(params),
+    },
+    counterpoints: { save: params => database.counterpoints.save(params) },
+    judgments: { save: params => database.judgments.save(params) },
   };
 }
 
@@ -555,8 +572,8 @@ describe('PR P final acceptance hardening', () => {
     fixture.db.raw.prepare("DELETE FROM claims WHERE run_id = ?").run(fixture.executionId);
     fixture.db.raw.prepare("DELETE FROM judgments WHERE run_id = ?").run(fixture.executionId);
     fixture.db.raw.prepare("DELETE FROM model_calls WHERE run_id = ?").run(fixture.executionId);
-    await repairJudgeProjections({ db: fixture.db, execution: (await sessionRows(fixture)).executions[0]!, outputs });
-    await repairJudgeProjections({ db: fixture.db, execution: (await sessionRows(fixture)).executions[0]!, outputs });
+    await repairJudgeProjections({ stores: projectionRepairStores(fixture.db), execution: (await sessionRows(fixture)).executions[0]!, outputs });
+    await repairJudgeProjections({ stores: projectionRepairStores(fixture.db), execution: (await sessionRows(fixture)).executions[0]!, outputs });
     expect(await fixture.db.conversation.getByRun(fixture.executionId)).toHaveLength(5);
     const expectedClaims = outputs
       .filter(output => ['round-1-bull-thesis', 'round-2-bull-rebuttal'].includes(output.nodeId))
@@ -582,8 +599,8 @@ describe('PR P final acceptance hardening', () => {
     conditional.db.raw.prepare("DELETE FROM counterpoints WHERE run_id = ? AND source_node_id = 'conditional-bear-rechallenge'")
       .run(conditional.executionId);
     conditional.db.raw.prepare("DELETE FROM agent_messages WHERE run_id = ?").run(conditional.executionId);
-    await repairJudgeProjections({ db: conditional.db, execution: (await sessionRows(conditional)).executions[0]!, outputs: conditionalOutputs });
-    await repairJudgeProjections({ db: conditional.db, execution: (await sessionRows(conditional)).executions[0]!, outputs: conditionalOutputs });
+    await repairJudgeProjections({ stores: projectionRepairStores(conditional.db), execution: (await sessionRows(conditional)).executions[0]!, outputs: conditionalOutputs });
+    await repairJudgeProjections({ stores: projectionRepairStores(conditional.db), execution: (await sessionRows(conditional)).executions[0]!, outputs: conditionalOutputs });
     expect((await conditional.db.counterpoints.getByRun(conditional.executionId))
       .filter(counterpoint => counterpoint.sourceNodeId === 'conditional-bear-rechallenge')).toHaveLength(conditionalCounterpoints.length);
     expect((await conditional.db.conversation.getByRun(conditional.executionId)).find(message => message.messageId.endsWith('_conditional'))?.metadata)
@@ -624,8 +641,8 @@ describe('PR P final acceptance hardening', () => {
       .get(fixture.executionId) as { count: number };
     fixture.db.raw.prepare('DELETE FROM counterpoints WHERE run_id = ?').run(fixture.executionId);
 
-    await repairJudgeProjections({ db: fixture.db, execution: (await sessionRows(fixture)).executions[0]!, outputs });
-    await repairJudgeProjections({ db: fixture.db, execution: (await sessionRows(fixture)).executions[0]!, outputs });
+    await repairJudgeProjections({ stores: projectionRepairStores(fixture.db), execution: (await sessionRows(fixture)).executions[0]!, outputs });
+    await repairJudgeProjections({ stores: projectionRepairStores(fixture.db), execution: (await sessionRows(fixture)).executions[0]!, outputs });
 
     const stored = await fixture.db.counterpoints.getByRun(fixture.executionId);
     expect(stored).toHaveLength(payload.counterpoints.length);
@@ -667,8 +684,8 @@ describe('PR P final acceptance hardening', () => {
     } as never) as { counterpoints: Array<Record<string, unknown>> };
     expect(decoded.counterpoints[0]).toEqual(expect.objectContaining({ targetClaimId: 'claim_1' }));
     expect(decoded.counterpoints[0]).not.toHaveProperty('evidenceIds');
-    await repairJudgeProjections({ db: fixture.db, execution: (await sessionRows(fixture)).executions[0]!, outputs: historicalOutputs });
-    await repairJudgeProjections({ db: fixture.db, execution: (await sessionRows(fixture)).executions[0]!, outputs: historicalOutputs });
+    await repairJudgeProjections({ stores: projectionRepairStores(fixture.db), execution: (await sessionRows(fixture)).executions[0]!, outputs: historicalOutputs });
+    await repairJudgeProjections({ stores: projectionRepairStores(fixture.db), execution: (await sessionRows(fixture)).executions[0]!, outputs: historicalOutputs });
     expect(await fixture.db.counterpoints.getByRun(fixture.executionId)).toEqual([]);
   });
 
@@ -723,7 +740,7 @@ describe('PR P final acceptance hardening', () => {
       id: fixture.executionId, ticker: 'BBCA',
     } as never)).rejects.toThrow();
     await expect(repairJudgeProjections({
-      db: fixture.db, execution: (await sessionRows(fixture)).executions[0]!, outputs: malformedOutputs,
+      stores: projectionRepairStores(fixture.db), execution: (await sessionRows(fixture)).executions[0]!, outputs: malformedOutputs,
     })).rejects.toThrow();
     expect(await fixture.db.counterpoints.getByRun(fixture.executionId)).toEqual([]);
   });
@@ -743,8 +760,8 @@ describe('PR P final acceptance hardening', () => {
     });
     fixture.db.raw.prepare('DELETE FROM claims WHERE run_id = ?').run(fixture.executionId);
     const execution = (await sessionRows(fixture)).executions[0]!;
-    await repairJudgeProjections({ db: fixture.db, execution, outputs: historical });
-    await repairJudgeProjections({ db: fixture.db, execution, outputs: historical });
+    await repairJudgeProjections({ stores: projectionRepairStores(fixture.db), execution, outputs: historical });
+    await repairJudgeProjections({ stores: projectionRepairStores(fixture.db), execution, outputs: historical });
     const restored = await fixture.db.claims.getByRun(fixture.executionId);
     expect(restored.length).toBeGreaterThan(0);
     expect(restored.every(claim => claim.policyId === undefined && claim.evidenceLinks === undefined)).toBe(true);

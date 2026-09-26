@@ -78,6 +78,8 @@ export {
   planJudgeResume,
   workflowDependencyFingerprint,
 } from './judge/checkpointResume.js';
+export { repairJudgeProjections } from './judge/projectionRepair.js';
+export type { JudgeProjectionRepairStores } from './judge/projectionRepair.js';
 export type {
   JudgeCheckpointPlanningOptions,
   JudgeCheckpointRuntimeIdentity,

@@ -48,13 +48,13 @@ configuration/provider/model rebinding and switching, `/resume` and `/continue`
 argument validation and target selection,
 control-command input projection, transcript/journal projection, Judge
 Execution lifecycle and WorkflowRunner composition, same-Execution acquisition,
-projection repair, release planning/publication and startup repair, trace
-composition, provider composition, CLI event projection, streaming
-presentation, and local-path Attachment import. The engine owns host-neutral
-Judge checkpoint encoding/decoding, resume compatibility planning, and
-restore-frontier derivation through supplied stores. The CLI validates the
-resume target and acquires the same interrupted Execution only after engine
-planning succeeds.
+release planning/publication and startup repair, trace composition, provider
+composition, CLI event projection, streaming presentation, and local-path
+Attachment import. The engine owns host-neutral Judge checkpoint
+encoding/decoding, resume compatibility planning, restore-frontier derivation,
+and durable Judge resume projection repair through supplied narrow store
+contracts. The CLI validates the resume target and acquires the same interrupted
+Execution only after engine planning succeeds.
 Engine coordinates the host-neutral attached-Turn lifecycle after CLI selects
 the existing Session, Turn, and Execution. Engine does not own
 ConversationController, AgentEvent presentation, host filesystem access, or

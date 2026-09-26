@@ -14,12 +14,14 @@ import {
   createJudgeNodeExecutors,
   JudgeCheckpointWriter,
   planJudgeResume,
+  repairJudgeProjections,
   WorkflowTraceRecorder,
   type BearChallengeResponse,
   type BullAnalysisResponse,
   type ChallengeTurn,
   type CollectedSources,
   type JudgeCheckpointStores,
+  type JudgeProjectionRepairStores,
   type JudgeProgress,
   type JudgeResumePlan,
   type JudgeTurn,
@@ -29,7 +31,7 @@ import {
 import type { SkillReference } from '@harness/subagent-core';
 import type { AgentEvent, UiWorkflowStepStatus } from '../repl/events';
 import type { HarnessContext } from '../context';
-import { ensureJudgeArtifacts, prepareJudgeReleasePlan, publishJudgeRelease, repairJudgeProjections, type JudgeReleasePlan } from './judgeCheckpoint';
+import { ensureJudgeArtifacts, prepareJudgeReleasePlan, publishJudgeRelease, type JudgeReleasePlan } from './judgeCheckpoint';
 import { projectFinancialToolEvent } from '../tools/financialToolEvents';
 
 /**
@@ -116,6 +118,30 @@ function projectWorkflowStep(event: WorkflowEvent, nodes: ReadonlyMap<string, Pr
 
 function value<T>(values: Readonly<Record<string, unknown>>, nodeId: string): T {
   return values[nodeId] as T;
+}
+
+function judgeProjectionRepairStores(ctx: HarnessContext): JudgeProjectionRepairStores {
+  return {
+    trace: {
+      getStep: (runId, nodeId) => ctx.db.sessions.getStep(runId, nodeId),
+      saveStep: params => ctx.db.sessions.saveStep(params),
+      listModelCallsForStep: (runId, stepId) => ctx.db.sessions.listModelCallsForStep(runId, stepId),
+      recordModelCall: params => ctx.db.sessions.recordModelCall(params),
+    },
+    conversation: {
+      addMessage: params => ctx.db.conversation.addMessage(params),
+    },
+    claims: {
+      save: params => ctx.db.claims.save(params),
+      repairLegacyCheckpointProjection: params => ctx.db.claims.repairLegacyCheckpointProjection(params),
+    },
+    counterpoints: {
+      save: params => ctx.db.counterpoints.save(params),
+    },
+    judgments: {
+      save: params => ctx.db.judgments.save(params),
+    },
+  };
 }
 
 /**
@@ -230,7 +256,7 @@ export async function judgeWorkflow(
       : undefined;
     if (resumePlan && opts.lifecycle) {
       await repairJudgeProjections({
-        db: ctx.db,
+        stores: judgeProjectionRepairStores(ctx),
         execution: run as unknown as import('@harness/session-core').ResearchExecution,
         outputs: resumePlan.outputs,
       });

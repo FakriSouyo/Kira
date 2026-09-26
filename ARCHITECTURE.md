@@ -33,8 +33,9 @@ WorkflowTraceRecorder, Screen application workflow, conversation context
 preparation and host-neutral Conversation Response orchestration, WorkingContext
 publication/reconciliation orchestration, host-neutral Workspace/Document
 workflows for `/files`, `/doc-index`, and `/doc-search`, Session restart
-lifecycle reconciliation, the host-neutral Judge node application runtime and
-Judge checkpoint/resume core,
+lifecycle reconciliation, the host-neutral Judge node application runtime,
+Judge checkpoint/resume core, and durable Judge resume projection repair through
+narrow host-supplied store contracts,
 and fresh-Turn lifecycle orchestration through the
 existing `ResearchSessionStore` and `WorkingContextPublisher` contracts, plus
 attached-Turn lifecycle orchestration around an existing Turn and Execution.
@@ -51,11 +52,11 @@ Engine does not own `/new` Session creation, configuration/runtime rebinding
 and switching, `/resume` or `/continue` parsing and target selection,
 ConversationController, AgentEvent presentation, provider composition, Judge
 Execution lifecycle, WorkflowRunner composition, same-Execution acquisition,
-projection repair, release planning/publication, startup release repair, or
-trace composition. Engine owns host-neutral Judge checkpoint encoding and
-decoding, resume compatibility planning, and restore-frontier derivation
-through supplied stores. The CLI acquires the same interrupted Execution only
-after engine planning succeeds.
+release planning/publication, startup release repair, or trace composition.
+Engine owns host-neutral Judge checkpoint encoding and decoding, resume
+compatibility planning, restore-frontier derivation, and durable resume
+projection repair through supplied stores. The CLI acquires the same
+interrupted Execution only after engine planning succeeds.
 The publisher coordinates publication; WorkingContextStore owns durable
 WorkingContext persistence. The context coordinator coordinates existing
 @harness/context policies and @harness/orchestrator focus/prompt semantics. The
@@ -72,7 +73,8 @@ Judge plan.
       Screen workflow, conversation context preparation and Conversation
       Response orchestration, WorkingContext publication/reconciliation,
       Workspace/Document workflows, Session restart reconciliation,
-      Judge checkpoint/resume core, fresh-Turn and attached-Turn lifecycle
+      Judge checkpoint/resume core and resume projection repair,
+      fresh-Turn and attached-Turn lifecycle
       orchestration
            | coordinates
            v
@@ -123,7 +125,7 @@ authorize. Tools execute. Domain packages own truth. Database persists.
 The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
-authority. UA14 and later boundaries remain unselected and
+authority. UA15 and later boundaries remain unselected and
 must be selected after a fresh source audit before each slice.
 
 ## Model runtime — Q1 / Q2
@@ -481,7 +483,7 @@ Document extraction, identity, chunking, and retrieval semantics, and the
 supplied DocumentStore remains persistence authority. Engine workflows do not
 load Turns, access the host filesystem, render CLI output, or duplicate
 Document/domain behavior. `/attach` remains CLI-local path/file-system
-ingestion. UA14 and later boundaries remain unselected and require a fresh
+ingestion. UA15 and later boundaries remain unselected and require a fresh
 source audit before selection.
 
 ## UA7 - Host-neutral Conversation Response Orchestration Extraction
@@ -574,8 +576,8 @@ handling, Judge execution/checkpointing, `/new` Session switching, and
 `/resume`/`/continue` target selection and input projection. ResearchSessionStore
 remains lifecycle persistence authority, WorkingContextPublisher remains publication
 policy authority, and no database migration is required. UA9 did not complete
-engine extraction; UA10, UA11, and UA12 are complete on master. UA13 is the
-selected/current implementation state pending source review; UA14+ remain
+engine extraction; UA10, UA11, UA12, and UA13 are complete on master. UA14 is
+the selected/current implementation state pending source review; UA15+ remain
 unselected until another fresh source audit.
 
 ## UA10 - Host-neutral Attached-Turn Lifecycle Orchestration Extraction
@@ -619,8 +621,8 @@ The runner does not create or acquire lifecycle rows, mutate `resumeGeneration`,
 or select the target. UA10 left the `/new` Turn lifecycle outside its scope;
 UA11 converges that Turn through `runSessionTurn`. UA9 lifecycle orchestration,
 UA8 restart reconciliation, Judge workflow/checkpointing, and journal mutation
-retain their separate responsibilities. No schema migration is required. UA14
-and later remain unselected pending a fresh source audit.
+retain their separate responsibilities. No schema migration is required. UA15+
+remain unselected pending a fresh source audit.
 
 ## UA11 - Special `/new` Turn Lifecycle Convergence
 
@@ -684,9 +686,34 @@ repair, release planning/publication, startup release repair, and AgentEvent
 projection. Engine planning completes before CLI acquisition. UA13 does not
 move the Judge workflow shell, change checkpoint payloads, graph/version,
 capability plan, release contract, artifact kinds, persistence schema, or
-resumeGeneration ownership. UA12 is complete on master; UA13 is the
-selected/current implementation state pending source review, and UA14+ remain
+resumeGeneration ownership. UA12 and UA13 are complete on master. UA14 is the
+selected/current implementation state pending source review, and UA15+ remain
 unselected pending a fresh source audit.
+
+## UA14 - Host-neutral Judge Resume Projection Repair Extraction
+
+UA14 moves `checkpointMessage` and `repairJudgeProjections` from
+`apps/cli/src/workflows/judgeCheckpoint.ts` into
+`packages/engine/src/judge/projectionRepair.ts`. Engine replays already-validated
+Judge checkpoint outputs into the existing WorkflowStep, Conversation, Claim,
+Counterpoint, Judgment, and ModelCall authorities. Its narrow host-supplied
+contract contains only step get/save, ModelCall list/record, Conversation
+`addMessage`, Claim `save` and legacy checkpoint repair, Counterpoint `save`, and
+Judgment `save`. ModelCall lookup remains a projection-specific trace operation;
+the canonical `ResearchSessionStore` interface is unchanged.
+
+Projection repair reuses `auditFromPayload` and
+`parseCheckpointCounterpoints` from the checkpoint/resume core. It preserves
+current and historical Claim/Bear behavior, deterministic step and ModelCall
+identities, message IDs and sequence values, and replay cost/currency as null.
+The CLI wraps concrete stores into the narrow contract. Resume remains ordered:
+engine planning, CLI acquisition of the same interrupted Execution, engine
+projection repair, then CLI `WorkflowRunner`. Execution lifecycle, workflow and
+trace composition, release planning/publication, startup release repair, and
+AgentEvent projection remain CLI-owned. No checkpoint, graph, release,
+persistence, or provider behavior changes. UA12 and UA13 are complete on master;
+UA14 is the selected/current implementation state in this source-review
+worktree, pending approval. UA15+ remain unselected pending a fresh source audit.
 
 ## Core boundaries and invariants
 
