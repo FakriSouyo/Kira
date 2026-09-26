@@ -16,10 +16,13 @@ provider-neutral financial-data boundary and Sectors as the current provider.
 ## Product boundary
 
 Kira is a reusable financial research engine. The CLI is its first host adapter,
-not the engine boundary. Today, the CLI still owns substantial application and
-runtime composition; no host-neutral engine package exists yet. Future Desktop
-and Web hosts are intended to consume the same engine rather than reimplement
-Judge, Session, Context, Evidence, capability, or lifecycle behavior. See
+not the engine boundary. `@harness/engine` already owns substantial
+host-neutral application orchestration, including the current Judge release
+core. UA extraction is still incomplete, and the CLI retains important
+host/runtime composition, Execution lifecycle, startup reconciliation, and
+historical compatibility work. Future Desktop and Web hosts are intended to
+consume the same engine rather than reimplement Judge, Session, Context,
+Evidence, capability, or lifecycle behavior. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for the clearly labelled current facts and
 target direction.
 

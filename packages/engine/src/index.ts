@@ -83,11 +83,23 @@ export type { JudgeProjectionRepairStores } from './judge/projectionRepair.js';
 export type {
   JudgeCheckpointPlanningOptions,
   JudgeCheckpointRuntimeIdentity,
+  JudgeCheckpointReadStores,
   JudgeCheckpointStores,
   JudgeCheckpointWriterOptions,
   JudgeResumePlan,
   ParsedCheckpointCounterpoints,
 } from './judge/checkpointResume.js';
+export {
+  buildJudgeArtifactEnvelopes,
+  prepareJudgeReleasePlan,
+  publishJudgeRelease,
+  requiredJudgeCheckpointOutput,
+} from './judge/release.js';
+export type {
+  JudgeArtifactContents,
+  JudgeReleasePlan,
+  JudgeReleaseStores,
+} from './judge/release.js';
 
 export interface EngineCapabilityRuntimeOptions {
   readonly financialData: FinancialDataProvider;

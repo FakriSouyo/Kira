@@ -21,8 +21,9 @@ apps/cli remains more than a thin host adapter. It owns command dispatch,
 Session switching and new-Session creation/configuration for `/new`, plus
 `/resume` and `/continue` argument validation and target selection,
 control-command input projection, Judge Execution lifecycle and WorkflowRunner
-composition, same-Execution acquisition, release planning/publication and
-startup repair, trace wiring, provider composition, CLI event projection and streaming presentation, and
+composition, same-Execution acquisition, the CLI-to-engine release store
+adapter, startup release reconciliation and historical repair, trace wiring,
+provider composition, CLI event projection and streaming presentation, and
 ConversationController. It also owns journal
 correlation/causation when audit events are appended.
 packages/engine (@harness/engine) owns financial, Attachment, and Document
@@ -48,19 +49,21 @@ configuration/provider/model rebinding and switching, `/resume` and `/continue`
 argument validation and target selection,
 control-command input projection, transcript/journal projection, Judge
 Execution lifecycle and WorkflowRunner composition, same-Execution acquisition,
-release planning/publication and startup repair, trace composition, provider
-composition, CLI event projection, streaming presentation, and local-path
-Attachment import. The engine owns host-neutral Judge checkpoint
-encoding/decoding, resume compatibility planning, restore-frontier derivation,
-and durable Judge resume projection repair through supplied narrow store
-contracts. The CLI validates the resume target and acquires the same interrupted
-Execution only after engine planning succeeds.
+release store adaptation, startup release reconciliation and historical repair,
+trace composition, provider composition, CLI event projection, streaming
+presentation, and local-path Attachment import. The engine owns host-neutral
+Judge checkpoint encoding/decoding, resume compatibility planning,
+restore-frontier derivation, durable Judge resume projection repair, and the
+current Judge release core through supplied narrow store contracts. The CLI
+validates the resume target and acquires the same interrupted Execution only
+after engine planning succeeds; for a new current release it preserves
+prepare, settle Execution, then publish ordering.
 Engine coordinates the host-neutral attached-Turn lifecycle after CLI selects
 the existing Session, Turn, and Execution. Engine does not own
 ConversationController, AgentEvent presentation, host filesystem access, or
-persistence implementation. UA is incomplete; do not assume broader engine
-APIs exist. Do not put new reusable application/core behavior in CLI when a
-host-neutral boundary is clearly required.
+persistence implementation. UA extraction is incomplete; do not assume
+broader engine APIs exist. Do not put new reusable application/core behavior
+in CLI when a host-neutral boundary is clearly required.
 
 For attached-Turn lifecycle behavior, preserve the source distinction: normal
 return maps a still-running target Execution to a failed Turn, while an action
