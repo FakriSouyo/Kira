@@ -21,6 +21,7 @@ import {
   type StoredCounterpoint,
 } from '@harness/execution';
 import {
+  createExecutionProfile,
   createWorkflowNodeOutput,
   type ExecutionProfile,
   type JsonValue,
@@ -31,8 +32,11 @@ import type { ArtifactEnvelope } from '@harness/schemas';
 import {
   prepareJudgeReleasePlan,
   publishJudgeRelease,
+  reconcileCompletedJudgeReleases,
+  reconstructHistoricalJudgeArtifacts,
   workflowDependencyFingerprint,
   type JudgeReleasePlan,
+  type JudgeReleaseReconciliationStores,
   type JudgeReleaseStores,
 } from '@harness/engine';
 
@@ -551,5 +555,226 @@ describe('host-neutral Judge current release core', () => {
     const source = readFileSync(new URL('../src/judge/release.ts', import.meta.url), 'utf8');
     expect(source).not.toMatch(/(?:from|import)\s+['"][^'"]*(?:apps\/cli|\.\.\/apps|@harness\/database|packages\/database)/i);
     expect(source).not.toMatch(/\b(?:FinharnessDatabase|openDb|HarnessContext|AgentEvent|ConversationController)\b/);
+  });
+});
+
+function completedExecution(harness: Harness): ResearchExecution {
+  return {
+    ...harness.execution,
+    status: 'completed',
+    completedAt: COMPLETED_AT,
+    executionTime: 60,
+  };
+}
+
+function reconciliationStores(
+  harness: Harness,
+  options: { artifacts?: ArtifactEnvelope[]; receipt?: ClaimGraphReleaseReceipt | null } = {},
+) {
+  const execution = completedExecution(harness);
+  const artifactRows = [...(options.artifacts ?? [])];
+  let receipt = options.receipt ?? null;
+  const artifactWrites = vi.fn(async (candidates: readonly ArtifactEnvelope[]) => {
+    for (const candidate of candidates) {
+      const previous = artifactRows.find(row => row.artifactId === candidate.artifactId);
+      if (previous && JSON.stringify(previous) !== JSON.stringify(candidate)) throw new Error('immutable artifact write conflict');
+      if (!previous) artifactRows.push(candidate);
+    }
+    return [...candidates];
+  });
+  const receiptWrites = vi.fn(async (candidate: ClaimGraphReleaseReceipt) => {
+    if (receipt && JSON.stringify(receipt) !== JSON.stringify(candidate)) throw new Error('immutable release receipt conflict');
+    receipt ??= candidate;
+    return receipt;
+  });
+  const stores: JudgeReleaseReconciliationStores = {
+    ...harness.stores,
+    sessions: {
+      getSessionArtifacts: async () => ({ executions: [execution] }) as never,
+    },
+    executionProfiles: {
+      async getByExecutionId<TPayload extends JsonValue = JsonValue>(executionId: string): Promise<ExecutionProfile<TPayload> | null> {
+        return executionId === execution.id ? harness.profile as unknown as ExecutionProfile<TPayload> : null;
+      },
+    },
+    artifacts: {
+      getByExecution: async executionId => executionId === execution.id ? [...artifactRows] : [],
+      saveMany: artifactWrites,
+    },
+    claimGraphReleases: {
+      getByExecution: async executionId => executionId === execution.id ? receipt : null,
+      save: receiptWrites,
+    },
+  };
+  return {
+    execution,
+    stores,
+    artifactRows,
+    artifactWrites,
+    receiptWrites,
+    getReceipt: () => receipt,
+  };
+}
+
+async function publishedCurrentRelease(harness: Harness) {
+  const execution = completedExecution(harness);
+  const plan = await prepareJudgeReleasePlan({ stores: harness.stores, execution, profile: harness.profile });
+  return publishJudgeRelease({ stores: harness.stores, execution, profile: harness.profile, plan });
+}
+
+function makeHistorical(harness: Harness): typeof harness.profile {
+  const payload = Object.fromEntries(Object.entries(harness.profile.payload)
+    .filter(([key]) => key !== 'releaseContract' && key !== 'releaseContractFingerprint')) as JsonValue;
+  const profile = createExecutionProfile({
+    executionId: harness.execution.id,
+    workflowId: 'judge',
+    workflowVersion: 2,
+    graphFingerprint: harness.profile.graphFingerprint,
+    command: 'judge',
+    ticker: harness.execution.ticker,
+    payload,
+    createdAt: harness.profile.createdAt,
+  });
+  const previous = new Map(harness.outputs.map(output => [output.nodeId, output]));
+  const fingerprints = new Map<string, string>();
+  const outputs = definition.nodes.map(node => {
+    const output = previous.get(node.id);
+    if (!output) throw new Error(`Test fixture omitted ${node.id}`);
+    const regenerated = createWorkflowNodeOutput({
+      executionId: output.executionId,
+      workflowId: profile.workflowId,
+      workflowVersion: profile.workflowVersion,
+      nodeId: output.nodeId,
+      status: output.status,
+      outputKind: output.outputKind,
+      dependencyFingerprint: workflowDependencyFingerprint(node, fingerprints, profile.fingerprint),
+      payload: output.payload,
+      completionGeneration: output.completionGeneration,
+      createdAt: output.createdAt,
+    });
+    fingerprints.set(node.id, regenerated.outputFingerprint);
+    return regenerated;
+  });
+  harness.outputs.splice(0, harness.outputs.length, ...outputs);
+  harness.profile = profile as typeof harness.profile;
+  return harness.profile;
+}
+
+describe('host-neutral Judge completed release reconciliation', () => {
+  it('skips non-Judge, incomplete, missing-profile, wrong-workflow, and unsupported-version rows', async () => {
+    const harness = createHarness();
+    const rows = [
+      { ...harness.execution, id: 'execution-non-judge', command: 'screen', status: 'completed' as const },
+      { ...harness.execution, id: 'execution-incomplete', status: 'running' as const },
+      { ...harness.execution, id: 'execution-missing-profile', status: 'completed' as const },
+      { ...harness.execution, id: 'execution-wrong-workflow', status: 'completed' as const },
+      { ...harness.execution, id: 'execution-unsupported-version', status: 'completed' as const },
+    ];
+    const profileById = new Map<string, ExecutionProfile | null>([
+      ['execution-missing-profile', null],
+      ['execution-wrong-workflow', { ...harness.profile, workflowId: 'other' }],
+      ['execution-unsupported-version', { ...harness.profile, workflowVersion: 3 }],
+    ]);
+    const getArtifacts = vi.fn(async () => []);
+    const base = reconciliationStores(harness);
+    const stores: JudgeReleaseReconciliationStores = {
+      ...base.stores,
+      sessions: { getSessionArtifacts: async () => ({ executions: rows }) as never },
+      executionProfiles: {
+        async getByExecutionId<TPayload extends JsonValue = JsonValue>(id: string): Promise<ExecutionProfile<TPayload> | null> {
+          return (profileById.get(id) ?? null) as ExecutionProfile<TPayload> | null;
+        },
+      },
+      artifacts: { getByExecution: getArtifacts, saveMany: base.artifactWrites },
+    };
+
+    await expect(reconcileCompletedJudgeReleases({ stores, sessionId: harness.execution.sessionId })).resolves.toBe(0);
+    expect(getArtifacts).not.toHaveBeenCalled();
+  });
+
+  it('validates an already canonical current release while preserving the zero repair count', async () => {
+    const harness = createHarness();
+    const canonical = await publishedCurrentRelease(harness);
+    const state = reconciliationStores(harness, { artifacts: canonical.artifacts, receipt: canonical.receipt });
+
+    await expect(reconcileCompletedJudgeReleases({ stores: state.stores, sessionId: harness.execution.sessionId })).resolves.toBe(0);
+    expect(state.artifactWrites).toHaveBeenCalledOnce();
+    expect(state.receiptWrites).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['one missing artifact with a receipt present', 2, true],
+    ['a missing receipt', 3, false],
+    ['all artifacts and receipt missing', 0, false],
+  ])('repairs current release state with %s and returns one repair', async (_label, artifactCount, hasReceipt) => {
+    const harness = createHarness();
+    const canonical = await publishedCurrentRelease(harness);
+    const state = reconciliationStores(harness, {
+      artifacts: canonical.artifacts.slice(0, artifactCount),
+      receipt: hasReceipt ? canonical.receipt : null,
+    });
+
+    await expect(reconcileCompletedJudgeReleases({ stores: state.stores, sessionId: harness.execution.sessionId })).resolves.toBe(1);
+    expect(state.artifactRows).toHaveLength(3);
+    expect(state.getReceipt()).not.toBeNull();
+  });
+
+  it('fails closed when an immutable current artifact conflicts', async () => {
+    const harness = createHarness();
+    const canonical = await publishedCurrentRelease(harness);
+    const altered = structuredClone(canonical.artifacts[0]!);
+    (altered.payload as Record<string, unknown>).conflicting = true;
+    const conflicting = [altered, ...canonical.artifacts.slice(1)];
+    const state = reconciliationStores(harness, { artifacts: conflicting, receipt: canonical.receipt });
+
+    await expect(reconcileCompletedJudgeReleases({ stores: state.stores, sessionId: harness.execution.sessionId }))
+      .rejects.toThrow(/immutable artifact write conflict/);
+  });
+
+  it('fails closed when an immutable current release receipt conflicts', async () => {
+    const harness = createHarness();
+    const canonical = await publishedCurrentRelease(harness);
+    const state = reconciliationStores(harness, {
+      artifacts: canonical.artifacts,
+      receipt: { ...canonical.receipt, ticker: 'OTHER' },
+    });
+
+    await expect(reconcileCompletedJudgeReleases({ stores: state.stores, sessionId: harness.execution.sessionId }))
+      .rejects.toThrow(/immutable release receipt conflict/);
+  });
+
+  it('reconstructs historical artifacts without creating a current release receipt', async () => {
+    const harness = createHarness();
+    makeHistorical(harness);
+    const state = reconciliationStores(harness);
+
+    await expect(reconcileCompletedJudgeReleases({ stores: state.stores, sessionId: harness.execution.sessionId })).resolves.toBe(1);
+    expect(state.artifactRows.map(artifact => artifact.kind)).toEqual(['BULL_CASE', 'BEAR_CASE', 'VERDICT']);
+    expect(state.getReceipt()).toBeNull();
+    expect(state.receiptWrites).not.toHaveBeenCalled();
+  });
+
+  it('keeps already-complete historical artifact state as a no-op', async () => {
+    const harness = createHarness();
+    makeHistorical(harness);
+    const artifacts = await reconstructHistoricalJudgeArtifacts({
+      stores: {
+        ...harness.stores,
+        artifacts: { saveMany: async candidates => [...candidates] },
+      },
+      execution: completedExecution(harness),
+      profile: harness.profile,
+    });
+    const state = reconciliationStores(harness, { artifacts });
+
+    await expect(reconcileCompletedJudgeReleases({ stores: state.stores, sessionId: harness.execution.sessionId })).resolves.toBe(0);
+    expect(state.artifactWrites).not.toHaveBeenCalled();
+    expect(state.receiptWrites).not.toHaveBeenCalled();
+  });
+
+  it('keeps the reconciliation module host-neutral and independent of workflow execution', () => {
+    const source = readFileSync(new URL('../src/judge/releaseReconciliation.ts', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/(?:from|import)\s+['"][^'"]*(?:apps\/cli|\.\.\/apps|@harness\/database|packages\/database)/i);
+    expect(source).not.toMatch(/\b(?:FinharnessDatabase|HarnessContext|ConversationController|WorkflowRunner|openDb|SQLite)\b/);
   });
 });
