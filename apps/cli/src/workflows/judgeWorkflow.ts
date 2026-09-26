@@ -12,12 +12,16 @@ import { FinancialDataVerificationError } from '@harness/financial-data';
 import {
   assertNotAborted,
   createJudgeNodeExecutors,
+  JudgeCheckpointWriter,
+  planJudgeResume,
   WorkflowTraceRecorder,
   type BearChallengeResponse,
   type BullAnalysisResponse,
   type ChallengeTurn,
   type CollectedSources,
+  type JudgeCheckpointStores,
   type JudgeProgress,
+  type JudgeResumePlan,
   type JudgeTurn,
   type SynthesisTurn,
   type ThesisTurn,
@@ -25,7 +29,7 @@ import {
 import type { SkillReference } from '@harness/subagent-core';
 import type { AgentEvent, UiWorkflowStepStatus } from '../repl/events';
 import type { HarnessContext } from '../context';
-import { ensureJudgeArtifacts, JudgeCheckpointWriter, planJudgeResume, prepareJudgeReleasePlan, publishJudgeRelease, repairJudgeProjections, type JudgeReleasePlan, type JudgeResumePlan } from './judgeCheckpoint';
+import { ensureJudgeArtifacts, prepareJudgeReleasePlan, publishJudgeRelease, repairJudgeProjections, type JudgeReleasePlan } from './judgeCheckpoint';
 import { projectFinancialToolEvent } from '../tools/financialToolEvents';
 
 /**
@@ -136,6 +140,12 @@ export async function judgeWorkflow(
 ): Promise<JudgeArtifacts> {
   const startedAt = Date.now();
   const definition = createJudgeWorkflow();
+  const checkpointStores: JudgeCheckpointStores = {
+    workflowNodeOutputs: ctx.db.workflowNodeOutputs,
+    financialSnapshots: ctx.db.financialSnapshots,
+    evidence: ctx.db.evidence,
+    contextSnapshots: ctx.db.contextSnapshots,
+  };
   let resumePlan: JudgeResumePlan | undefined;
   let releasePlan: JudgeReleasePlan | undefined;
   let profile: Awaited<ReturnType<typeof createJudgeExecutionProfile>> | undefined;
@@ -151,7 +161,7 @@ export async function judgeWorkflow(
       if (!profile) throw new UserFriendlyError('INCOMPATIBLE_CHECKPOINT', 'This execution has no immutable Judge execution profile.', 'Historical interrupted executions cannot be resumed by PR P.');
       if (!ctx.config) throw new UserFriendlyError('INCOMPATIBLE_CHECKPOINT', 'The active runtime configuration is unavailable for resume validation.', 'Start a new /judge after checking configuration.');
       resumePlan = await planJudgeResume({
-        db: ctx.db,
+        stores: checkpointStores,
         execution: existing,
         profile,
         definition,
@@ -211,7 +221,7 @@ export async function judgeWorkflow(
     const recorder = new WorkflowTraceRecorder({ runId: run.id, definition, store: ctx.db.sessions });
     const checkpointWriter = opts.lifecycle && profile
       ? new JudgeCheckpointWriter({
-        db: ctx.db,
+        stores: checkpointStores,
         execution: run as unknown as import('@harness/session-core').ResearchExecution,
         profile,
         definition,

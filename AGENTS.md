@@ -21,8 +21,8 @@ apps/cli remains more than a thin host adapter. It owns command dispatch,
 Session switching and new-Session creation/configuration for `/new`, plus
 `/resume` and `/continue` argument validation and target selection,
 control-command input projection, Judge Execution lifecycle and WorkflowRunner
-composition, checkpoint/resume/release and trace wiring, provider composition,
-CLI event projection and streaming presentation, and
+composition, same-Execution acquisition, release planning/publication and
+startup repair, trace wiring, provider composition, CLI event projection and streaming presentation, and
 ConversationController. It also owns journal
 correlation/causation when audit events are appended.
 packages/engine (@harness/engine) owns financial, Attachment, and Document
@@ -47,10 +47,14 @@ still owns fresh-input parsing and presentation, `/new` Session creation,
 configuration/provider/model rebinding and switching, `/resume` and `/continue`
 argument validation and target selection,
 control-command input projection, transcript/journal projection, Judge
-Execution lifecycle and WorkflowRunner composition, checkpoint/resume/release,
-trace composition, provider composition, CLI event projection, streaming
-presentation, and local-path Attachment import. The Judge resume workflow owns
-compatibility validation and same-Execution acquisition/resume.
+Execution lifecycle and WorkflowRunner composition, same-Execution acquisition,
+projection repair, release planning/publication and startup repair, trace
+composition, provider composition, CLI event projection, streaming
+presentation, and local-path Attachment import. The engine owns host-neutral
+Judge checkpoint encoding/decoding, resume compatibility planning, and
+restore-frontier derivation through supplied stores. The CLI validates the
+resume target and acquires the same interrupted Execution only after engine
+planning succeeds.
 Engine coordinates the host-neutral attached-Turn lifecycle after CLI selects
 the existing Session, Turn, and Execution. Engine does not own
 ConversationController, AgentEvent presentation, host filesystem access, or

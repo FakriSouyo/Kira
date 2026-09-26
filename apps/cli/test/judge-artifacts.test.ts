@@ -5,12 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkflowRunner } from '@harness/command-core';
 import { checkpointKindForNode, createJudgeWorkflow, JUDGE_NODE_IDS, JUDGE_RELEASE_CONTRACT_FINGERPRINT } from '@harness/command-judge';
 import { openDb, type FinharnessDatabase } from '@harness/database';
+import { workflowDependencyFingerprint } from '@harness/engine';
 import { claimGraphFingerprint, createClaimGraphReleaseReceipt } from '@harness/execution';
 import { createExecutionProfile, createWorkflowNodeOutput } from '@harness/session-core';
 import { loadConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
 import { judgeWorkflow } from '../src/workflows/judgeWorkflow';
-import { repairCompletedJudgeReleases, workflowDependencyFingerprint } from '../src/workflows/judgeCheckpoint';
+import { repairCompletedJudgeReleases } from '../src/workflows/judgeCheckpoint';
 
 describe('PR F /judge typed artifacts', () => {
   let dir: string;

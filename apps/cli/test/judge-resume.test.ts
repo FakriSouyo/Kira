@@ -13,13 +13,19 @@ import { createExecutionProfile, createWorkflowNodeOutput } from '@harness/sessi
 import { buildContext } from '../src/context';
 import { loadConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
-import { createJudgeNodeExecutors } from '@harness/engine';
-import { decodeJudgeCheckpoint, JudgeCheckpointWriter } from '../src/workflows/judgeCheckpoint';
+import { createJudgeNodeExecutors, decodeJudgeCheckpoint, JudgeCheckpointWriter, type JudgeCheckpointStores } from '@harness/engine';
 import { resumeJudgeRun } from '../src/workflows/judgeWorkflow';
 
 describe('PR P same-Execution Judge resume', () => {
   let homeDir: string;
   let db: FinharnessDatabase;
+
+  const checkpointStores = (database: FinharnessDatabase): JudgeCheckpointStores => ({
+    workflowNodeOutputs: database.workflowNodeOutputs,
+    financialSnapshots: database.financialSnapshots,
+    evidence: database.evidence,
+    contextSnapshots: database.contextSnapshots,
+  });
 
   beforeEach(() => {
     homeDir = mkdtempSync(join(tmpdir(), 'finharness-judge-resume-'));
@@ -89,7 +95,7 @@ describe('PR P same-Execution Judge resume', () => {
 
     const decision = {};
     const prefix = { ...definition, nodes: definition.nodes.slice(0, 7) };
-    const writer = new JudgeCheckpointWriter({ db, execution, profile, definition });
+    const writer = new JudgeCheckpointWriter({ stores: checkpointStores(db), execution, profile, definition });
     const executors = createJudgeNodeExecutors({
       deps: {
         capabilityGateway: context.capabilityGateway,
