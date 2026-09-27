@@ -1,6 +1,6 @@
 # Kira Progress
 
-Last updated: 2026-09-27
+Last updated: 2026-09-28
 
 ## Current state
 
@@ -24,7 +24,8 @@ Last updated: 2026-09-27
 - UA16 Host-neutral Judge Release Reconciliation Extraction is complete on master.
 - UA17 Judge Workflow Host-Neutralization is the current broad phase.
 - UA17A Host-neutral Judge Runtime Composition Extraction is complete on master.
-- UA17B Host-neutral Judge Execution Preparation + Resume Acquisition is implemented in the current isolated source-review worktree; source review is pending.
+- UA17B Host-neutral Judge Execution Preparation + Resume Acquisition is complete on master.
+- UA17C Host-neutral Judge Completion + Release Orchestration Extraction is the current implementation/source-review slice.
 - Later UA17 slices remain unselected pending a fresh source audit.
 - Engine owns canonical fresh-Turn lifecycle orchestration for ordinary commands, natural-language conversation, local input, and the old-Session `/new` Turn through `runSessionTurn`, plus attached-Turn lifecycle orchestration after the host selects an existing target. The runner uses `ResearchSessionStore`; its normal success path uses `WorkingContextPublisher`, while `/new` explicitly opts out of success publication and its publication-only artifact reload.
 - Engine owns the host-neutral Judge node runtime and coordinates supplied CapabilityGateway, specialist, and domain store contracts.
@@ -32,9 +33,10 @@ Last updated: 2026-09-27
 - Engine owns durable Judge resume projection repair for WorkflowStep, Conversation, Claim, Counterpoint, Judgment, and ModelCall projections through narrow host-supplied stores.
 - Engine owns current Judge release preparation and publication through `JudgeReleaseStores`: current checkpoint completeness, durable Claim/Counterpoint parity, Claim Graph parity and artifact projections, current artifact construction, and release receipt construction.
 - Engine owns completed Judge release reconciliation and historical artifact reconstruction through `JudgeReleaseReconciliationStores`, reusing the current release core for T5 and the canonical artifact builder for historical executions.
+- Engine owns successful lifecycle-backed Judge completion through `completeJudgeExecution`: immutable profile-based current/history selection, current release validation before settlement, current artifact/receipt publication after settlement, and historical artifact reconstruction after settlement. Post-settlement errors identify the completed Execution and preserve the publication cause.
 - Engine owns Judge workflow runtime composition through one canonical WorkflowRunner, WorkflowTraceRecorder, JudgeCheckpointWriter, post-acquisition projection repair, restore-state composition, and typed runtime results.
 - Engine owns host-neutral Judge Execution creation, immutable profile persistence, resume compatibility planning, and same-Execution acquisition through the existing Session, profile, and checkpoint store contracts. The host still selects `/resume` and `/continue` targets.
-- CLI still owns `/new` Session creation, configuration/provider/model rebinding, ConversationController switching, journal reconciliation and prepared-context commit, `/resume` and `/continue` argument validation and target selection, Judge Execution settlement/cancellation, release preparation/publication and concrete release/reconciliation store adapters, startup invocation timing, journal/transcript and AgentEvent projection, provider composition, streaming presentation, and reload/suspend behavior. Current release ordering remains prepare, settle Execution, publish. Startup reconciliation remains before the Session artifact reload used for WorkingContext publication. The engine preparation operation completes resume planning before acquisition; engine projection repair follows acquisition and precedes WorkflowRunner execution.
+- CLI still owns `/new` Session creation, configuration/provider/model rebinding, ConversationController switching, journal reconciliation and prepared-context commit, `/resume` and `/continue` argument validation and target selection, Judge failed/cancelled settlement and host error policy, concrete release/reconciliation store adapters, startup invocation timing, journal/transcript and AgentEvent projection, provider composition, streaming presentation, and reload/suspend behavior. Startup reconciliation remains before the Session artifact reload used for WorkingContext publication. The engine preparation operation completes resume planning before acquisition; engine projection repair follows acquisition and precedes WorkflowRunner execution.
 - KB Internal Kira Identity Migration follows UA, then U Research Composition.
 
 The canonical dependency sequence and future design boundaries live in

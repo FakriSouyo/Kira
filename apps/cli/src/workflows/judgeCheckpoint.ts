@@ -1,10 +1,7 @@
 import type { FinharnessDatabase } from '@harness/database';
-import type { ExecutionProfile, ResearchExecution } from '@harness/session-core';
 import {
   reconcileCompletedJudgeReleases,
-  reconstructHistoricalJudgeArtifacts,
   type JudgeCheckpointStores,
-  type JudgeHistoricalArtifactStores,
   type JudgeReleaseReconciliationStores,
   type JudgeReleaseStores,
 } from '@harness/engine';
@@ -39,20 +36,6 @@ export function createJudgeReleaseReconciliationStores(db: FinharnessDatabase): 
     artifacts: db.artifacts,
     claimGraphReleases: db.claimGraphReleases,
   };
-}
-
-/** Thin compatibility adapter for the legacy Judge workflow publication path. */
-export async function ensureJudgeArtifacts(params: {
-  db: FinharnessDatabase;
-  execution: ResearchExecution;
-  profile: ExecutionProfile;
-}) {
-  const stores: JudgeHistoricalArtifactStores = {
-    ...checkpointStores(params.db),
-    claims: params.db.claims,
-    artifacts: params.db.artifacts,
-  };
-  return reconstructHistoricalJudgeArtifacts({ stores, execution: params.execution, profile: params.profile });
 }
 
 /** Thin compatibility adapter retained for startup and existing CLI integration callers. */

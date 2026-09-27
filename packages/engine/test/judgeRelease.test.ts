@@ -26,10 +26,13 @@ import {
   type ExecutionProfile,
   type JsonValue,
   type ResearchExecution,
+  type ResearchSessionStore,
   type WorkflowNodeOutput,
 } from '@harness/session-core';
 import type { ArtifactEnvelope } from '@harness/schemas';
 import {
+  completeJudgeExecution,
+  JudgeExecutionCompletionError,
   prepareJudgeReleasePlan,
   publishJudgeRelease,
   reconcileCompletedJudgeReleases,
@@ -375,6 +378,10 @@ function prepare(harness: Harness) {
   });
 }
 
+function completionStores(releaseStores: JudgeReleaseStores) {
+  return { releaseStores, historicalArtifactStores: releaseStores };
+}
+
 describe('host-neutral Judge current release core', () => {
   it('prepares a complete current release and preserves the artifact graph projections', async () => {
     const harness = createHarness({ conditional: true });
@@ -659,6 +666,212 @@ function makeHistorical(harness: Harness): typeof harness.profile {
   harness.profile = profile as typeof harness.profile;
   return harness.profile;
 }
+
+describe('host-neutral Judge execution completion', () => {
+  it('validates a current release before settlement and publishes only after completed settlement', async () => {
+    const harness = createHarness();
+    const order: string[] = [];
+    let settled = false;
+    const completed = completedExecution(harness);
+    const settleExecution = vi.fn<ResearchSessionStore['settleExecution']>(async (_id, status, result) => {
+      order.push('settle');
+      expect(status).toBe('completed');
+      settled = true;
+      return { ...completed, executionTime: result?.executionTimeSeconds ?? null };
+    });
+    const stores: JudgeReleaseStores = {
+      ...harness.stores,
+      workflowNodeOutputs: {
+        ...harness.stores.workflowNodeOutputs,
+        async listNodeOutputsForExecution<TPayload extends JsonValue = JsonValue>(executionId: string) {
+          order.push('plan');
+          return harness.stores.workflowNodeOutputs.listNodeOutputsForExecution<TPayload>(executionId);
+        },
+      },
+      artifacts: {
+        saveMany: vi.fn(async (artifacts: readonly ArtifactEnvelope[]) => {
+          order.push('artifacts');
+          expect(settled).toBe(true);
+          return [...artifacts];
+        }),
+      },
+      claimGraphReleases: {
+        save: vi.fn(async receipt => {
+          order.push('receipt');
+          expect(settled).toBe(true);
+          return receipt;
+        }),
+      },
+    };
+
+    const result = await completeJudgeExecution({
+      execution: harness.execution,
+      profile: harness.profile,
+      executionTimeSeconds: 12,
+      sessions: { settleExecution },
+      ...completionStores(stores),
+    });
+
+    expect(order).toEqual(['plan', 'settle', 'artifacts', 'receipt']);
+    expect(settleExecution).toHaveBeenCalledOnce();
+    expect(settleExecution).toHaveBeenCalledWith(harness.execution.id, 'completed', { executionTimeSeconds: 12 });
+    expect(result.execution).toMatchObject({ id: harness.execution.id, status: 'completed', completedAt: COMPLETED_AT });
+    expect(result.artifacts.map(artifact => artifact.kind)).toEqual(['BULL_CASE', 'BEAR_CASE', 'VERDICT']);
+  });
+
+  it('keeps release-plan validation failures before settlement and publication', async () => {
+    const harness = createHarness();
+    harness.overrideGraph({} as ClaimGraph);
+    const settleExecution = vi.fn<ResearchSessionStore['settleExecution']>();
+
+    await expect(completeJudgeExecution({
+      execution: harness.execution,
+      profile: harness.profile,
+      executionTimeSeconds: 12,
+      sessions: { settleExecution },
+      ...completionStores(harness.stores),
+    })).rejects.toMatchObject({ phase: 'before-settlement', execution: undefined, cause: expect.any(Error) });
+
+    expect(settleExecution).not.toHaveBeenCalled();
+    expect(harness.artifactWrites).not.toHaveBeenCalled();
+    expect(harness.receiptWrites).not.toHaveBeenCalled();
+  });
+
+  it('does not publish or claim completion when canonical settlement fails', async () => {
+    const harness = createHarness();
+    const settlementFailure = new Error('settlement unavailable');
+    const settleExecution = vi.fn<ResearchSessionStore['settleExecution']>(async () => { throw settlementFailure; });
+
+    await expect(completeJudgeExecution({
+      execution: harness.execution,
+      profile: harness.profile,
+      executionTimeSeconds: 12,
+      sessions: { settleExecution },
+      ...completionStores(harness.stores),
+    })).rejects.toMatchObject({ phase: 'before-settlement', execution: undefined, cause: settlementFailure });
+
+    expect(settleExecution).toHaveBeenCalledOnce();
+    expect(harness.artifactWrites).not.toHaveBeenCalled();
+    expect(harness.receiptWrites).not.toHaveBeenCalled();
+  });
+
+  it('identifies artifact publication failure after completed settlement and preserves its cause', async () => {
+    const harness = createHarness();
+    const completed = completedExecution(harness);
+    const publicationFailure = new Error('artifact write failed');
+    const settleExecution = vi.fn<ResearchSessionStore['settleExecution']>(async () => completed);
+    const artifacts = vi.fn(async (): Promise<ArtifactEnvelope[]> => { throw publicationFailure; });
+
+    const result = completeJudgeExecution({
+      execution: harness.execution,
+      profile: harness.profile,
+      executionTimeSeconds: 12,
+      sessions: { settleExecution },
+      ...completionStores({ ...harness.stores, artifacts: { saveMany: artifacts } }),
+    });
+
+    await expect(result).rejects.toBeInstanceOf(JudgeExecutionCompletionError);
+    await expect(result).rejects.toMatchObject({ phase: 'after-settlement', execution: completed, cause: publicationFailure });
+    expect(settleExecution).toHaveBeenCalledOnce();
+    expect(artifacts).toHaveBeenCalledOnce();
+    expect(harness.receiptWrites).not.toHaveBeenCalled();
+  });
+
+  it('identifies receipt publication failure after completed settlement and preserves its cause', async () => {
+    const harness = createHarness();
+    const completed = completedExecution(harness);
+    const publicationFailure = new Error('receipt write failed');
+    const settleExecution = vi.fn<ResearchSessionStore['settleExecution']>(async () => completed);
+    const receipt = vi.fn(async () => { throw publicationFailure; });
+    const artifacts = vi.fn(async (candidates: readonly ArtifactEnvelope[]) => [...candidates]);
+
+    const result = completeJudgeExecution({
+      execution: harness.execution,
+      profile: harness.profile,
+      executionTimeSeconds: 12,
+      sessions: { settleExecution },
+      ...completionStores({ ...harness.stores, artifacts: { saveMany: artifacts }, claimGraphReleases: { save: receipt } }),
+    });
+
+    await expect(result).rejects.toBeInstanceOf(JudgeExecutionCompletionError);
+    await expect(result).rejects.toMatchObject({ phase: 'after-settlement', execution: completed, cause: publicationFailure });
+    expect(settleExecution).toHaveBeenCalledOnce();
+    expect(artifacts).toHaveBeenCalledOnce();
+    expect(receipt).toHaveBeenCalledOnce();
+  });
+
+  it('settles a historical profile before reconstructing three artifacts without a T5 receipt', async () => {
+    const harness = createHarness();
+    const profile = makeHistorical(harness);
+    const order: string[] = [];
+    const settleExecution = vi.fn<ResearchSessionStore['settleExecution']>(async () => {
+      order.push('settle');
+      return completedExecution(harness);
+    });
+    const stores: JudgeReleaseStores = {
+      ...harness.stores,
+      workflowNodeOutputs: {
+        ...harness.stores.workflowNodeOutputs,
+        async listNodeOutputsForExecution<TPayload extends JsonValue = JsonValue>(executionId: string) {
+          order.push('reconstruct');
+          return harness.stores.workflowNodeOutputs.listNodeOutputsForExecution<TPayload>(executionId);
+        },
+      },
+      artifacts: {
+        saveMany: vi.fn(async (artifacts: readonly ArtifactEnvelope[]) => {
+          order.push('artifacts');
+          return [...artifacts];
+        }),
+      },
+    };
+
+    const result = await completeJudgeExecution({
+      execution: harness.execution,
+      profile,
+      executionTimeSeconds: 12,
+      sessions: { settleExecution },
+      ...completionStores(stores),
+    });
+
+    expect(order).toEqual(['settle', 'reconstruct', 'artifacts']);
+    expect(result.execution.status).toBe('completed');
+    expect(result.artifacts.map(artifact => artifact.kind)).toEqual(['BULL_CASE', 'BEAR_CASE', 'VERDICT']);
+    expect(harness.receiptWrites).not.toHaveBeenCalled();
+  });
+
+  it('keeps historical reconstruction failures post-settlement and never settles again', async () => {
+    const harness = createHarness();
+    const profile = makeHistorical(harness);
+    const completed = completedExecution(harness);
+    const reconstructionFailure = new Error('historical checkpoint unavailable');
+    const settleExecution = vi.fn<ResearchSessionStore['settleExecution']>(async () => completed);
+    const stores: JudgeReleaseStores = {
+      ...harness.stores,
+      workflowNodeOutputs: {
+        ...harness.stores.workflowNodeOutputs,
+        async listNodeOutputsForExecution() { throw reconstructionFailure; },
+      },
+    };
+
+    await expect(completeJudgeExecution({
+      execution: harness.execution,
+      profile,
+      executionTimeSeconds: 12,
+      sessions: { settleExecution },
+      ...completionStores(stores),
+    })).rejects.toMatchObject({ phase: 'after-settlement', execution: completed, cause: reconstructionFailure });
+
+    expect(settleExecution).toHaveBeenCalledOnce();
+    expect(harness.artifactWrites).not.toHaveBeenCalled();
+    expect(harness.receiptWrites).not.toHaveBeenCalled();
+  });
+
+  it('keeps completion orchestration independent of CLI, database, provider, and filesystem modules', () => {
+    const source = readFileSync(new URL('../src/judge/executionCompletion.ts', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/(?:from|import)\s+['"][^'"]*(?:apps\/cli|@harness\/(?:database|financial-data|llm|providers?|config)|packages\/database|node:fs|(?:node:)?fs(?:\/|['"]))/i);
+    expect(source).not.toMatch(/\b(?:FinharnessDatabase|HarnessContext|AgentEvent|UserFriendlyError|provider|configuration|config|openDb|SQLite)\b/i);
+  });
+});
 
 describe('host-neutral Judge completed release reconciliation', () => {
   it('skips non-Judge, incomplete, missing-profile, wrong-workflow, and unsupported-version rows', async () => {

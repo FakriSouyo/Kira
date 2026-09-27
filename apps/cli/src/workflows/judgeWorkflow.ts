@@ -6,9 +6,9 @@ import { mapToUserFriendly, UserFriendlyError } from '@harness/shared';
 import { FinancialDataVerificationError } from '@harness/financial-data';
 import {
   JudgeExecutionPreparationError,
+  JudgeExecutionCompletionError,
+  completeJudgeExecution,
   prepareJudgeExecution,
-  prepareJudgeReleasePlan,
-  publishJudgeRelease,
   runJudgeWorkflowRuntime,
   type BearChallengeResponse,
   type BullAnalysisResponse,
@@ -16,13 +16,12 @@ import {
   type JudgeNodeEvent,
   type JudgeProjectionRepairStores,
   type JudgeProgress,
-  type JudgeReleasePlan,
   type PreparedJudgeExecution,
 } from '@harness/engine';
 import type { SkillReference } from '@harness/subagent-core';
 import type { AgentEvent, UiWorkflowStepStatus } from '../repl/events';
 import type { HarnessContext } from '../context';
-import { createJudgeReleaseStores, ensureJudgeArtifacts } from './judgeCheckpoint';
+import { createJudgeReleaseStores } from './judgeCheckpoint';
 import { projectFinancialToolEvent } from '../tools/financialToolEvents';
 
 /**
@@ -169,7 +168,6 @@ export async function judgeWorkflow(
     evidence: ctx.db.evidence,
     contextSnapshots: ctx.db.contextSnapshots,
   };
-  let releasePlan: JudgeReleasePlan | undefined;
   let prepared: PreparedJudgeExecution | undefined;
   let preparationFailure: unknown;
   let preparationFailed = false;
@@ -271,35 +269,25 @@ export async function judgeWorkflow(
     });
     const { collected, thesis, challenge, rebuttal, judgeTurn, judgment, synthesis } = runtime;
 
-    if (opts.lifecycle && profile && (!resumePlan || resumePlan.releaseKind === 'current')) {
-      releasePlan = await prepareJudgeReleasePlan({
-        stores: createJudgeReleaseStores(ctx.db),
-        execution: run as ResearchExecution,
-        profile,
-      });
-    }
-
     const executionTimeSeconds = (Date.now() - startedAt) / 1000;
-    const completed = opts.lifecycle
-      ? await ctx.db.sessions.settleExecution(run.id, 'completed', { executionTimeSeconds })
-      : await ctx.db.execution.completeRun(run.id, executionTimeSeconds);
-    executionSettled = true;
+    let completed: ExecutionRun | ResearchExecution;
     let artifactRefs: DurableArtifactRef[] = [];
     if (opts.lifecycle) {
-      const saved = releasePlan
-        ? (await publishJudgeRelease({
-          stores: createJudgeReleaseStores(ctx.db),
-          execution: completed as ResearchExecution,
-          profile: profile!,
-          plan: releasePlan,
-        })).artifacts
-        : await ensureJudgeArtifacts({
-          db: ctx.db,
-          execution: completed as ResearchExecution,
-          profile: profile!,
-        });
-      artifactRefs = saved.map(artifact => ({ kind: artifact.kind, artifactId: artifact.artifactId }));
+      const releaseStores = createJudgeReleaseStores(ctx.db);
+      const completion = await completeJudgeExecution({
+        execution: run as ResearchExecution,
+        profile: profile!,
+        executionTimeSeconds,
+        sessions: ctx.db.sessions,
+        releaseStores,
+        historicalArtifactStores: releaseStores,
+      });
+      completed = completion.execution;
+      artifactRefs = completion.artifacts.map(artifact => ({ kind: artifact.kind, artifactId: artifact.artifactId }));
+    } else {
+      completed = await ctx.db.execution.completeRun(run.id, executionTimeSeconds);
     }
+    executionSettled = true;
     events({
       type: 'verdict',
       stance: judgment.stance, score: judgment.score, confidence: judgment.confidence,
@@ -324,8 +312,10 @@ export async function judgeWorkflow(
     };
   } catch (error) {
     if (executionSettled) throw error;
+    if (error instanceof JudgeExecutionCompletionError && error.phase === 'after-settlement') throw error.cause;
     // The runtime wraps required-step failures; the user must see the original cause.
-    const cause = error instanceof WorkflowStepError ? error.cause ?? error : error;
+    const completionCause = error instanceof JudgeExecutionCompletionError ? error.cause : error;
+    const cause = completionCause instanceof WorkflowStepError ? completionCause.cause ?? completionCause : completionCause;
     const aborted = Boolean(opts.signal?.aborted);
     const friendly = aborted
       ? new UserFriendlyError('ABORTED', 'Aborted', 'Run cancelled at phase boundary')
