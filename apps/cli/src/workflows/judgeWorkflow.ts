@@ -1,35 +1,27 @@
 import type { ExecutionRun } from '@harness/execution';
 import type { DurableArtifactRef, Evidence, Judgment } from '@harness/schemas';
 import {
-  createJudgeCommandContext, createJudgeWorkflow,
+  createJudgeWorkflow,
   createJudgeExecutionProfile,
   judgeWorkflowGraphFingerprint,
-  type JudgeRoundDecision,
 } from '@harness/command-judge';
-import { WorkflowRunner, WorkflowStepError, type WorkflowEvent } from '@harness/command-core';
+import { WorkflowStepError, type WorkflowEvent } from '@harness/command-core';
+import type { ResearchExecution } from '@harness/session-core';
 import { mapToUserFriendly, UserFriendlyError } from '@harness/shared';
 import { FinancialDataVerificationError } from '@harness/financial-data';
 import {
-  assertNotAborted,
-  createJudgeNodeExecutors,
-  JudgeCheckpointWriter,
   planJudgeResume,
   prepareJudgeReleasePlan,
   publishJudgeRelease,
-  repairJudgeProjections,
-  WorkflowTraceRecorder,
+  runJudgeWorkflowRuntime,
   type BearChallengeResponse,
   type BullAnalysisResponse,
-  type ChallengeTurn,
-  type CollectedSources,
   type JudgeCheckpointStores,
+  type JudgeNodeEvent,
   type JudgeProjectionRepairStores,
   type JudgeProgress,
   type JudgeReleasePlan,
   type JudgeResumePlan,
-  type JudgeTurn,
-  type SynthesisTurn,
-  type ThesisTurn,
 } from '@harness/engine';
 import type { SkillReference } from '@harness/subagent-core';
 import type { AgentEvent, UiWorkflowStepStatus } from '../repl/events';
@@ -119,8 +111,15 @@ function projectWorkflowStep(event: WorkflowEvent, nodes: ReadonlyMap<string, Pr
   };
 }
 
-function value<T>(values: Readonly<Record<string, unknown>>, nodeId: string): T {
-  return values[nodeId] as T;
+function projectJudgeNodeEvent(event: JudgeNodeEvent, emit: (event: AgentEvent) => void): void {
+  switch (event.type) {
+    case 'phase': emit({ type: 'phase', phase: event.phase, label: event.label }); return;
+    case 'agent.start': emit({ type: 'agent.start', agent: event.agent }); return;
+    case 'agent.text': emit({ type: 'agent.text', agent: event.agent, text: event.text }); return;
+    case 'agent.complete': emit({ type: 'agent.complete', agent: event.agent }); return;
+    case 'evidence.found': emit({ type: 'evidence.found', id: event.id, source: event.source }); return;
+    case 'command.output': emit({ type: 'command.output', text: event.text }); return;
+  }
 }
 
 function judgeProjectionRepairStores(ctx: HarnessContext): JudgeProjectionRepairStores {
@@ -168,7 +167,6 @@ export async function judgeWorkflow(
   opts: { conditional?: boolean; reasoning?: boolean; signal?: AbortSignal; lifecycle?: { sessionId: string; turnId: string }; resumeExecutionId?: string } = {},
 ): Promise<JudgeArtifacts> {
   const startedAt = Date.now();
-  const definition = createJudgeWorkflow();
   const checkpointStores: JudgeCheckpointStores = {
     workflowNodeOutputs: ctx.db.workflowNodeOutputs,
     financialSnapshots: ctx.db.financialSnapshots,
@@ -189,6 +187,7 @@ export async function judgeWorkflow(
       profile = await ctx.db.executionProfiles.getByExecutionId(existing.id) as typeof profile;
       if (!profile) throw new UserFriendlyError('INCOMPATIBLE_CHECKPOINT', 'This execution has no immutable Judge execution profile.', 'Historical interrupted executions cannot be resumed by PR P.');
       if (!ctx.config) throw new UserFriendlyError('INCOMPATIBLE_CHECKPOINT', 'The active runtime configuration is unavailable for resume validation.', 'Start a new /judge after checking configuration.');
+      const definition = createJudgeWorkflow();
       resumePlan = await planJudgeResume({
         stores: checkpointStores,
         execution: existing,
@@ -233,110 +232,62 @@ export async function judgeWorkflow(
       });
       await ctx.db.executionProfiles.save(profile);
     }
-    events({
-      type: 'workflow.plan',
-      workflowId: definition.id,
-      nodes: definition.nodes.map(node => ({
-        id: node.id,
-        label: node.label,
-        parentIds: node.dependsOn ?? [],
-        ...(node.executor ? { owner: node.executor.id } : {}),
-      })),
-    });
-
-    // One canonical workflow event stream: the TUI projection and the durable
-    // trace recorder are subscribers, never separate sources of execution truth.
-    const nodes = new Map<string, ProjectedNode>(definition.nodes.map(node => [node.id, node] as const));
-    const recorder = new WorkflowTraceRecorder({ runId: run.id, definition, store: ctx.db.sessions });
-    const checkpointWriter = opts.lifecycle && profile
-      ? new JudgeCheckpointWriter({
-        stores: checkpointStores,
-        execution: run as unknown as import('@harness/session-core').ResearchExecution,
-        profile,
-        definition,
-        initialOutputs: resumePlan?.outputs,
-      })
-      : undefined;
-    if (resumePlan && opts.lifecycle) {
-      await repairJudgeProjections({
-        stores: judgeProjectionRepairStores(ctx),
-        execution: run as unknown as import('@harness/session-core').ResearchExecution,
-        outputs: resumePlan.outputs,
-      });
-    }
-    const runner = new WorkflowRunner({
-      onNodeCompleted: checkpointWriter ? (node, value, inputs) => checkpointWriter.completed(node, value, inputs) : undefined,
-      onNodeSkipped: checkpointWriter ? node => checkpointWriter.skipped(node) : undefined,
-      onNodeFailed: checkpointWriter ? (node, error) => checkpointWriter.optionalFailure(node, error) : undefined,
-      onEvent: async (event) => {
-        events(projectWorkflowStep(event, nodes));
-        await recorder.handle(event);
+    let projectedNodes = new Map<string, ProjectedNode>();
+    const runtime = await runJudgeWorkflowRuntime({
+      run: { id: run.id, ticker, createdAt: run.createdAt },
+      dependencies: {
+        node: {
+          capabilityGateway: ctx.capabilityGateway,
+          bull: ctx.bull,
+          bear: ctx.bear,
+          judge: ctx.judge,
+          validator: ctx.validator,
+          researchers,
+          evidence: ctx.db.evidence,
+          financialSnapshots: ctx.db.financialSnapshots,
+          conversation: ctx.db.conversation,
+          claims: ctx.db.claims,
+          counterpoints: ctx.db.counterpoints,
+          judgments: ctx.db.judgments,
+        },
+        trace: ctx.db.sessions,
       },
-    });
-
-    const decision: JudgeRoundDecision = {};
-    const restoredValue = <T>(nodeId: string): T | undefined => {
-      const seed = resumePlan?.restored.find(candidate => candidate.nodeId === nodeId);
-      return seed?.status === 'completed' ? seed.value as T : undefined;
-    };
-    const restoredEvaluation = restoredValue<JudgeTurn>('evaluate-arguments');
-    if (restoredEvaluation) decision.extraRound = restoredEvaluation.needsExtra;
-    const restoredRound1Bear = restoredValue<ChallengeTurn>('round-1-bear-challenge');
-    const restoredConditionalBear = restoredValue<ChallengeTurn>('conditional-bear-rechallenge');
-    const executors = createJudgeNodeExecutors({
-      deps: {
-        capabilityGateway: ctx.capabilityGateway,
-        bull: ctx.bull,
-        bear: ctx.bear,
-        judge: ctx.judge,
-        validator: ctx.validator,
-        researchers,
-        evidence: ctx.db.evidence,
-        financialSnapshots: ctx.db.financialSnapshots,
-        conversation: ctx.db.conversation,
-        claims: ctx.db.claims,
-        counterpoints: ctx.db.counterpoints,
-        judgments: ctx.db.judgments,
-      },
-      ticker, runId: run.id, events,
-      onToolEvent: event => projectFinancialToolEvent(event, { ticker, emit: events }),
-      progress, decision, reasoning, conditional,
-      executionStartedAt: run.createdAt,
-      lifecycle: opts.lifecycle,
-      checkpoint: checkpointWriter
-        ? (nodeId, value) => checkpointWriter.completedValue(nodeId, value)
-        : undefined,
-      restored: {
-        round1BearCounterpoints: restoredRound1Bear?.counterpoints,
-        conditionalBearCounterpoints: restoredConditionalBear?.counterpoints,
-      },
-      trace: { recordSubagentResult: (nodeId, result) => recorder.recordSubagentResult(nodeId, result) },
-    });
-    const context = createJudgeCommandContext({
-      reasoningMode: reasoning ? 'reasoning' : 'usual',
+      reasoning,
       conditional,
-      researchers,
-      executors,
-      decision,
+      progress,
+      signal: opts.signal,
+      ...(opts.lifecycle && profile ? {
+        canonical: {
+          execution: run as ResearchExecution,
+          profile,
+          checkpointStores,
+          ...(resumePlan ? { projectionRepairStores: judgeProjectionRepairStores(ctx) } : {}),
+        },
+      } : {}),
+      resumePlan,
+      onPlan: definition => {
+        projectedNodes = new Map<string, ProjectedNode>(definition.nodes.map(node => [node.id, node] as const));
+        events({
+          type: 'workflow.plan',
+          workflowId: definition.id,
+          nodes: definition.nodes.map(node => ({
+            id: node.id,
+            label: node.label,
+            parentIds: node.dependsOn ?? [],
+            ...(node.executor ? { owner: node.executor.id } : {}),
+          })),
+        });
+      },
+      onWorkflowEvent: event => events(projectWorkflowStep(event, projectedNodes)),
+      onJudgeNodeEvent: event => projectJudgeNodeEvent(event, events),
+      onToolEvent: event => projectFinancialToolEvent(event, { ticker, emit: events }),
     });
-
-    const values = await runner.run(definition, context, { signal: opts.signal, restored: resumePlan?.restored });
-    assertNotAborted(opts.signal);
-
-    const collected = value<CollectedSources>(values, 'collect-sources');
-    const thesis = value<ThesisTurn>(values, 'round-1-bull-thesis');
-    const challenge = value<ChallengeTurn>(values, 'round-1-bear-challenge');
-    const rebuttal = value<ThesisTurn>(values, 'round-2-bull-rebuttal');
-    const firstVerdict = value<JudgeTurn>(values, 'evaluate-arguments');
-    const resolved = values['resolve-conflicts'] as JudgeTurn | undefined;
-    const synthesis = value<SynthesisTurn>(values, 'synthesize-verdict');
-    const judgment = synthesis.judgment;
-    const judgeTurn = resolved ?? firstVerdict;
+    const { collected, thesis, challenge, rebuttal, judgeTurn, judgment, synthesis } = runtime;
 
     if (opts.lifecycle && profile && (!resumePlan || resumePlan.releaseKind === 'current')) {
       releasePlan = await prepareJudgeReleasePlan({
         stores: createJudgeReleaseStores(ctx.db),
-        execution: run as unknown as import('@harness/session-core').ResearchExecution,
+        execution: run as ResearchExecution,
         profile,
       });
     }
@@ -351,13 +302,13 @@ export async function judgeWorkflow(
       const saved = releasePlan
         ? (await publishJudgeRelease({
           stores: createJudgeReleaseStores(ctx.db),
-          execution: completed as unknown as import('@harness/session-core').ResearchExecution,
+          execution: completed as ResearchExecution,
           profile: profile!,
           plan: releasePlan,
         })).artifacts
         : await ensureJudgeArtifacts({
           db: ctx.db,
-          execution: completed as unknown as import('@harness/session-core').ResearchExecution,
+          execution: completed as ResearchExecution,
           profile: profile!,
         });
       artifactRefs = saved.map(artifact => ({ kind: artifact.kind, artifactId: artifact.artifactId }));
@@ -382,7 +333,7 @@ export async function judgeWorkflow(
       judgment,
       artifactRefs,
       subagentAudit: { bull: thesis.result.skills, bear: challenge.result.skills, judge: judgeTurn.result.skills },
-      conditionalUsed: synthesis.rounds > 1,
+      conditionalUsed: runtime.conditionalUsed,
     };
   } catch (error) {
     if (executionSettled) throw error;

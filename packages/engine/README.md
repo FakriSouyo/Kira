@@ -117,9 +117,10 @@ context policy, model runtime authority, or persistence implementation. The CLI
 owns fresh-input parsing and presentation, `/new` Session creation, runtime
 rebinding and switching, transcript/journal and event projection, streaming
 display, cancellation presentation, provider composition, Judge Execution
-lifecycle and WorkflowRunner composition, same-Execution acquisition,
-startup invocation timing, concrete Judge release store adaptation, trace
-composition, and control-command input projection. The engine plans and
+lifecycle, resume planning/acquisition, startup invocation timing, concrete
+Judge release store adaptation, and control-command input projection. The
+engine Judge runtime composes the WorkflowRunner and trace recorder and
+repairs projections after acquisition. The engine plans and
 validates the restore frontier; CLI acquires the same interrupted Execution
 only after that plan succeeds.
 Natural-language conversation remains one Turn
@@ -139,16 +140,21 @@ Conversation, Claim, Counterpoint, and Judgment stores. Those contracts remain
 the authorities; the engine does not open or wrap a database.
 
 The runtime emits a narrow `JudgeNodeEvent`, keeps `JudgeProgress` as a supplied
-callback, forwards raw ToolRuntime events through `onToolEvent`, and receives
-checkpoint and trace callbacks from its host. The CLI adapts ToolRuntime events
-to its existing `tool.start` / `tool.complete` events and retains Judge
-Execution lifecycle and `WorkflowRunner` composition. Current release
-preparation, parity validation, artifact construction, receipt construction,
-and publication are owned by the host-neutral release core described below.
-The CLI still supplies stores, settles the Execution between prepare and
-publish, composes traces, and projects workflow/session/verdict
-`AgentEvent` values. The 15-node graph, workflow version, capability plan,
-checkpoint format, resume rules, and release contract remain unchanged.
+callback, and forwards raw ToolRuntime events through `onToolEvent`.
+`runJudgeWorkflowRuntime` composes the canonical Judge definition with one
+`WorkflowRunner`, `WorkflowTraceRecorder`, optional `JudgeCheckpointWriter`,
+post-acquisition resume projection repair, restored runtime closure state, and
+typed semantic outputs. Direct legacy runs use the same runner without
+checkpoint stores or fabricated lifecycle objects. CLI adapts node, workflow,
+and ToolRuntime events into its existing presentation events and retains Judge
+Execution lifecycle, resume planning/acquisition, provider composition, and
+release ordering. Current release preparation, parity validation, artifact
+construction, receipt construction, and publication are owned by the
+host-neutral release core described below. The CLI still supplies stores,
+settles the Execution between prepare and publish, and projects
+workflow/session/verdict `AgentEvent` values. The 15-node graph, workflow
+version, capability plan, checkpoint format, resume rules, and release contract
+remain unchanged.
 
 ## Judge Checkpoint + Resume Core
 
@@ -173,11 +179,11 @@ ownership. It does not import `FinharnessDatabase`, `@harness/database`, or CLI
 modules.
 
 The CLI still owns Execution lifecycle and same-Execution acquisition, resume
-target selection, WorkflowRunner and trace composition, startup invocation
-timing, concrete release store adaptation, and AgentEvent projection. Resume
-compatibility planning completes before acquisition. The same Execution is
-resumed, and `resumeGeneration` remains owned by the existing execution
-store/acquisition flow.
+target selection, startup invocation timing, concrete release store adaptation,
+and AgentEvent projection. Resume compatibility planning completes before
+acquisition. Engine runtime repairs projections after acquisition and before
+WorkflowRunner execution. The same Execution is resumed, and `resumeGeneration`
+remains owned by the existing execution store/acquisition flow.
 
 ## Judge Current Release Core
 
@@ -244,8 +250,9 @@ behavior, message identities/order, deterministic step and ModelCall IDs,
 attempt one, null replay cost/currency, and idempotency. It replays durable
 checkpoint state and has no model, provider, tool-runtime, CLI, or concrete
 database dependency. CLI wraps its stores into the narrow contract and retains
-resume-target validation, same-Execution acquisition, `WorkflowRunner` and trace
-composition, startup invocation timing, release store adaptation, and
-`AgentEvent` projection. Current release planning/publication and completed
+resume-target validation, same-Execution acquisition, startup invocation
+timing, release store adaptation, and `AgentEvent` projection. The Judge
+workflow runtime composes `WorkflowRunner` and trace recording around the
+projection repair that follows acquisition. Current release planning/publication and completed
 release reconciliation live in the engine. Resume remains ordered: plan,
 acquire, repair, then `WorkflowRunner`.

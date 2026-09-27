@@ -17,7 +17,7 @@ export interface TraceableWorkflowDefinition {
   }>;
 }
 
-interface TraceStore {
+export interface WorkflowTraceStore {
   saveStep(params: {
     stepId?: string; runId: string; nodeId: string; parentNodeIds: string[]; subagent?: string;
     skills: Array<{ name: string; contentHash: string }>; status: WorkflowStepStatus;
@@ -36,7 +36,7 @@ interface TraceStore {
 export interface WorkflowTraceRecorderOptions {
   runId: string;
   definition: TraceableWorkflowDefinition;
-  store: TraceStore;
+  store: WorkflowTraceStore;
   pricingFor?: (provider: string, model: string) => ModelPricing | null;
 }
 
