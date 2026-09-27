@@ -72,12 +72,13 @@ UA12 Host-neutral Judge Node Runtime Extraction
 UA13 Host-neutral Judge Checkpoint + Resume Core Extraction
 UA14 Host-neutral Judge Resume Projection Repair Extraction
 UA15 Host-neutral Judge Current Release Core Extraction
+UA17A Host-neutral Judge Runtime Composition Extraction
 
 CURRENT
 
 UA Kira Engine Extraction
 UA17 Judge Workflow Host-Neutralization
-UA17A Host-neutral Judge Runtime Composition Extraction
+UA17B Host-neutral Judge Execution Preparation + Resume Acquisition
 
 Later UA17 slices remain unselected pending a fresh source audit.
 
@@ -118,7 +119,7 @@ boundaries established by earlier milestones.
 
 **Current broad phase:** UA17 — Judge Workflow Host-Neutralization.
 
-**Selected slice:** UA17A — Host-neutral Judge Runtime Composition Extraction.
+**Selected slice:** UA17B — Host-neutral Judge Execution Preparation + Resume Acquisition.
 
 UA1 — Host-neutral Capability Runtime Extraction, UA2 — Host-neutral Workflow
 Trace Extraction, UA3 — Host-neutral Screen Workflow Extraction, and UA4 —
@@ -170,9 +171,9 @@ and input projection, ConversationController, journal/transcript projection,
 AgentEvent presentation, Judge orchestration/checkpointing, and provider
 composition remain CLI-owned. ResearchSessionStore remains lifecycle
 persistence authority, and WorkingContextPublisher remains publication policy
-authority. UA14, UA15, and UA16 are complete on master. UA17 is the current
-broad phase; UA17A is the current isolated source-review slice. Later UA17
-slices remain unselected pending a fresh source audit.
+authority. UA14, UA15, UA16, and UA17A are complete on master. UA17 is the
+current broad phase; UA17B is the current implementation/source-review slice.
+Later UA17 slices remain unselected pending a fresh source audit.
 
 UA10 extracts the reusable lifecycle around an already-selected existing Turn
 and Execution into `packages/engine`. `runAttachedSessionTurn` reloads the
@@ -199,9 +200,10 @@ CLI creates the new Session, prepares configured/default runtime context,
 switches the ConversationController, reconciles the journal, and commits the
 prepared context. The prior Session's user-selected model is not copied. Judge,
 provider composition, persistence, and journal authority remain unchanged; no
-schema migration is required. UA14, UA15, and UA16 are complete on master.
-UA17 is the current broad phase; UA17A is the current isolated source-review
-slice. Later UA17 slices remain unselected pending a fresh source audit.
+schema migration is required. UA14, UA15, UA16, and UA17A are complete on
+master. UA17 is the current broad phase; UA17B is the current
+implementation/source-review slice. Later UA17 slices remain unselected
+pending a fresh source audit.
 
 ## UA12 — Host-neutral Judge Node Runtime Extraction
 
@@ -242,10 +244,10 @@ projection. UA16 later moved completed-release reconciliation and historical
 artifact reconstruction semantics into engine while preserving CLI startup
 invocation timing. UA13 did not move the Judge workflow shell or alter checkpoint
 payloads, workflow graph/version, capability semantics, release contract,
-artifact kinds, database schema, or resumeGeneration ownership. UA12-UA16 are
-complete on master. UA17 is the current broad phase and UA17A is the current
-source-review slice. Later UA17 slices remain unselected pending a fresh source
-audit.
+artifact kinds, database schema, or resumeGeneration ownership. UA12-UA17A are
+complete on master. UA17 is the current broad phase and UA17B is the current
+implementation/source-review slice. Later UA17 slices remain unselected
+pending a fresh source audit.
 
 ## UA14 — Host-neutral Judge Resume Projection Repair Extraction
 
@@ -329,9 +331,9 @@ UA17 is the broad phase for moving the remaining reusable Judge workflow
 behavior out of CLI while preserving Execution lifecycle, release publication,
 provider composition, and presentation ownership at the host boundary.
 
-### UA17A — Host-neutral Judge Runtime Composition Extraction
+### UA17A — Host-neutral Judge Runtime Composition Extraction (complete on master)
 
-The current source-review slice moves canonical Judge definition execution,
+UA17A moved canonical Judge definition execution,
 WorkflowRunner, trace and checkpoint wiring, resume projection repair after
 same-Execution acquisition, restored decision/Bear state, node runtime
 composition, and typed result extraction into
@@ -339,11 +341,30 @@ composition, and typed result extraction into
 lifecycle runs share this runtime. CLI retains resume planning/acquisition,
 Execution settlement, release preparation/publication, provider/config
 construction, database-store adapters, event projection, and `JudgeArtifacts`
-assembly. UA17A changes no graph, checkpoint, release, capability, schema, or
+assembly. UA17A changed no graph, checkpoint, release, capability, schema, or
 provider semantics.
 
-UA17A is the current isolated source-review slice. Any later UA17 slice remains
-unselected pending a fresh source audit.
+### UA17B — Host-neutral Judge Execution Preparation + Resume Acquisition
+
+The current implementation/source-review slice moves lifecycle-backed Judge
+Execution preparation and resume acquisition into
+`packages/engine/src/judge/executionPreparation.ts` through existing supplied
+`ResearchSessionStore`, `ExecutionProfileStore`, and `JudgeCheckpointStores`
+contracts. Fresh preparation creates one canonical Execution and saves its
+immutable Judge profile before returning to workflow invocation. Resume keeps
+target selection in the host, while engine validates Session and Turn
+ownership, Judge command, ticker and interrupted state, loads the immutable
+profile, and plans against the existing graph, provider/model, runtime-plan,
+capability-plan, checkpoint and release semantics. Only a successful plan may
+call the store's atomic same-Execution acquisition authority. Effective resume
+reasoning, conditional and researcher settings come from the persisted profile
+and plan. CLI retains settlement/cancellation, provider/runtime construction,
+release preparation and publication ordering, concrete database adapters,
+presentation, and artifacts assembly. UA17B changes no graph, checkpoint,
+release, capability, schema, provider, or artifact semantics.
+
+UA17B is the current isolated implementation/source-review slice. Later UA17
+slices remain unselected pending a fresh source audit.
 
 ## Completed foundation — A-P, Q1, Q2, R1, R2A, R2B, R2C1, R2C2, S1, S2, S3, T1-T5 on master
 
