@@ -20,11 +20,11 @@ roadmap or historical design document.
 apps/cli remains more than a thin host adapter. It owns command dispatch,
 Session switching and new-Session creation/configuration for `/new`, plus
 `/resume` and `/continue` argument validation and target selection,
-control-command input projection, Judge Execution lifecycle and WorkflowRunner
-composition, same-Execution acquisition, Judge release and completed-release
-reconciliation database-to-store adapters, startup invocation timing, trace wiring,
-provider composition, CLI event projection and streaming presentation, and
-ConversationController. It also owns journal
+control-command input projection, Judge Execution lifecycle, resume planning and
+same-Execution acquisition, Judge release and completed-release reconciliation
+database-to-store adapters, startup invocation timing, provider composition,
+CLI event projection and streaming presentation, and ConversationController.
+It also owns journal
 correlation/causation when audit events are appended.
 packages/engine (@harness/engine) owns financial, Attachment, and Document
 capability composition, WorkflowTraceRecorder, Screen workflow, conversation
@@ -48,14 +48,17 @@ still owns fresh-input parsing and presentation, `/new` Session creation,
 configuration/provider/model rebinding and switching, `/resume` and `/continue`
 argument validation and target selection,
 control-command input projection, transcript/journal projection, Judge
-Execution lifecycle and WorkflowRunner composition, same-Execution acquisition,
-Judge release/reconciliation store adaptation, startup invocation timing, trace
-composition, provider composition, CLI event
+Execution lifecycle, resume planning and same-Execution acquisition,
+Judge release/reconciliation store adaptation, startup invocation timing,
+provider composition, CLI event
 projection, streaming presentation, and local-path Attachment import. The
-engine owns host-neutral Judge checkpoint encoding/decoding, resume compatibility
-planning, restore-frontier derivation, durable Judge resume projection repair,
-the current Judge release core, completed Judge release reconciliation, and
-historical artifact reconstruction through supplied narrow store contracts.
+engine owns Judge workflow runtime composition through the canonical
+WorkflowRunner, trace/checkpoint wiring, post-acquisition projection repair,
+restore-state composition, and typed runtime results. It also owns host-neutral
+Judge checkpoint encoding/decoding, resume compatibility planning,
+restore-frontier derivation, durable Judge resume projection repair, the current
+Judge release core, completed Judge release reconciliation, and historical
+artifact reconstruction through supplied narrow store contracts.
 The CLI validates the resume target and acquires the same interrupted Execution
 only after engine planning succeeds; for a new current release it preserves
 prepare, settle Execution, then publish ordering.

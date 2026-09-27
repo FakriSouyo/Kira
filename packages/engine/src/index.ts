@@ -42,6 +42,7 @@ export type { RunSessionTurnOptions, SettledTurnStatus } from './session/turnLif
 export { WorkflowTraceRecorder } from './runtime/workflowTraceRecorder';
 export type {
   TraceableWorkflowDefinition,
+  WorkflowTraceStore,
   WorkflowTraceRecorderOptions,
 } from './runtime/workflowTraceRecorder';
 export { screenWorkflow } from './workflows/screen';
@@ -68,6 +69,14 @@ export type {
   SynthesisTurn,
   ThesisTurn,
 } from './judge/nodeRuntime.js';
+export { runJudgeWorkflowRuntime } from './judge/workflowRuntime.js';
+export type {
+  JudgeWorkflowCanonicalRuntime,
+  JudgeWorkflowRunIdentity,
+  JudgeWorkflowRuntimeDependencies,
+  JudgeWorkflowRuntimeOptions,
+  JudgeWorkflowRuntimeResult,
+} from './judge/workflowRuntime.js';
 export {
   auditFromPayload,
   decodeJudgeCheckpoint,
