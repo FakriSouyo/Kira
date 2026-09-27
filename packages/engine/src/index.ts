@@ -122,6 +122,8 @@ export type {
   JudgeHistoricalArtifactStores,
   JudgeReleaseReconciliationStores,
 } from './judge/releaseReconciliation.js';
+export { completeJudgeExecution, JudgeExecutionCompletionError } from './judge/executionCompletion.js';
+export type { CompletedJudgeExecution, JudgeExecutionCompletionPhase } from './judge/executionCompletion.js';
 
 export interface EngineCapabilityRuntimeOptions {
   readonly financialData: FinancialDataProvider;

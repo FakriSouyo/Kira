@@ -247,6 +247,48 @@ describe('PR F /judge typed artifacts', () => {
     await expectT5ReleaseGateFailure(mutate);
   });
 
+  it('keeps a completed Execution after artifact publication fails and reconciles without rerunning Judge', async () => {
+    const session = await createHarnessSession(db, config(), { write: () => {} });
+    const sessionId = session.conversation.id;
+    const turn = await db.sessions.createTurn({ sessionId, input: '/judge BBCA', command: 'judge' });
+    const providerCalls = [
+      'getCompanyReport', 'getQuarterlyFinancials', 'getDailyTransaction',
+      'getForeignFlow', 'getNews', 'getFilings', 'getSentiment',
+    ].map(method => vi.spyOn(session.context.financialData, method));
+    const modelCalls = [
+      vi.spyOn(session.context.bull, 'analyze'),
+      vi.spyOn(session.context.bear, 'challenge'),
+      vi.spyOn(session.context.judge, 'evaluate'),
+    ];
+    const workflow = vi.spyOn(WorkflowRunner.prototype, 'run');
+    const settlement = vi.spyOn(db.sessions, 'settleExecution');
+    const publicationFailure = new Error('artifact persistence failed');
+    vi.spyOn(db.artifacts, 'saveMany').mockRejectedValueOnce(publicationFailure);
+
+    const result = judgeWorkflow(session.context, 'BBCA', () => {}, () => {}, {
+      lifecycle: { sessionId, turnId: turn.id },
+    });
+    await expect(result).rejects.toBe(publicationFailure);
+
+    const execution = (await db.sessions.getSessionArtifacts(sessionId)).executions[0]!;
+    const dependencyCounts = [...providerCalls, ...modelCalls].map(call => call.mock.calls.length);
+    const workflowCount = workflow.mock.calls.length;
+    expect(execution.status).toBe('completed');
+    expect(await db.artifacts.getByExecution(execution.id)).toEqual([]);
+    expect(await db.claimGraphReleases.getByExecution(execution.id)).toBeNull();
+    expect(settlement.mock.calls.map(call => call[1])).toEqual(['completed']);
+
+    await expect(repairCompletedJudgeReleases({ db, sessionId })).resolves.toBe(1);
+
+    expect((await db.sessions.getSessionArtifacts(sessionId)).executions[0]?.status).toBe('completed');
+    expect(await db.artifacts.getByExecution(execution.id)).toHaveLength(3);
+    expect(await db.claimGraphReleases.getByExecution(execution.id)).not.toBeNull();
+    expect(settlement.mock.calls.map(call => call[1])).toEqual(['completed']);
+    expect(workflow).toHaveBeenCalledTimes(workflowCount);
+    expect([...providerCalls, ...modelCalls].map(call => call.mock.calls.length)).toEqual(dependencyCounts);
+    await session.close();
+  });
+
   it('writes one validated PR P checkpoint for every Judge node, including skipped branches', async () => {
     const session = await createHarnessSession(db, config(), { write: () => {} });
     await session.commands.get('judge')!(['BBCA']);

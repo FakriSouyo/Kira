@@ -146,7 +146,7 @@ post-acquisition resume projection repair, restored runtime closure state, and
 typed semantic outputs. Direct legacy runs use the same runner without
 checkpoint stores or fabricated lifecycle objects. CLI adapts node, workflow,
 and ToolRuntime events into its existing presentation events and retains Judge
-Execution settlement/cancellation, provider composition, and release ordering.
+failed/cancelled settlement, host error policy, and provider composition.
 The engine also owns `prepareJudgeExecution`, which creates the canonical
 Execution and persists its immutable profile for a fresh lifecycle-backed
 Judge command. For resume, the host selects the `/resume` or `/continue`
@@ -158,11 +158,11 @@ operation returns the acquired Execution, profile, plan, and effective
 persisted reasoning, conditional, and researcher semantics. CLI retains target
 selection. Current release preparation, parity validation, artifact
 construction, receipt construction, and publication are owned by the
-host-neutral release core described below. The CLI still supplies stores,
-settles the Execution between prepare and publish, and projects
-workflow/session/verdict `AgentEvent` values. The 15-node graph, workflow
-version, capability plan, checkpoint format, resume rules, and release contract
-remain unchanged.
+host-neutral release core described below. `completeJudgeExecution` composes
+that core with canonical successful settlement; CLI supplies stores, handles
+failed/cancelled settlement, and projects workflow/session/verdict
+`AgentEvent` values. The 15-node graph, workflow version, capability plan,
+checkpoint format, resume rules, and release contract remain unchanged.
 
 ## Judge Execution Preparation + Resume Acquisition
 
@@ -183,7 +183,9 @@ The module receives existing lifecycle, profile, and checkpoint store
 contracts. It does not import the database implementation, CLI context,
 ConversationController, presentation events, or filesystem/configuration code.
 CLI retains `/resume` and `/continue` target selection, provider composition,
-runtime invocation, settlement/cancellation, and post-runtime release ordering.
+runtime invocation, failed/cancelled settlement, and host-facing error policy.
+`completeJudgeExecution` owns current and historical success ordering after
+runtime.
 
 ## Judge Checkpoint + Resume Core
 
@@ -207,12 +209,15 @@ within the Execution and ticker scope, and checks ContextSnapshot Session/Turn
 ownership. It does not import `FinharnessDatabase`, `@harness/database`, or CLI
 modules.
 
-The CLI still owns Execution lifecycle and same-Execution acquisition, resume
-target selection, startup invocation timing, concrete release store adaptation,
-and AgentEvent projection. Resume compatibility planning completes before
-acquisition. Engine runtime repairs projections after acquisition and before
-WorkflowRunner execution. The same Execution is resumed, and `resumeGeneration`
-remains owned by the existing execution store/acquisition flow.
+The `ResearchSessionStore` remains lifecycle persistence authority. CLI owns
+resume target selection, startup invocation timing, concrete release store
+adaptation, `AgentEvent` projection, and failed/cancelled settlement. Engine
+coordinates canonical creation, same-Execution acquisition, and successful
+completion through supplied stores. Resume compatibility planning completes
+before acquisition. Engine runtime repairs projections after acquisition and
+before WorkflowRunner execution. The same Execution is resumed, and
+`resumeGeneration` remains owned by the existing execution store/acquisition
+flow.
 
 ## Judge Current Release Core
 
@@ -227,14 +232,25 @@ historical reconstruction so payload semantics remain canonical.
 
 `JudgeReleaseStores` contains only read-only checkpoint inputs, Claim and
 Counterpoint reads, Claim Graph reads, artifact writes, and receipt writes. The
-engine does not settle Executions or receive a concrete database object. The
-CLI owns Execution lifecycle and preserves this order for new current releases:
-prepare the release, settle the Execution as completed, then publish. Completed
-release reconciliation and historical artifact reconstruction live in
-`src/judge/releaseReconciliation.ts`; they receive supplied stores and never
-re-run Judge. The CLI owns the concrete database-to-store adapter and decides
-when startup calls reconciliation. Historical profiles continue without
-fabricated current release receipts.
+engine receives no concrete database object. `completeJudgeExecution` in
+`src/judge/executionCompletion.ts` owns lifecycle-backed success after runtime.
+The immutable profile selects the path: current profiles validate the full
+release plan before `settleExecution(..., 'completed')`, then publish artifacts
+and the receipt; compatible historical profiles settle first, then reconstruct
+artifacts without a current T5 receipt. It returns the canonical completed
+Execution and Artifact envelopes for CLI projection.
+
+`JudgeExecutionCompletionError` marks pre-settlement versus post-settlement
+failures. A post-settlement publication or reconstruction error carries the
+completed Execution and original cause. CLI must not settle it again. CLI keeps
+failed/cancelled settlement, friendly error mapping, events, the concrete
+database-to-store adapter, and startup reconciliation timing.
+
+Completed release reconciliation and historical artifact reconstruction live
+in `src/judge/releaseReconciliation.ts`; they receive supplied stores and never
+re-run Judge. `reconstructHistoricalJudgeArtifacts` serves lifecycle completion
+and reconciliation. Historical profiles continue without fabricated current
+release receipts.
 
 ## Judge Completed Release Reconciliation
 
@@ -254,8 +270,8 @@ metadata.
 artifact and ExecutionProfile reads plus Artifact and release-receipt lookups.
 It does not widen the UA15 current release contract.
 `reconstructHistoricalJudgeArtifacts` also has a smaller
-`JudgeHistoricalArtifactStores` contract for the legacy workflow publication
-fallback. Concrete store implementations remain outside engine.
+`JudgeHistoricalArtifactStores` contract for historical completion and
+reconciliation. Concrete store implementations remain outside engine.
 
 Startup remains CLI orchestration. It invokes Judge release reconciliation
 before reloading Session artifacts for WorkingContext publication, then
