@@ -77,6 +77,11 @@ export type {
   JudgeWorkflowRuntimeOptions,
   JudgeWorkflowRuntimeResult,
 } from './judge/workflowRuntime.js';
+export { JudgeExecutionPreparationError, prepareJudgeExecution } from './judge/executionPreparation.js';
+export type {
+  JudgeExecutionPreparationOptions,
+  PreparedJudgeExecution,
+} from './judge/executionPreparation.js';
 export {
   auditFromPayload,
   decodeJudgeCheckpoint,

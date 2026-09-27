@@ -20,8 +20,8 @@ roadmap or historical design document.
 apps/cli remains more than a thin host adapter. It owns command dispatch,
 Session switching and new-Session creation/configuration for `/new`, plus
 `/resume` and `/continue` argument validation and target selection,
-control-command input projection, Judge Execution lifecycle, resume planning and
-same-Execution acquisition, Judge release and completed-release reconciliation
+control-command input projection, Judge Execution settlement, Judge
+release/publication ordering, completed-release reconciliation invocation and
 database-to-store adapters, startup invocation timing, provider composition,
 CLI event projection and streaming presentation, and ConversationController.
 It also owns journal
@@ -48,20 +48,22 @@ still owns fresh-input parsing and presentation, `/new` Session creation,
 configuration/provider/model rebinding and switching, `/resume` and `/continue`
 argument validation and target selection,
 control-command input projection, transcript/journal projection, Judge
-Execution lifecycle, resume planning and same-Execution acquisition,
+Execution settlement and cancellation, Judge release/publication ordering,
 Judge release/reconciliation store adaptation, startup invocation timing,
 provider composition, CLI event
 projection, streaming presentation, and local-path Attachment import. The
-engine owns Judge workflow runtime composition through the canonical
+engine owns Judge execution preparation and resume planning/acquisition of the
+same interrupted Execution through supplied lifecycle, profile, and checkpoint
+store contracts. It also owns Judge workflow runtime composition through the canonical
 WorkflowRunner, trace/checkpoint wiring, post-acquisition projection repair,
 restore-state composition, and typed runtime results. It also owns host-neutral
 Judge checkpoint encoding/decoding, resume compatibility planning,
 restore-frontier derivation, durable Judge resume projection repair, the current
 Judge release core, completed Judge release reconciliation, and historical
 artifact reconstruction through supplied narrow store contracts.
-The CLI validates the resume target and acquires the same interrupted Execution
-only after engine planning succeeds; for a new current release it preserves
-prepare, settle Execution, then publish ordering.
+The host selects the resume target; the engine validates and plans it before
+calling the existing atomic same-Execution acquisition authority. CLI preserves
+prepare, settle Execution, then publish ordering for a new current release.
 Engine coordinates the host-neutral attached-Turn lifecycle after CLI selects
 the existing Session, Turn, and Execution. Engine does not own
 ConversationController, AgentEvent presentation, host filesystem access, or

@@ -468,6 +468,37 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
     ]);
   });
 
+  it('emits start before settling a fresh profile-preparation failure without invoking workflow, provider, or model work', async () => {
+    const context = ctx();
+    const events: AgentEvent[] = [];
+    const session = await db.sessions.createSession({
+      sessionId: 'conversation_profile_prepare_fail', title: 'Profile preparation failure', provider: 'openai', model: 'mock', reasoningMode: 'usual',
+    });
+    const turn = await db.sessions.createTurn({ sessionId: session.id, input: '/judge BBCA', command: 'judge' });
+    const profileFailure = new Error('profile store unavailable');
+    const saveProfile = vi.spyOn(db.executionProfiles, 'save').mockRejectedValue(profileFailure);
+    const settle = vi.spyOn(db.sessions, 'settleExecution');
+    const workflow = vi.spyOn(WorkflowRunner.prototype, 'run');
+    const provider = vi.spyOn(context.financialData, 'getCompanyReport');
+    const model = vi.spyOn(context.bull, 'analyze');
+
+    await expect(judgeWorkflow(context, 'BBCA', () => {}, event => events.push(event), {
+      lifecycle: { sessionId: session.id, turnId: turn.id },
+    })).rejects.toThrow('profile store unavailable');
+
+    const runId = runIdOf(events);
+    expect(events.map(event => event.type)).toEqual(['session.start', 'session.complete']);
+    expect(events[0]).toMatchObject({ type: 'session.start', runId, sessionId: session.id, turnId: turn.id });
+    expect(events[1]).toMatchObject({ type: 'session.complete', runId, status: 'failed' });
+    expect(saveProfile).toHaveBeenCalledTimes(1);
+    expect(settle).toHaveBeenCalledTimes(1);
+    expect(settle).toHaveBeenCalledWith(runId, 'failed', { error: profileFailure.message });
+    expect((db.raw.prepare('SELECT status FROM executions WHERE id = ?').get(runId) as { status: string }).status).toBe('failed');
+    expect(workflow).not.toHaveBeenCalled();
+    expect(provider).not.toHaveBeenCalled();
+    expect(model).not.toHaveBeenCalled();
+  });
+
   it('cancels through the workflow runtime, settles the Execution as cancelled, and stops downstream work', async () => {
     const context = ctx();
     const events: AgentEvent[] = [];

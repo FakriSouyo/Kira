@@ -1,16 +1,12 @@
 import type { ExecutionRun } from '@harness/execution';
 import type { DurableArtifactRef, Evidence, Judgment } from '@harness/schemas';
-import {
-  createJudgeWorkflow,
-  createJudgeExecutionProfile,
-  judgeWorkflowGraphFingerprint,
-} from '@harness/command-judge';
 import { WorkflowStepError, type WorkflowEvent } from '@harness/command-core';
 import type { ResearchExecution } from '@harness/session-core';
 import { mapToUserFriendly, UserFriendlyError } from '@harness/shared';
 import { FinancialDataVerificationError } from '@harness/financial-data';
 import {
-  planJudgeResume,
+  JudgeExecutionPreparationError,
+  prepareJudgeExecution,
   prepareJudgeReleasePlan,
   publishJudgeRelease,
   runJudgeWorkflowRuntime,
@@ -21,7 +17,7 @@ import {
   type JudgeProjectionRepairStores,
   type JudgeProgress,
   type JudgeReleasePlan,
-  type JudgeResumePlan,
+  type PreparedJudgeExecution,
 } from '@harness/engine';
 import type { SkillReference } from '@harness/subagent-core';
 import type { AgentEvent, UiWorkflowStepStatus } from '../repl/events';
@@ -173,37 +169,45 @@ export async function judgeWorkflow(
     evidence: ctx.db.evidence,
     contextSnapshots: ctx.db.contextSnapshots,
   };
-  let resumePlan: JudgeResumePlan | undefined;
   let releasePlan: JudgeReleasePlan | undefined;
-  let profile: Awaited<ReturnType<typeof createJudgeExecutionProfile>> | undefined;
-  const run = opts.lifecycle && opts.resumeExecutionId
-    ? await (async () => {
-      const artifacts = await ctx.db.sessions.getSessionArtifacts(opts.lifecycle!.sessionId);
-      const existing = artifacts.executions.find(candidate => candidate.id === opts.resumeExecutionId);
-      if (!existing || existing.turnId !== opts.lifecycle!.turnId || existing.command !== 'judge' || existing.ticker !== ticker) {
-        throw new UserFriendlyError('RESUME_NOT_FOUND', `Execution ${opts.resumeExecutionId} is not a Judge execution in this Session.`, 'Use /history to inspect this Session.');
-      }
-      if (existing.status !== 'interrupted') throw new UserFriendlyError('RESUME_NOT_INTERRUPTED', `Execution ${existing.id} is ${existing.status}, not interrupted.`, 'Only interrupted Judge executions can be resumed.');
-      profile = await ctx.db.executionProfiles.getByExecutionId(existing.id) as typeof profile;
-      if (!profile) throw new UserFriendlyError('INCOMPATIBLE_CHECKPOINT', 'This execution has no immutable Judge execution profile.', 'Historical interrupted executions cannot be resumed by PR P.');
-      if (!ctx.config) throw new UserFriendlyError('INCOMPATIBLE_CHECKPOINT', 'The active runtime configuration is unavailable for resume validation.', 'Start a new /judge after checking configuration.');
-      const definition = createJudgeWorkflow();
-      resumePlan = await planJudgeResume({
-        stores: checkpointStores,
-        execution: existing,
-        profile,
-        definition,
-        currentGraphFingerprint: judgeWorkflowGraphFingerprint(definition),
-        provider: ctx.config.llm.agent.providerId ?? ctx.config.llm.agent.provider,
-        model: ctx.config.llm.agent.model,
-        runtimePlanFingerprint: ctx.runtimePlan?.runtimeFingerprint,
-        capabilityPlanFingerprint: ctx.judgeCapabilityPlan.fingerprint,
+  let prepared: PreparedJudgeExecution | undefined;
+  let preparationFailure: unknown;
+  let preparationFailed = false;
+  let run: ExecutionRun | ResearchExecution;
+  if (opts.lifecycle) {
+    try {
+      prepared = await prepareJudgeExecution({
+        sessions: ctx.db.sessions,
+        executionProfiles: ctx.db.executionProfiles,
+        checkpointStores,
+        lifecycle: opts.lifecycle,
+        request: {
+          ticker,
+          command: 'judge',
+          reasoning: opts.reasoning,
+          conditional: opts.conditional,
+          researchers: ctx.researchers,
+          ...(opts.resumeExecutionId ? { resumeExecutionId: opts.resumeExecutionId } : {}),
+        },
+        currentRuntime: {
+          provider: ctx.config?.llm.agent.providerId ?? ctx.config?.llm.agent.provider,
+          model: ctx.config?.llm.agent.model,
+          capabilityPlan: ctx.judgeCapabilityPlan,
+          runtimePlan: ctx.runtimePlan as never,
+        },
       });
-      return await ctx.db.sessions.acquireInterruptedExecution(existing.id);
-    })()
-    : opts.lifecycle
-      ? await ctx.db.sessions.createExecution({ ...opts.lifecycle, ticker, command: 'judge' })
-      : await ctx.db.execution.createRun({ ticker, command: 'judge' });
+      run = prepared.execution;
+    } catch (error) {
+      if (!(error instanceof JudgeExecutionPreparationError) || opts.resumeExecutionId) throw error;
+      run = error.execution;
+      preparationFailure = error.cause;
+      preparationFailed = true;
+    }
+  } else {
+    run = await ctx.db.execution.createRun({ ticker, command: 'judge' });
+  }
+  const profile = prepared?.profile;
+  const resumePlan = prepared?.resumePlan;
   const lifecycleIds = opts.lifecycle
     ? { ...opts.lifecycle, executionId: run.id }
     : {};
@@ -211,27 +215,10 @@ export async function judgeWorkflow(
 
   try {
     if (!opts.resumeExecutionId) events({ type: 'session.start', runId: run.id, ...lifecycleIds, ticker });
-    const reasoning = resumePlan?.reasoning ?? Boolean(opts.reasoning);
-    const conditional = resumePlan?.conditional ?? Boolean(opts.conditional);
-    const researchers = resumePlan?.researchers ?? ctx.researchers;
-    // Capture the immutable semantic envelope before any provider/model work.
-    // Legacy direct runs intentionally remain outside the resumable contract.
-    if (opts.lifecycle && !opts.resumeExecutionId) {
-      if (!ctx.config) throw new Error('Canonical judge execution requires runtime configuration for its execution profile');
-      profile = createJudgeExecutionProfile({
-        executionId: run.id,
-        ticker,
-        reasoningMode: reasoning ? 'reasoning' : 'usual',
-        conditional,
-        researchers,
-        provider: ctx.config.llm.agent.providerId ?? ctx.config.llm.agent.provider,
-        model: ctx.config.llm.agent.model,
-        capabilityPlan: ctx.judgeCapabilityPlan,
-        runtimePlan: ctx.runtimePlan as never,
-        createdAt: run.createdAt,
-      });
-      await ctx.db.executionProfiles.save(profile);
-    }
+    if (preparationFailed) throw preparationFailure;
+    const reasoning = prepared?.reasoning ?? Boolean(opts.reasoning);
+    const conditional = prepared?.conditional ?? Boolean(opts.conditional);
+    const researchers = prepared?.researchers ?? ctx.researchers;
     let projectedNodes = new Map<string, ProjectedNode>();
     const runtime = await runJudgeWorkflowRuntime({
       run: { id: run.id, ticker, createdAt: run.createdAt },

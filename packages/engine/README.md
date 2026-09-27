@@ -117,12 +117,11 @@ context policy, model runtime authority, or persistence implementation. The CLI
 owns fresh-input parsing and presentation, `/new` Session creation, runtime
 rebinding and switching, transcript/journal and event projection, streaming
 display, cancellation presentation, provider composition, Judge Execution
-lifecycle, resume planning/acquisition, startup invocation timing, concrete
-Judge release store adaptation, and control-command input projection. The
-engine Judge runtime composes the WorkflowRunner and trace recorder and
-repairs projections after acquisition. The engine plans and
-validates the restore frontier; CLI acquires the same interrupted Execution
-only after that plan succeeds.
+lifecycle settlement/cancellation, startup invocation timing, concrete Judge
+release store adaptation, and control-command input projection. The engine
+Judge runtime composes the WorkflowRunner and trace recorder and repairs
+projections after acquisition. The engine plans and validates the restore
+frontier before it acquires the same interrupted Execution.
 Natural-language conversation remains one Turn
 with zero `ResearchExecution`. Restart reconciliation, fresh-Turn orchestration,
 and attached-Turn orchestration coordinate existing authorities without
@@ -147,14 +146,44 @@ post-acquisition resume projection repair, restored runtime closure state, and
 typed semantic outputs. Direct legacy runs use the same runner without
 checkpoint stores or fabricated lifecycle objects. CLI adapts node, workflow,
 and ToolRuntime events into its existing presentation events and retains Judge
-Execution lifecycle, resume planning/acquisition, provider composition, and
-release ordering. Current release preparation, parity validation, artifact
+Execution settlement/cancellation, provider composition, and release ordering.
+The engine also owns `prepareJudgeExecution`, which creates the canonical
+Execution and persists its immutable profile for a fresh lifecycle-backed
+Judge command. For resume, the host selects the `/resume` or `/continue`
+target; the engine validates Session and Turn ownership, Judge command, ticker,
+interrupted state, profile, runtime identity, release semantics, and
+checkpoints. It finishes compatibility planning before calling the existing
+atomic `acquireInterruptedExecution` authority for the same Execution. The
+operation returns the acquired Execution, profile, plan, and effective
+persisted reasoning, conditional, and researcher semantics. CLI retains target
+selection. Current release preparation, parity validation, artifact
 construction, receipt construction, and publication are owned by the
 host-neutral release core described below. The CLI still supplies stores,
 settles the Execution between prepare and publish, and projects
 workflow/session/verdict `AgentEvent` values. The 15-node graph, workflow
 version, capability plan, checkpoint format, resume rules, and release contract
 remain unchanged.
+
+## Judge Execution Preparation + Resume Acquisition
+
+`prepareJudgeExecution` and its `PreparedJudgeExecution` result live in
+`src/judge/executionPreparation.ts`. Fresh preparation creates one canonical
+Judge Execution through the supplied `ResearchSessionStore`, derives the
+profile from the current runtime inputs, and persists it through the supplied
+`ExecutionProfileStore` before returning control to workflow execution. Resume
+preparation validates the host-selected target against its Session, Turn,
+command, ticker, and interrupted state; loads its profile; and calls
+`planJudgeResume` with the existing graph, provider/model, runtime-plan, and
+capability-plan identities. Only a successful plan is followed by the existing
+atomic same-Execution acquisition. The store remains the lifecycle authority
+and alone advances `resumeGeneration`. Resume semantics come from the persisted
+profile and plan, not current UI settings.
+
+The module receives existing lifecycle, profile, and checkpoint store
+contracts. It does not import the database implementation, CLI context,
+ConversationController, presentation events, or filesystem/configuration code.
+CLI retains `/resume` and `/continue` target selection, provider composition,
+runtime invocation, settlement/cancellation, and post-runtime release ordering.
 
 ## Judge Checkpoint + Resume Core
 
