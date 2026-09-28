@@ -144,12 +144,9 @@ authorize. Tools execute. Domain packages own truth. Database persists.
 The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
-authority. UA15 and UA16 are complete on master. UA17 Judge Workflow
-Host-Neutralization is the current broad phase. UA17A Judge Runtime Composition
-Extraction, UA17B Judge Execution Preparation + Resume Acquisition, and UA17C
-Judge Completion + Release Orchestration are complete on master. UA17D Judge
-Execution Lifecycle Orchestration is the current implementation/source-review
-slice. Later UA17 slices remain unselected pending another fresh source audit.
+authority. UA15, UA16, and UA17A-D are complete on master, closing the planned
+UA Kira Engine Extraction phase. KB Internal Kira Identity Migration is the next
+broad phase.
 
 ## Model runtime — Q1 / Q2
 
@@ -599,11 +596,9 @@ handling, Judge abort classification and friendly error mapping, concrete
 store adaptation, `/new` Session switching, and
 `/resume`/`/continue` target selection and input projection. ResearchSessionStore
 remains lifecycle persistence authority, WorkingContextPublisher remains publication
-policy authority, and no database migration is required. UA9 did not complete
-engine extraction; UA10-UA16 are complete on master. UA17 is the current broad
-phase. UA17A, UA17B, and UA17C are complete on master, and UA17D is the current
-implementation/source-review slice. Later UA17 slices remain unselected
-pending a fresh source audit.
+policy authority, and no database migration is required. UA9 by itself did not
+complete the planned extraction; UA10-UA17D later completed the UA Kira Engine
+Extraction phase. KB Internal Kira Identity Migration is the next broad phase.
 
 ## UA10 - Host-neutral Attached-Turn Lifecycle Orchestration Extraction
 
@@ -714,9 +709,9 @@ historical artifact reconstruction. Engine planning completes before CLI
 acquisition. UA13 did not
 move the Judge workflow shell, change checkpoint payloads, graph/version,
 capability plan, release contract, artifact kinds, persistence schema, or
-resumeGeneration ownership. UA12-UA17C are complete on master. UA17 is the broad
-phase and UA17D is the current implementation/source-review slice; later UA17
-slices remain unselected pending a fresh source audit.
+resumeGeneration ownership. UA12-UA17D are complete on master, closing the
+planned UA Kira Engine Extraction phase. KB Internal Kira Identity Migration is
+the next broad phase.
 
 ## UA14 - Host-neutral Judge Resume Projection Repair Extraction
 
@@ -793,10 +788,9 @@ engine operation. Startup ordering remains reconciliation, Session artifact
 reload, then WorkingContext publication and journal reconciliation. Execution
 lifecycle, providers, and presentation remain CLI-owned. UA16 changes no schema,
 migration, workflow graph/version, capability plan,
-release contract, or artifact kinds. UA15 is complete on master. UA16 is
-complete on master. UA17 is the current broad phase. UA17A, UA17B, and UA17C are
-complete on master, and UA17D is the current implementation/source-review
-slice. Later UA17 slices remain unselected pending a fresh source audit.
+release contract, or artifact kinds. UA15, UA16, and UA17A-D are complete on
+master, closing the planned UA Kira Engine Extraction phase. KB Internal Kira
+Identity Migration is the next broad phase.
 
 ## UA17 - Judge Workflow Host-Neutralization
 
@@ -851,9 +845,9 @@ projection, concrete store adapters, provider composition, and direct legacy
 `ExecutionRun` completion. UA17C changes no workflow graph, checkpoint format,
 release or artifact schema, persistence migration, provider, or model semantics.
 
-UA17A, UA17B, and UA17C are complete on master. UA17D is the current
-implementation/source-review slice. Later UA17 slices remain unselected pending
-a fresh source audit.
+UA17A, UA17B, UA17C, and UA17D are complete on master. This closes the planned
+UA Kira Engine Extraction phase; KB Internal Kira Identity Migration is the next
+broad phase.
 
 ### UA17D — Judge Execution Lifecycle Orchestration
 

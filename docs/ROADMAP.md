@@ -72,19 +72,15 @@ UA12 Host-neutral Judge Node Runtime Extraction
 UA13 Host-neutral Judge Checkpoint + Resume Core Extraction
 UA14 Host-neutral Judge Resume Projection Repair Extraction
 UA15 Host-neutral Judge Current Release Core Extraction
+UA16 Host-neutral Judge Release Reconciliation Extraction
+UA17 Judge Workflow Host-Neutralization (UA17A-D complete)
 UA17A Host-neutral Judge Runtime Composition Extraction
 UA17B Host-neutral Judge Execution Preparation + Resume Acquisition
 UA17C Host-neutral Judge Completion + Release Orchestration Extraction
-
-CURRENT
-
-UA Kira Engine Extraction
-UA17 Judge Workflow Host-Neutralization
 UA17D Host-neutral Judge Execution Lifecycle Orchestration
+UA Kira Engine Extraction (planned UA phase, including UA17, complete)
 
-Later UA17 slices remain unselected pending a fresh source audit.
-
-THEN
+NEXT BROAD PHASE
 
 KB Internal Kira Identity Migration
 
@@ -117,11 +113,12 @@ research capability maturation. Discovery and design for later milestones may
 begin earlier, but production implementations must not bypass the dependency
 boundaries established by earlier milestones.
 
-## UA slice selection
+## UA extraction status
 
-**Current broad phase:** UA17 — Judge Workflow Host-Neutralization.
-
-**Selected slice:** UA17D — Host-neutral Judge Execution Lifecycle Orchestration.
+UA1-UA17D, including UA17 Judge Workflow Host-Neutralization, are complete on
+master. This closes the planned UA Kira Engine Extraction phase. KB Internal
+Kira Identity Migration is the next broad phase; this roadmap does not select
+or design that migration.
 
 UA1 — Host-neutral Capability Runtime Extraction, UA2 — Host-neutral Workflow
 Trace Extraction, UA3 — Host-neutral Screen Workflow Extraction, and UA4 —
@@ -173,9 +170,9 @@ and input projection, ConversationController, journal/transcript projection,
 AgentEvent presentation, Judge orchestration/checkpointing, and provider
 composition remain CLI-owned. ResearchSessionStore remains lifecycle
 persistence authority, and WorkingContextPublisher remains publication policy
-authority. UA14, UA15, UA16, UA17A, UA17B, and UA17C are complete on master.
-UA17 is the current broad phase; UA17D is the current implementation/source-review
-slice. Later UA17 slices remain unselected pending a fresh source audit.
+authority. UA14, UA15, UA16, and UA17A-D are complete on master. The planned UA
+Kira Engine Extraction phase is closed; KB Internal Kira Identity Migration is
+the next broad phase.
 
 UA10 extracts the reusable lifecycle around an already-selected existing Turn
 and Execution into `packages/engine`. `runAttachedSessionTurn` reloads the
@@ -202,10 +199,9 @@ CLI creates the new Session, prepares configured/default runtime context,
 switches the ConversationController, reconciles the journal, and commits the
 prepared context. The prior Session's user-selected model is not copied. Judge,
 provider composition, persistence, and journal authority remain unchanged; no
-schema migration is required. UA14, UA15, UA16, UA17A, UA17B, and UA17C are
-complete on master. UA17 is the current broad phase; UA17D is the current
-implementation/source-review slice. Later UA17 slices remain unselected
-pending a fresh source audit.
+schema migration is required. UA14, UA15, UA16, and UA17A-D are complete on
+master. The planned UA Kira Engine Extraction phase is closed; KB Internal Kira
+Identity Migration is the next broad phase.
 
 ## UA12 — Host-neutral Judge Node Runtime Extraction
 
@@ -246,10 +242,9 @@ projection. UA16 later moved completed-release reconciliation and historical
 artifact reconstruction semantics into engine while preserving CLI startup
 invocation timing. UA13 did not move the Judge workflow shell or alter checkpoint
 payloads, workflow graph/version, capability semantics, release contract,
-artifact kinds, database schema, or resumeGeneration ownership. UA12-UA17C are
-complete on master. UA17 is the current broad phase and UA17D is the current
-implementation/source-review slice. Later UA17 slices remain unselected
-pending a fresh source audit.
+artifact kinds, database schema, or resumeGeneration ownership. UA12-UA17D are
+complete on master, closing the planned UA Kira Engine Extraction phase. KB
+Internal Kira Identity Migration is the next broad phase.
 
 ## UA14 — Host-neutral Judge Resume Projection Repair Extraction
 
@@ -385,9 +380,9 @@ friendly error mapping, provider composition, store adapters, and legacy direct
 `ExecutionRun` completion. UA17C changes no workflow, checkpoint, release,
 artifact, persistence, provider, or model semantics.
 
-UA17A, UA17B, and UA17C are complete on master. UA17D is the current isolated
-implementation/source-review slice. Later UA17 slices remain unselected pending
-a fresh source audit.
+UA17A, UA17B, UA17C, and UA17D are complete on master. This closes the planned
+UA Kira Engine Extraction phase; KB Internal Kira Identity Migration is the next
+broad phase.
 
 ### UA17D — Judge Execution Lifecycle Orchestration
 

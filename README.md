@@ -15,15 +15,19 @@ provider-neutral financial-data boundary and Sectors as the current provider.
 
 ## Product boundary
 
-Kira is a reusable financial research engine. The CLI is its first host adapter,
-not the engine boundary. `@harness/engine` already owns substantial
-host-neutral application orchestration, including the current Judge release
-core, completed-release reconciliation, and historical artifact reconstruction
-through supplied stores. UA extraction is still incomplete, and the CLI retains
-important host/runtime composition, Execution lifecycle, startup invocation
-timing, and the concrete database-to-store adapter. Future Desktop and Web
-hosts are intended to consume the same engine rather than reimplement Judge, Session, Context,
-Evidence, capability, or lifecycle behavior. See
+Kira is a reusable financial research engine. The CLI is its first host and
+remains a substantial host boundary; it is not a trivial adapter.
+`@harness/engine` owns host-neutral Session/Turn orchestration and canonical
+Judge Execution lifecycle orchestration, the current Judge release core,
+completed-release reconciliation, and historical artifact reconstruction
+through supplied stores.
+The CLI retains runtime and provider composition, command and resume-target
+selection, concrete store adapters, abort classification, host-facing errors,
+AgentEvent projection, presentation, and startup invocation timing. UA17 closes
+the planned UA Kira Engine Extraction phase; it does not complete future engine
+or product development. KB Internal Kira Identity Migration is the next broad
+phase. Future Desktop and Web hosts can reuse the existing host-neutral Judge,
+Session, Context, capability, and lifecycle behavior. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for the clearly labelled current facts and
 target direction.
 
