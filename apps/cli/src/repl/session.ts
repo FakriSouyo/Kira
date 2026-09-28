@@ -2,7 +2,7 @@ import type { FinharnessDatabase } from '@harness/database';
 import { conversationRespondWorkflow, conversationStreamWorkflow, createWorkingContextPublisher, reconcileCompletedJudgeReleases, runAttachedSessionTurn, runSessionTurn } from '@harness/engine';
 import { UserFriendlyError } from '@harness/shared';
 import { buildContext } from '../context';
-import { loadConfig, type FinharnessConfig } from '../config';
+import { loadConfig, type CliConfig } from '../config';
 import { buildCommands } from '../commands';
 import type { AgentEvent } from './events';
 import type { CommandHandler } from './loop';
@@ -10,14 +10,14 @@ import { ConversationController } from '../ui/conversationController';
 import { createJudgeReleaseReconciliationStores } from '../workflows/judgeCheckpoint';
 
 /** Owns active clients and preview resources for either terminal renderer. */
-export async function createHarnessSession(db: FinharnessDatabase, initialConfig: FinharnessConfig, options: {
+export async function createHarnessSession(db: FinharnessDatabase, initialConfig: CliConfig, options: {
   write?: (text: string) => void;
   events?: (event: AgentEvent) => void;
 } = {}) {
   const rawWrite = options.write ?? ((text: string) => { process.stdout.write(text); });
   const controller = await ConversationController.create(db, initialConfig, event => options.events?.(event));
   const initialSelection = await db.sessions.getCurrentModelSelection(controller.snapshot.id);
-  const configForSelection = (base: FinharnessConfig, selection: Awaited<ReturnType<FinharnessDatabase['sessions']['getCurrentModelSelection']>>): FinharnessConfig => {
+  const configForSelection = (base: CliConfig, selection: Awaited<ReturnType<FinharnessDatabase['sessions']['getCurrentModelSelection']>>): CliConfig => {
     // Initial/legacy rows describe the config that created the Session. Only a
     // durable user choice overrides a newly supplied process configuration;
     // this preserves PR P's provider-drift compatibility gate for old runs.
@@ -42,8 +42,8 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
   let reasoningMode: 'usual' | 'reasoning' = 'usual';
   const context = buildContext(db, config, { sessionId: controller.snapshot.id });
   const cleanup: Array<() => Promise<void>> = [];
-  type PreparedContext = { config: FinharnessConfig; context: ReturnType<typeof buildContext> };
-  const prepareContext = (next: FinharnessConfig, sessionId: string): PreparedContext => ({
+  type PreparedContext = { config: CliConfig; context: ReturnType<typeof buildContext> };
+  const prepareContext = (next: CliConfig, sessionId: string): PreparedContext => ({
     config: next,
     context: buildContext(db, next, { sessionId }),
   });
@@ -51,7 +51,7 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
     config = prepared.config;
     Object.assign(context, prepared.context);
   };
-  const applyConfig = (next: FinharnessConfig, sessionId = controller.snapshot.id) => {
+  const applyConfig = (next: CliConfig, sessionId = controller.snapshot.id) => {
     commitContext(prepareContext(next, sessionId));
   };
   const prepareSession = async (sessionId: string): Promise<PreparedContext> => {

@@ -14,7 +14,7 @@ import { BullAgent } from '@harness/subagent-bull';
 import { SubagentRuntime } from '@harness/subagent-core';
 import { JudgeAgent } from '@harness/subagent-judge';
 import { ResearcherAgent } from '@harness/subagent-researcher';
-import type { FinharnessConfig } from './config';
+import type { CliConfig } from './config';
 
 export interface HarnessContext extends EngineCapabilityRuntime {
   db: FinharnessDatabase;
@@ -29,7 +29,7 @@ export interface HarnessContext extends EngineCapabilityRuntime {
   validator: ClaimValidator;
   researchers: { market: boolean; news: boolean };
   homeDir: string;
-  config?: FinharnessConfig;
+  config?: CliConfig;
   runtimePlan?: ModelRuntimePlan;
 }
 
@@ -64,7 +64,7 @@ export interface BuildContextOptions {
 
 export function buildContext(
   db: FinharnessDatabase,
-  config: FinharnessConfig,
+  config: CliConfig,
   { sessionId }: BuildContextOptions,
 ): HarnessContext {
   const agentLlm = createLLMClient(config.llm.agent, { mock: config.mockLlm });

@@ -25,8 +25,9 @@ The CLI retains runtime and provider composition, command and resume-target
 selection, concrete store adapters, abort classification, host-facing errors,
 AgentEvent projection, presentation, and startup invocation timing. UA17 closes
 the planned UA Kira Engine Extraction phase; it does not complete future engine
-or product development. KB Internal Kira Identity Migration is the next broad
-phase. Future Desktop and Web hosts can reuse the existing host-neutral Judge,
+or product development. KB Internal Kira Identity Migration is the current broad
+phase. KB1 renames only the CLI runtime config type from FinharnessConfig to
+CliConfig. Future Desktop and Web hosts can reuse the existing host-neutral Judge,
 Session, Context, capability, and lifecycle behavior. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for the clearly labelled current facts and
 target direction.
@@ -121,9 +122,9 @@ The current implementation loads configuration in this order:
 4. Defaults
 
 The current storage and credential directory remains ~/.finharness, and
-environment variables retain their FINHARNESS_* names. These identities are
-scheduled for KB Internal Kira Identity Migration. Kira does not currently
-support ~/.kira.
+environment variables retain their FINHARNESS_* names. They are unchanged by
+KB1; any later migration requires separate source review and selection. Kira
+does not currently support ~/.kira.
 
 The CLI supports separate agent and router model tiers, OpenAI-compatible
 providers, and the current Sectors financial-data provider. Use /setup,
@@ -142,9 +143,11 @@ providers, and the current Sectors financial-data provider. Use /setup,
 | Historical, non-authoritative material | docs/archive/ |
 
 Current internal source identifiers such as MainFinHarnessAgent,
-FinharnessConfig, HarnessContext, the @harness/* package namespace, and
-FINHARNESS_* settings remain unchanged in KA and are scheduled for KB. Exact
-source symbols remain written as implemented until code changes them.
+HarnessContext, the @harness/* package namespace, and FINHARNESS_* settings
+remain unchanged in KB1. Later identity changes remain unselected and require
+separate source review. The CLI runtime config type was renamed from
+FinharnessConfig to CliConfig in KB1. Exact source symbols remain written as
+implemented until code changes them.
 
 ## Scope
 
