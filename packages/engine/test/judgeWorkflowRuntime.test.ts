@@ -482,6 +482,6 @@ describe('Judge workflow runtime composition', () => {
   it('keeps the runtime source free of host/database presentation dependencies', async () => {
     const { readFile } = await import('node:fs/promises');
     const source = await readFile(new URL('../src/judge/workflowRuntime.ts', import.meta.url), 'utf8');
-    expect(source).not.toMatch(/@harness\/database|FinharnessDatabase|apps\/cli|HarnessContext|AgentEvent|ConversationController|FinharnessConfig|openDb|SQLite|process\.stdout/);
+    expect(source).not.toMatch(/@harness\/database|FinharnessDatabase|apps\/cli|HarnessContext|AgentEvent|ConversationController|CliConfig|openDb|SQLite|process\.stdout/);
   });
 });

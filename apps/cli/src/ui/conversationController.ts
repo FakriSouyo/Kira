@@ -3,7 +3,7 @@ import { projectConversation, type ConversationEvent, type ConversationSession, 
 import type { FinharnessDatabase } from '@harness/database';
 import { reconcileSessionLifecycleAfterRestart } from '@harness/engine';
 import type { AgentEvent } from '../repl/events';
-import type { FinharnessConfig } from '../config';
+import type { CliConfig } from '../config';
 
 /** Owns durable conversation events; transient thinking never enters the journal. */
 export class ConversationController {
@@ -12,10 +12,10 @@ export class ConversationController {
   private assistantId?: string;
   private activeTurn?: { id: string; executionId?: string; lastEventId?: string };
   private evidenceLabels = new Map<string, string>();
-  private constructor(private readonly db: FinharnessDatabase, private readonly config: FinharnessConfig, private readonly notify: (event: AgentEvent) => void, session: ResearchSession) {
+  private constructor(private readonly db: FinharnessDatabase, private readonly config: CliConfig, private readonly notify: (event: AgentEvent) => void, session: ResearchSession) {
     this.state = { id: session.id, title: session.title, blocks: [], sequence: 0 };
   }
-  static async create(db: FinharnessDatabase, config: FinharnessConfig, notify: (event: AgentEvent) => void): Promise<ConversationController> {
+  static async create(db: FinharnessDatabase, config: CliConfig, notify: (event: AgentEvent) => void): Promise<ConversationController> {
     const recent = db.journal.list().find(session => session.id.startsWith('conversation_'));
     const session = recent ?? await db.sessions.createSession({
       sessionId: `conversation_${randomUUID().slice(0, 8)}`,

@@ -105,9 +105,11 @@ External seams remain explicit: packages/llm owns model clients,
 packages/financial-data owns the provider-neutral financial contract, and
 packages/sectors-api is the current financial provider implementation. The
 current source symbol for the conversational host is MainFinHarnessAgent; it is
-a legacy internal name scheduled for KB. The current @harness/* package
-namespace and FinharnessConfig/HarnessContext identifiers are also deferred
-to KB; no internal identity migration occurs in KA or UA.
+a legacy internal name unchanged by KB1. The current @harness/* package
+namespace and HarnessContext identifier also remain unchanged by KB1; later
+identity changes remain unselected and require separate source review.
+FinharnessConfig was renamed to CliConfig in KB1; no other internal identity
+migration occurred in KA or UA.
 
 ## Target direction — complete Kira engine
 
@@ -145,8 +147,9 @@ The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
 authority. UA15, UA16, and UA17A-D are complete on master, closing the planned
-UA Kira Engine Extraction phase. KB Internal Kira Identity Migration is the next
-broad phase.
+UA Kira Engine Extraction phase. KB Internal Kira Identity Migration is the
+current broad phase. KB1 renames only the CLI runtime config type from
+FinharnessConfig to CliConfig.
 
 ## Model runtime — Q1 / Q2
 
@@ -598,7 +601,7 @@ store adaptation, `/new` Session switching, and
 remains lifecycle persistence authority, WorkingContextPublisher remains publication
 policy authority, and no database migration is required. UA9 by itself did not
 complete the planned extraction; UA10-UA17D later completed the UA Kira Engine
-Extraction phase. KB Internal Kira Identity Migration is the next broad phase.
+Extraction phase. KB Internal Kira Identity Migration is the current broad phase.
 
 ## UA10 - Host-neutral Attached-Turn Lifecycle Orchestration Extraction
 
@@ -711,7 +714,7 @@ move the Judge workflow shell, change checkpoint payloads, graph/version,
 capability plan, release contract, artifact kinds, persistence schema, or
 resumeGeneration ownership. UA12-UA17D are complete on master, closing the
 planned UA Kira Engine Extraction phase. KB Internal Kira Identity Migration is
-the next broad phase.
+the current broad phase.
 
 ## UA14 - Host-neutral Judge Resume Projection Repair Extraction
 
@@ -790,7 +793,7 @@ lifecycle, providers, and presentation remain CLI-owned. UA16 changes no schema,
 migration, workflow graph/version, capability plan,
 release contract, or artifact kinds. UA15, UA16, and UA17A-D are complete on
 master, closing the planned UA Kira Engine Extraction phase. KB Internal Kira
-Identity Migration is the next broad phase.
+Identity Migration is the current broad phase.
 
 ## UA17 - Judge Workflow Host-Neutralization
 
@@ -846,8 +849,8 @@ projection, concrete store adapters, provider composition, and direct legacy
 release or artifact schema, persistence migration, provider, or model semantics.
 
 UA17A, UA17B, UA17C, and UA17D are complete on master. This closes the planned
-UA Kira Engine Extraction phase; KB Internal Kira Identity Migration is the next
-broad phase.
+UA Kira Engine Extraction phase; KB Internal Kira Identity Migration is the
+current broad phase.
 
 ### UA17D — Judge Execution Lifecycle Orchestration
 

@@ -1,7 +1,7 @@
-import type { FinharnessConfig } from '../../config';
+import type { CliConfig } from '../../config';
 import { getProvider } from '../providers';
 
-export function statusLine(config: FinharnessConfig): string {
+export function statusLine(config: CliConfig): string {
   const provider = getProvider(
     (config.llm.agent.baseURL?.includes('bitdeer') ? 'bitdeer' : config.llm.agent.provider === 'anthropic' ? 'anthropic' : 'openai') as never,
   );

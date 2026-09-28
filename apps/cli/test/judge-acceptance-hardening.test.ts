@@ -16,7 +16,7 @@ import { type FinancialDataProvider } from '@harness/financial-data';
 import { createExecutionProfile, createWorkflowNodeOutput } from '@harness/session-core';
 import { repairJudgeProjections, WorkflowTraceRecorder, type JudgeCheckpointStores, type JudgeProjectionRepairStores } from '@harness/engine';
 import { buildContext } from '../src/context';
-import { loadConfig, type FinharnessConfig } from '../src/config';
+import { loadConfig, type CliConfig } from '../src/config';
 import { createHarnessSession } from '../src/repl/session';
 import { createJudgeNodeExecutors } from '@harness/engine';
 import { decodeJudgeCheckpoint, JudgeCheckpointWriter, planJudgeResume } from '@harness/engine';
@@ -24,7 +24,7 @@ import { decodeJudgeCheckpoint, JudgeCheckpointWriter, planJudgeResume } from '@
 type Fixture = {
   dir: string;
   db: FinharnessDatabase;
-  config: FinharnessConfig;
+  config: CliConfig;
   sessionId: string;
   turnId: string;
   executionId: string;
@@ -67,7 +67,7 @@ const PROVIDER_METHODS: Array<keyof FinancialDataProvider> = [
 
 const MODEL_METHODS = ['analyze', 'challenge', 'rebuttal', 'evaluate'] as const;
 
-function createConfig(dir: string, overrides: Partial<FinharnessConfig['llm']['agent']> = {}): FinharnessConfig {
+function createConfig(dir: string, overrides: Partial<CliConfig['llm']['agent']> = {}): CliConfig {
   const config = loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true });
   config.llm.agent = { ...config.llm.agent, ...overrides };
   return config;
@@ -75,7 +75,7 @@ function createConfig(dir: string, overrides: Partial<FinharnessConfig['llm']['a
 
 async function createFixture(
   db: FinharnessDatabase,
-  config: FinharnessConfig,
+  config: CliConfig,
   options: { suffix?: string; reasoningMode?: 'usual' | 'reasoning'; conditional?: boolean; runtimePlan?: boolean } = {},
 ): Promise<Fixture> {
   const suffix = options.suffix ?? 'acceptance';

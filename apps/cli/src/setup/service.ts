@@ -2,14 +2,14 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { writeCredentialsFile, loadConfig } from '../config';
 import { getProvider, type ProviderId } from './providers';
-import type { FinharnessConfig } from '../config';
+import type { CliConfig } from '../config';
 
 /**
  * Setup service — pure config persistence + first-run detection (Phase 9B Slice 1).
  * Reuses existing credential/config mechanisms, no new storage.
  */
 
-export function needsSetup(config: FinharnessConfig): boolean {
+export function needsSetup(config: CliConfig): boolean {
   // Scriptable bypass: mock mode or CI/non-TTY handled in index.ts gate; here only check missing keys
   if (config.sectors.mock || config.mockLlm) return false;
   const missingSectors = !config.sectors.apiKey;
@@ -17,11 +17,11 @@ export function needsSetup(config: FinharnessConfig): boolean {
   return missingSectors || missingLlm;
 }
 
-export function isSectorsConfigured(config: FinharnessConfig): boolean {
+export function isSectorsConfigured(config: CliConfig): boolean {
   return Boolean(config.sectors.apiKey);
 }
 
-export function isLlmConfigured(config: FinharnessConfig): boolean {
+export function isLlmConfigured(config: CliConfig): boolean {
   return Boolean(config.llm.agent.apiKey || config.llm.router.apiKey);
 }
 
@@ -80,7 +80,7 @@ export function saveProvider(
   return credPath;
 }
 
-export function loadFreshConfig(homeDir?: string): FinharnessConfig {
+export function loadFreshConfig(homeDir?: string): CliConfig {
   return loadConfig({ homeDir });
 }
 

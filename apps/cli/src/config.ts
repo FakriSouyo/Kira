@@ -64,7 +64,7 @@ interface CredentialsFile {
 }
 
 /** Konfigurasi runtime hasil merge: env (tertinggi) → .credentials.json → config.json → default. */
-export interface FinharnessConfig {
+export interface CliConfig {
   providers?: Record<string, SavedProvider>;
   providerSetup?: ProviderSetup;
   homeDir: string;
@@ -201,7 +201,7 @@ function providerOr(value: string | undefined): Provider {
   return value === 'anthropic' ? 'anthropic' : 'openai';
 }
 
-export function loadConfig(overrides: ConfigOverrides = {}): FinharnessConfig {
+export function loadConfig(overrides: ConfigOverrides = {}): CliConfig {
   const homeDir =
     overrides.homeDir ?? process.env[ENV.home] ?? join(homedir(), DATA_DIR_NAME);
   const file = overrides.skipRepair ? readConfigFile(homeDir) : repairActiveProviderModels(homeDir, readConfigFile(homeDir));
