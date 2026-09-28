@@ -262,10 +262,11 @@ describe('PR F /judge typed artifacts', () => {
     ];
     const workflow = vi.spyOn(WorkflowRunner.prototype, 'run');
     const settlement = vi.spyOn(db.sessions, 'settleExecution');
+    const events: Array<{ type: string; status?: string }> = [];
     const publicationFailure = new Error('artifact persistence failed');
     vi.spyOn(db.artifacts, 'saveMany').mockRejectedValueOnce(publicationFailure);
 
-    const result = judgeWorkflow(session.context, 'BBCA', () => {}, () => {}, {
+    const result = judgeWorkflow(session.context, 'BBCA', () => {}, event => events.push(event), {
       lifecycle: { sessionId, turnId: turn.id },
     });
     await expect(result).rejects.toBe(publicationFailure);
@@ -277,6 +278,7 @@ describe('PR F /judge typed artifacts', () => {
     expect(await db.artifacts.getByExecution(execution.id)).toEqual([]);
     expect(await db.claimGraphReleases.getByExecution(execution.id)).toBeNull();
     expect(settlement.mock.calls.map(call => call[1])).toEqual(['completed']);
+    expect(events.find(event => event.type === 'session.complete')?.status).toBe('completed');
 
     await expect(repairCompletedJudgeReleases({ db, sessionId })).resolves.toBe(1);
 

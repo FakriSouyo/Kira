@@ -11,12 +11,12 @@ apps/cli still owns significant application/runtime composition. It owns the CLI
 host, command dispatch and parsing, Session/repl lifecycle, `/new` Session
 creation, configuration/runtime rebinding and switching, `/resume` and
 `/continue` argument validation and target selection, local-path Attachment
-import, rendering, Judge failed/cancelled settlement and host error policy,
+import, rendering, Judge host abort classification and friendly error policy,
 concrete Judge release/reconciliation database-to-store adapters, startup
 reconciliation invocation timing, provider composition, AgentEvent projection,
 streaming presentation, and ConversationController. Engine owns successful
-lifecycle-backed Judge completion and release ordering through
-`completeJudgeExecution`. The CLI consumes the
+lifecycle-backed Judge completion and canonical lifecycle resolution through
+`completeJudgeExecution` and `runJudgeExecutionLifecycle`. The CLI consumes the
 conversation response stream and presents its chunks; host-neutral response
 orchestration is in the engine. Fresh canonical Turn lifecycle orchestration
 for ordinary commands, natural-language input, local input, and the old-Session
@@ -57,7 +57,7 @@ Persistence implementations and host filesystem access remain outside engine.
 Engine does not own `/new` Session creation, configuration/runtime rebinding
 and switching, `/resume` or `/continue` parsing and target selection,
 ConversationController, AgentEvent presentation, provider composition, Judge
-failed/cancelled settlement and host error policy, general Session startup
+abort classification and friendly error policy, general Session startup
 and reconciliation invocation timing, or persistence implementation. Engine owns
 Judge workflow runtime composition through the canonical WorkflowRunner,
 WorkflowTraceRecorder, optional JudgeCheckpointWriter, post-acquisition
@@ -69,9 +69,12 @@ reconciliation, and historical artifact reconstruction through supplied
 stores. The CLI adapts concrete database stores and decides when startup invokes
 reconciliation. The host selects a resume target; the engine validates and
 plans it, then acquires the same interrupted Execution through its existing
-store authority. `completeJudgeExecution` validates current release state before
-settlement and publishes after completion; historical profiles settle before
-artifact reconstruction. CLI retains failure/cancellation policy.
+store authority. `runJudgeExecutionLifecycle` coordinates canonical Judge
+preparation, runtime, completion, and failed/cancelled settlement;
+`completeJudgeExecution` validates current release state before settlement and
+publishes after completion, while historical profiles settle before artifact
+reconstruction. CLI supplies concrete stores and abort classification, then
+projects events and friendly errors.
 The publisher coordinates publication; WorkingContextStore owns durable
 WorkingContext persistence. The context coordinator coordinates existing
 @harness/context policies and @harness/orchestrator focus/prompt semantics. The
@@ -88,7 +91,7 @@ Judge plan.
       Screen workflow, conversation context preparation and Conversation
       Response orchestration, WorkingContext publication/reconciliation,
       Workspace/Document workflows, Session restart reconciliation,
-      Judge workflow runtime, checkpoint/resume core, resume projection repair,
+      Judge workflow runtime and lifecycle, checkpoint/resume core, resume projection repair,
       current Judge release core and completed release reconciliation,
       fresh-Turn and attached-Turn lifecycle
       orchestration
@@ -143,10 +146,10 @@ another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
 authority. UA15 and UA16 are complete on master. UA17 Judge Workflow
 Host-Neutralization is the current broad phase. UA17A Judge Runtime Composition
-Extraction and UA17B Judge Execution Preparation + Resume Acquisition are
-complete on master. UA17C Judge Completion + Release Orchestration Extraction is
-the current implementation/source-review slice. Later UA17 slices remain
-unselected pending another fresh source audit.
+Extraction, UA17B Judge Execution Preparation + Resume Acquisition, and UA17C
+Judge Completion + Release Orchestration are complete on master. UA17D Judge
+Execution Lifecycle Orchestration is the current implementation/source-review
+slice. Later UA17 slices remain unselected pending another fresh source audit.
 
 ## Model runtime — Q1 / Q2
 
@@ -592,13 +595,13 @@ Turns, and `recordLocalInput` Turns. Natural-language and local-input Turns
 continue to create zero ResearchExecutions. The CLI retains command parsing,
 provider composition, ConversationController/journal/transcript projection,
 AgentEvent projection, response streaming/rendering, reload and suspend
-handling, Judge Execution settlement/cancellation, release
-settlement/publication, `/new` Session switching, and
+handling, Judge abort classification and friendly error mapping, concrete
+store adaptation, `/new` Session switching, and
 `/resume`/`/continue` target selection and input projection. ResearchSessionStore
 remains lifecycle persistence authority, WorkingContextPublisher remains publication
 policy authority, and no database migration is required. UA9 did not complete
 engine extraction; UA10-UA16 are complete on master. UA17 is the current broad
-phase. UA17A and UA17B are complete on master, and UA17C is the current
+phase. UA17A, UA17B, and UA17C are complete on master, and UA17D is the current
 implementation/source-review slice. Later UA17 slices remain unselected
 pending a fresh source audit.
 
@@ -711,8 +714,8 @@ historical artifact reconstruction. Engine planning completes before CLI
 acquisition. UA13 did not
 move the Judge workflow shell, change checkpoint payloads, graph/version,
 capability plan, release contract, artifact kinds, persistence schema, or
-resumeGeneration ownership. UA12-UA17B are complete on master. UA17 is the broad
-phase and UA17C is the current implementation/source-review slice; later UA17
+resumeGeneration ownership. UA12-UA17C are complete on master. UA17 is the broad
+phase and UA17D is the current implementation/source-review slice; later UA17
 slices remain unselected pending a fresh source audit.
 
 ## UA14 - Host-neutral Judge Resume Projection Repair Extraction
@@ -763,9 +766,9 @@ through separate supplied-store contracts; CLI retains the adapter and startup
 invocation timing. Before UA17C, release ordering remained
 `prepare release -> settle Execution completed -> publish release`; the engine
 did not settle Executions. UA17C moves successful lifecycle completion ordering
-into engine while failed/cancelled settlement remains CLI-owned. Pre-T5
-historical profiles continue to reconstruct artifacts without a fabricated
-current release receipt.
+into engine, and UA17D moves failed/cancelled settlement resolution into engine.
+Pre-T5 historical profiles continue to reconstruct artifacts without a
+fabricated current release receipt.
 
 UA15 changed no workflow graph or version, capability plan, release contract,
 Claim or Counterpoint Policy, schema, migration, or artifact kind. UA14 and UA15
@@ -791,15 +794,15 @@ reload, then WorkingContext publication and journal reconciliation. Execution
 lifecycle, providers, and presentation remain CLI-owned. UA16 changes no schema,
 migration, workflow graph/version, capability plan,
 release contract, or artifact kinds. UA15 is complete on master. UA16 is
-complete on master. UA17 is the current broad phase. UA17A and UA17B are
-complete on master, and UA17C is the current implementation/source-review
+complete on master. UA17 is the current broad phase. UA17A, UA17B, and UA17C are
+complete on master, and UA17D is the current implementation/source-review
 slice. Later UA17 slices remain unselected pending a fresh source audit.
 
 ## UA17 - Judge Workflow Host-Neutralization
 
 UA17 is the broad phase for moving reusable Judge workflow behavior out of the
-CLI while preserving lifecycle persistence authority, failed/cancelled policy,
-provider composition, and presentation ownership at the host boundary.
+CLI while preserving `ResearchSessionStore` as lifecycle persistence authority
+and provider composition and presentation at the host boundary.
 
 UA17A, Host-neutral Judge Runtime Composition Extraction, moved canonical Judge
 definition execution, `WorkflowRunner`, trace and checkpoint wiring,
@@ -848,9 +851,21 @@ projection, concrete store adapters, provider composition, and direct legacy
 `ExecutionRun` completion. UA17C changes no workflow graph, checkpoint format,
 release or artifact schema, persistence migration, provider, or model semantics.
 
-UA17A and UA17B are complete on master. UA17C is the current
+UA17A, UA17B, and UA17C are complete on master. UA17D is the current
 implementation/source-review slice. Later UA17 slices remain unselected pending
 a fresh source audit.
+
+### UA17D — Judge Execution Lifecycle Orchestration
+
+`runJudgeExecutionLifecycle` composes the engine's existing Judge preparation,
+runtime, and completion authorities. It owns failed/cancelled resolution for
+fresh preparation, runtime, and pre-settlement completion failures, preserves
+resume incompatibility before acquisition, and returns post-settlement
+publication failure with the completed Execution so the host can project the
+completed state without settling again. Store persistence remains with
+`ResearchSessionStore`; the CLI supplies concrete stores and abort
+classification, then projects host events and friendly errors. The direct
+legacy `ExecutionRun` path remains in the CLI with its own settlement guard.
 
 ## Core boundaries and invariants
 

@@ -20,7 +20,7 @@ roadmap or historical design document.
 apps/cli remains more than a thin host adapter. It owns command dispatch,
 Session switching and new-Session creation/configuration for `/new`, plus
 `/resume` and `/continue` argument validation and target selection,
-control-command input projection, Judge failed/cancelled settlement and host
+control-command input projection, Judge host cancellation classification and
 error policy, completed-release reconciliation invocation and database-to-store
 adapters, startup invocation timing, provider composition,
 CLI event projection and streaming presentation, and ConversationController.
@@ -48,7 +48,7 @@ still owns fresh-input parsing and presentation, `/new` Session creation,
 configuration/provider/model rebinding and switching, `/resume` and `/continue`
 argument validation and target selection,
 control-command input projection, transcript/journal projection, Judge
-failed/cancelled settlement and host error policy, Judge
+abort classification and host error policy, Judge
 release/reconciliation store adaptation, startup invocation timing,
 provider composition, CLI event
 projection, streaming presentation, and local-path Attachment import. The
@@ -61,15 +61,18 @@ Judge checkpoint encoding/decoding, resume compatibility planning,
 restore-frontier derivation, durable Judge resume projection repair, the current
 Judge release core, completed Judge release reconciliation, and historical
 artifact reconstruction through supplied narrow store contracts. Engine also
-owns successful lifecycle-backed Judge completion after runtime through
-`completeJudgeExecution`: the immutable profile selects current release
+owns canonical lifecycle resolution through `runJudgeExecutionLifecycle`, which
+composes Judge preparation, runtime, and completion. `completeJudgeExecution`
+uses the immutable profile to select current release
 validation before settlement and current publication afterward, or historical
-artifact reconstruction after settlement. A typed post-settlement error carries
-the completed Execution and publication cause so CLI cannot settle it again.
+artifact reconstruction after settlement. The lifecycle coordinator also owns
+failure/cancellation settlement and the no-resettlement boundary after
+completion. A typed post-settlement error carries the completed Execution and
+publication cause so the CLI can project completion without settling it again.
 The host selects the resume target; the engine validates and plans it before
-calling the existing atomic same-Execution acquisition authority. CLI preserves
-failed/cancelled settlement and maps failures to host-facing events and errors.
-UA17A and UA17B are complete on master. UA17C is the current
+calling the existing atomic same-Execution acquisition authority. CLI supplies
+the host abort classifier, maps engine errors to host-facing errors, and projects
+AgentEvents. UA17A, UA17B, and UA17C are complete on master. UA17D is the current
 implementation/source-review slice; later UA17 slices remain unselected
 pending a fresh source audit.
 Engine coordinates the host-neutral attached-Turn lifecycle after CLI selects
