@@ -5,7 +5,7 @@ import { ClaimValidator } from '@harness/execution';
 import { createLLMClient, type ModelRuntimePlan } from '@harness/llm';
 import { DEFAULT_CONTEXT_SAFETY_MARGIN_TOKENS } from '@harness/context';
 import { IntentRouter } from '@harness/routing';
-import { MainFinHarnessAgent } from '@harness/orchestrator';
+import { MainKiraAgent } from '@harness/orchestrator';
 import { createSectorsFinancialDataProvider } from '@harness/sectors-api';
 import type { FinancialDataProvider } from '@harness/financial-data';
 import { FilesystemSkillProvider } from '@harness/skill-filesystem';
@@ -24,7 +24,7 @@ export interface HarnessContext extends EngineCapabilityRuntime {
   bear: BearAgent;
   judge: JudgeAgent;
   router: IntentRouter;
-  mainAgent: MainFinHarnessAgent;
+  mainAgent: MainKiraAgent;
   conversationContext: ConversationContextCoordinator;
   validator: ClaimValidator;
   researchers: { market: boolean; news: boolean };
@@ -112,7 +112,7 @@ export function buildContext(
     bear: new BearAgent(specialist('bear')),
     judge: new JudgeAgent(specialist('judge')),
     router: new IntentRouter(routerLlm),
-    mainAgent: new MainFinHarnessAgent(agentLlm),
+    mainAgent: new MainKiraAgent(agentLlm),
     conversationContext: createConversationContextCoordinator({
       workingContext: db.workingContext,
       artifacts: db.artifacts,

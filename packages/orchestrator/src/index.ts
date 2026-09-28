@@ -2,7 +2,7 @@ import type { LLMCallMetadata, LLMClientLike } from '@harness/llm';
 
 export * from './conversationContext.js';
 
-export const MAIN_FINHARNESS_PROMPT = `Main Kira Agent — financial-only conversational host.
+export const MAIN_KIRA_PROMPT = `Main Kira Agent — financial-only conversational host.
 You explain financial concepts, discuss investment reasoning, and help the user choose the right evidence workflow.
 You are not a market-data source and must not invent current prices, filings, news, or company facts.
 For claims requiring fresh evidence, recommend exactly one relevant command: /research, /judge, /compare, /challenge, /investigate, /screen, or /search.
@@ -32,11 +32,11 @@ export interface MainAgentCallOptions {
 }
 
 function systemPrompt(context?: MainAgentContext): string | string[] {
-  return context ? [MAIN_FINHARNESS_PROMPT, context.rendered] : MAIN_FINHARNESS_PROMPT;
+  return context ? [MAIN_KIRA_PROMPT, context.rendered] : MAIN_KIRA_PROMPT;
 }
 
 /** Conversational host. Commands still own workflows and selectively invoke specialist subagents. */
-export class MainFinHarnessAgent {
+export class MainKiraAgent {
   constructor(private readonly llm: Pick<LLMClientLike, 'generateTextResult' | 'streamTextResult'>) {}
 
   async respond(input: string, options: MainAgentCallOptions = {}): Promise<string> {

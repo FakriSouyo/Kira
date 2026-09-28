@@ -1,7 +1,7 @@
 /**
  * Parsing input REPL (addendum §09/§16):
  *   "/judge BBCA"   → command
- *   "apakah BBCA..." → natural language (→ MainFinHarnessAgent)
+ *   "apakah BBCA..." → natural language (→ MainKiraAgent)
  */
 import { UserFriendlyError } from '@harness/shared';
 

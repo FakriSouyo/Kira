@@ -39,7 +39,7 @@ Claim, Counterpoint, and Judgment stores.
 `runSessionTurn` owns canonical fresh-Turn lifecycle orchestration for ordinary
 commands, natural language, local input, and the old-Session Turn for `/new`.
 The conversation workflow prepares context, invokes
-MainFinHarnessAgent, and persists successful ModelCall provenance through
+MainKiraAgent, and persists successful ModelCall provenance through
 supplied contracts. These engine boundaries use host-supplied store contracts
 and narrow callbacks; their persistence implementations remain outside engine.
 WorkingContextStore owns durable WorkingContext persistence, and CLI's
@@ -74,10 +74,11 @@ calling the existing atomic same-Execution acquisition authority. CLI supplies
 the host abort classifier, maps engine errors to host-facing errors, and projects
 AgentEvents. UA17A, UA17B, UA17C, and UA17D are complete on master. This closes
 the planned UA Kira Engine Extraction phase; KB Internal Kira Identity Migration
-is the current broad phase. KB1 renames only the CLI runtime config type from
-FinharnessConfig to CliConfig. Other internal source symbols, package names,
-storage paths, and environment variable names remain unchanged and require
-separate source review and selection before migration. Future engine or product
+is the current broad phase. KB1 renamed the CLI runtime config type from
+FinharnessConfig to CliConfig. KB2 renamed the main conversational agent class and prompt constant to their
+Kira identities. Other internal
+source symbols, package names, storage paths, and environment variable names
+remain unchanged and require separate source review before migration. Future engine or product
 development remains subject to its own source review.
 Engine coordinates the host-neutral attached-Turn lifecycle after CLI selects
 the existing Session, Turn, and Execution. Engine does not own
@@ -97,9 +98,10 @@ Pre-settlement failures retain the legacy outer-catch reconciliation behavior.
 The future engine coordinates existing authorities. It must not replace
 Evidence, Claims, capability authorization, ToolRuntime, database, providers,
 or graph ownership. See ARCHITECTURE.md for current facts and target direction.
-Internal @harness names, .finharness storage/configuration, FINHARNESS_* settings,
-and legacy TypeScript symbols remain unchanged beyond KB1; keep them
-source-accurate unless a later slice is separately selected after source review.
+Internal @harness names, .finharness storage/configuration, and FINHARNESS_*
+settings remain unchanged. The main conversational agent class and prompt constant were renamed by KB2;
+keep other legacy TypeScript symbols source-accurate unless a
+later slice is separately selected after source review.
 
 ## Repository rules
 

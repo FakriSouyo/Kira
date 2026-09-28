@@ -26,8 +26,10 @@ selection, concrete store adapters, abort classification, host-facing errors,
 AgentEvent projection, presentation, and startup invocation timing. UA17 closes
 the planned UA Kira Engine Extraction phase; it does not complete future engine
 or product development. KB Internal Kira Identity Migration is the current broad
-phase. KB1 renames only the CLI runtime config type from FinharnessConfig to
-CliConfig. Future Desktop and Web hosts can reuse the existing host-neutral Judge,
+phase. KB1 renamed the CLI runtime config type from FinharnessConfig to
+CliConfig. KB2 renamed the conversational agent class and prompt constant without changing
+behavior or prompt bytes.
+Future Desktop and Web hosts can reuse the existing host-neutral Judge,
 Session, Context, capability, and lifecycle behavior. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for the clearly labelled current facts and
 target direction.
@@ -123,7 +125,8 @@ The current implementation loads configuration in this order:
 
 The current storage and credential directory remains ~/.finharness, and
 environment variables retain their FINHARNESS_* names. They are unchanged by
-KB1; any later migration requires separate source review and selection. Kira
+KB1 and KB2; any later migration requires separate source review and selection.
+Kira
 does not currently support ~/.kira.
 
 The CLI supports separate agent and router model tiers, OpenAI-compatible
@@ -142,12 +145,12 @@ providers, and the current Sectors financial-data provider. Use /setup,
 | Historical release record | CHANGELOG.md |
 | Historical, non-authoritative material | docs/archive/ |
 
-Current internal source identifiers such as MainFinHarnessAgent,
-HarnessContext, the @harness/* package namespace, and FINHARNESS_* settings
-remain unchanged in KB1. Later identity changes remain unselected and require
-separate source review. The CLI runtime config type was renamed from
-FinharnessConfig to CliConfig in KB1. Exact source symbols remain written as
-implemented until code changes them.
+Current internal source identifiers include MainKiraAgent and
+MAIN_KIRA_PROMPT; KB2 renamed these internal symbols without changing behavior
+or prompt bytes. HarnessContext,
+the @harness/* package namespace, and FINHARNESS_* settings remain unchanged.
+The CLI runtime config type was renamed from FinharnessConfig to CliConfig in
+KB1. Later identity changes remain unselected and require separate source review.
 
 ## Scope
 

@@ -47,7 +47,7 @@ existing `ResearchSessionStore` and `WorkingContextPublisher` contracts, plus
 attached-Turn lifecycle orchestration around an existing Turn and Execution.
 Conversation Response
 orchestration coordinates `ConversationContextCoordinator` ->
-`MainFinHarnessAgent` -> `ResearchSessionStore.recordModelCall` through supplied
+`MainKiraAgent` -> `ResearchSessionStore.recordModelCall` through supplied
 current contracts. The context coordinator receives supplied WorkingContextStore,
 ArtifactStore, and ContextSnapshotStore contracts; the WorkingContext publisher
 receives supplied WorkingContextStore, ArtifactStore, and JudgmentStore
@@ -104,12 +104,11 @@ Judge plan.
 External seams remain explicit: packages/llm owns model clients,
 packages/financial-data owns the provider-neutral financial contract, and
 packages/sectors-api is the current financial provider implementation. The
-current source symbol for the conversational host is MainFinHarnessAgent; it is
-a legacy internal name unchanged by KB1. The current @harness/* package
-namespace and HarnessContext identifier also remain unchanged by KB1; later
-identity changes remain unselected and require separate source review.
-FinharnessConfig was renamed to CliConfig in KB1; no other internal identity
-migration occurred in KA or UA.
+current source symbol for the conversational host is MainKiraAgent, and
+its prompt constant is MAIN_KIRA_PROMPT. KB2 renamed only the internal class
+and prompt identifiers; behavior and prompt bytes are unchanged. The @harness/* package namespace
+and HarnessContext identifier remain unchanged. FinharnessConfig was renamed
+to CliConfig in KB1; no other internal identity migration occurred in KA or UA.
 
 ## Target direction — complete Kira engine
 
@@ -148,8 +147,9 @@ another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
 authority. UA15, UA16, and UA17A-D are complete on master, closing the planned
 UA Kira Engine Extraction phase. KB Internal Kira Identity Migration is the
-current broad phase. KB1 renames only the CLI runtime config type from
-FinharnessConfig to CliConfig.
+current broad phase. KB1 renamed the CLI runtime config type from FinharnessConfig to CliConfig.
+KB2 renamed the conversational agent class and prompt constant without changing
+behavior or prompt bytes.
 
 ## Model runtime — Q1 / Q2
 
@@ -225,7 +225,7 @@ using the `openai-compatible` adapter. API keys and private request/session
 affinity are excluded from the fingerprint.
 
 The production Context budget uses the capabilities of the exact runtime plan
-for real providers. MainFinHarnessAgent and SubagentRuntime use result-bearing
+for real providers. MainKiraAgent and SubagentRuntime use result-bearing
 runtime calls; durable ModelCall rows record the actual provider/model,
 adapter, protocol, runtime fingerprint, and usage. Fallback still creates a
 new one-shot PreparedModelCall per attempt, and successful metadata identifies
@@ -513,7 +513,7 @@ audit before selection.
 
 UA7 moves only host-neutral conversational response orchestration from CLI to
 `packages/engine`. The CLI still creates and settles the conversation Turn;
-the engine coordinates the current context coordinator, MainFinHarnessAgent,
+the engine coordinates the current context coordinator, MainKiraAgent,
 and successful ModelCall provenance persistence through the supplied
 ResearchSessionStore contract.
 
@@ -524,7 +524,7 @@ CLI creates conversation Turn
         ↓
 ConversationContextCoordinator
         ↓
-MainFinHarnessAgent
+MainKiraAgent
         ↓
 ResearchSessionStore.recordModelCall
         ↓
@@ -538,7 +538,7 @@ presentation, context policy, and model runtime authority. Engine does not own
 still owned Turn creation/settlement and the WorkingContext publication trigger;
 UA9 subsequently extracts the fresh-Turn orchestration around its current
 command, conversation, and local-input callbacks. Context selection, budgeting,
-snapshot creation, MainFinHarnessAgent behavior, runtime routing, and model
+snapshot creation, MainKiraAgent behavior, runtime routing, and model
 provenance fields keep their existing authorities and semantics.
 
 ## UA8 - Host-neutral Session Restart Lifecycle Reconciliation Extraction
@@ -872,7 +872,7 @@ legacy `ExecutionRun` path remains in the CLI with its own settlement guard.
   Bear → rebuttal → Judge → deterministic evidence check → Verdict path.
 - Bull, Bear, and Judge are workflow-scoped specialists. Other commands do not
   implicitly invoke the debate pipeline.
-- Natural-language input is handled by `MainFinHarnessAgent`; it does not
+- Natural-language input is handled by `MainKiraAgent`; it does not
   silently execute `/judge`, `/research`, `/compare`, `/challenge`,
   `/investigate`, or `/screen`.
 - Provider cache/freshness, Evidence, artifacts, context, and workflow

@@ -1,9 +1,9 @@
 import { expect, it, vi } from 'vitest';
-import { MainFinHarnessAgent } from '../src/index';
+import { MainKiraAgent } from '../src/index';
 
 it.each(['siapa kamu?', 'apa itu Kira?'])('answers identity locally without spending an LLM request (%s)', async (question) => {
   const llm = { generateText: vi.fn() };
-  const agent = new MainFinHarnessAgent(llm as never);
+  const agent = new MainKiraAgent(llm as never);
   const answer = await agent.respond(question);
   expect(answer).toContain('Saya Kira');
   expect(answer).not.toMatch(/\/research\b/);
@@ -18,7 +18,7 @@ it('grounds general financial chat in a bounded main-agent prompt', async () => 
       metadata: { provider: 'mock', model: 'test', providerId: 'mock', modelId: 'test', adapterId: 'mock', protocol: 'mock', runtimeFingerprint: 'f'.repeat(64), inputTokens: null, outputTokens: null, cachedInputTokens: null, totalTokens: null, finishReason: 'stop', latencyMs: 0 },
     }),
   };
-  const agent = new MainFinHarnessAgent(llm as never);
+  const agent = new MainKiraAgent(llm as never);
   const answer = await agent.respond('apa itu diversifikasi?');
   expect(answer).toContain('Diversifikasi');
   expect(llm.generateTextResult).toHaveBeenCalledWith(expect.objectContaining({
@@ -34,7 +34,7 @@ it('passes stable structured context to the model and records the call after suc
     inputTokens: 10, outputTokens: 4, cachedInputTokens: 0, totalTokens: 14, finishReason: 'stop', latencyMs: 12,
   };
   const llm = { generateText: vi.fn().mockResolvedValue('jawaban'), generateTextResult: vi.fn().mockResolvedValue({ value: 'jawaban', metadata }) };
-  const agent = new MainFinHarnessAgent(llm as never);
+  const agent = new MainKiraAgent(llm as never);
   const rendered = '<FINHARNESS_CONTEXT>\nVERIFIED RESEARCH ARTIFACTS\n</FINHARNESS_CONTEXT>';
 
   await agent.respond('jadi menurutmu bagaimana?', {
@@ -63,7 +63,7 @@ it('keeps final metadata on the result-bearing text stream and invokes the callb
       metadata: Promise.resolve(metadata),
     })),
   };
-  const agent = new MainFinHarnessAgent(llm as never);
+  const agent = new MainKiraAgent(llm as never);
   const chunks: string[] = [];
   for await (const chunk of agent.stream('apa kabar?', { onModelCall })) chunks.push(chunk);
   expect(chunks).toEqual(['partial']);

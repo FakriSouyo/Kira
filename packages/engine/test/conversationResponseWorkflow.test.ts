@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LLMClientLike, LLMCallMetadata } from '@harness/llm';
-import { MainFinHarnessAgent, type MainAgentCallOptions } from '@harness/orchestrator';
+import { MainKiraAgent, type MainAgentCallOptions } from '@harness/orchestrator';
 import type { ResearchSessionStore, ModelCallRecord } from '@harness/session-core';
 import type { ConversationContextCoordinator, PreparedConversationContext } from '../src/conversation/contextCoordinator.js';
 import {
@@ -72,7 +72,7 @@ function realAgentForFastPaths() {
     generateTextResult: vi.fn(),
     streamTextResult: vi.fn(),
   } as unknown as Pick<LLMClientLike, 'generateTextResult' | 'streamTextResult'>;
-  return { agent: new MainFinHarnessAgent(llm), llm };
+  return { agent: new MainKiraAgent(llm), llm };
 }
 
 describe('host-neutral conversation response workflows', () => {
@@ -210,7 +210,7 @@ describe('host-neutral conversation response workflows', () => {
         metadata: Promise.resolve(METADATA),
       })),
     } as unknown as Pick<LLMClientLike, 'generateTextResult' | 'streamTextResult'>;
-    const realAgent = new MainFinHarnessAgent(llm);
+    const realAgent = new MainKiraAgent(llm);
 
     await expect(collect(conversationStreamWorkflow({ ...test.dependencies, agent: realAgent }, INPUT))).rejects.toBe(failure);
     expect(test.recordModelCall).not.toHaveBeenCalled();

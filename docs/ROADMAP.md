@@ -110,11 +110,11 @@ Z
 
 ## KB identity migration status
 
-KB is the current broad phase. KB1 is its first bounded slice and renames only
-the CLI runtime config type from FinharnessConfig to CliConfig. It does not
-migrate storage, environment variables, the package namespace, or other
-internal source symbols. Later KB slices remain unselected and require their
-own source review.
+KB is the current broad phase. KB1 renamed the CLI runtime config type from
+FinharnessConfig to CliConfig. KB2 renamed only the conversational agent class and prompt constant to their
+current Kira identities, without changing behavior or prompt bytes. These slices do not migrate storage, environment
+variables, or the package namespace. Later KB slices remain unselected and
+require their own source review.
 
 The sequence intentionally combines architecture evolution with user-visible
 research capability maturation. Discovery and design for later milestones may
@@ -125,8 +125,8 @@ boundaries established by earlier milestones.
 
 UA1-UA17D, including UA17 Judge Workflow Host-Neutralization, are complete on
 master. This closes the planned UA Kira Engine Extraction phase. KB Internal
-Kira Identity Migration is the current broad phase; KB1 is limited to the CLI
-runtime config type rename described above.
+Kira Identity Migration is the current broad phase; KB1 and KB2 are complete
+as described above.
 
 UA1 — Host-neutral Capability Runtime Extraction, UA2 — Host-neutral Workflow
 Trace Extraction, UA3 — Host-neutral Screen Workflow Extraction, and UA4 —
