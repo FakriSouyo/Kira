@@ -124,6 +124,12 @@ export type {
 } from './judge/releaseReconciliation.js';
 export { completeJudgeExecution, JudgeExecutionCompletionError } from './judge/executionCompletion.js';
 export type { CompletedJudgeExecution, JudgeExecutionCompletionPhase } from './judge/executionCompletion.js';
+export { JudgeExecutionSettlementError, runJudgeExecutionLifecycle } from './judge/executionLifecycle.js';
+export type {
+  JudgeExecutionLifecycleOptions,
+  JudgeExecutionLifecycleResult,
+  JudgeExecutionLifecycleRuntimeOptions,
+} from './judge/executionLifecycle.js';
 
 export interface EngineCapabilityRuntimeOptions {
   readonly financialData: FinancialDataProvider;

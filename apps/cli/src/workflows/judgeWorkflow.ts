@@ -5,18 +5,17 @@ import type { ResearchExecution } from '@harness/session-core';
 import { mapToUserFriendly, UserFriendlyError } from '@harness/shared';
 import { FinancialDataVerificationError } from '@harness/financial-data';
 import {
-  JudgeExecutionPreparationError,
-  JudgeExecutionCompletionError,
-  completeJudgeExecution,
-  prepareJudgeExecution,
+  JudgeExecutionSettlementError,
   runJudgeWorkflowRuntime,
+  runJudgeExecutionLifecycle,
   type BearChallengeResponse,
   type BullAnalysisResponse,
   type JudgeCheckpointStores,
+  type JudgeExecutionLifecycleRuntimeOptions,
   type JudgeNodeEvent,
   type JudgeProjectionRepairStores,
   type JudgeProgress,
-  type PreparedJudgeExecution,
+  type JudgeWorkflowRuntimeResult,
 } from '@harness/engine';
 import type { SkillReference } from '@harness/subagent-core';
 import type { AgentEvent, UiWorkflowStepStatus } from '../repl/events';
@@ -141,19 +140,40 @@ function judgeProjectionRepairStores(ctx: HarnessContext): JudgeProjectionRepair
   };
 }
 
-/**
- * `/judge` composition boundary (PR C): it creates the canonical Execution,
- * invokes `WorkflowRunner` over the declared graph, projects runtime events into
- * the shared Agent-Events stream, persists the workflow trace, settles the
- * Execution exactly once, and returns the artifacts to render.
- *
- * Financial orchestration lives in the engine Judge node runtime;
- * there is no second, manual execution path.
- *
- * Degradasi enrichment (addendum §24-A.5): kegagalan Market/News → kategori
- * rubrik terkait `null`, run tetap `completed`. Kegagalan fundamental
- * (Company Report/Financials) atau persistence → run `failed`.
- */
+function projectJudgeVerdict(runtime: JudgeWorkflowRuntimeResult, events: (event: AgentEvent) => void): void {
+  const { judgment, collected, synthesis } = runtime;
+  events({
+    type: 'verdict',
+    stance: judgment.stance, score: judgment.score, confidence: judgment.confidence,
+    evidenceCount: collected.evidenceIds.length, rounds: synthesis.rounds,
+    summary: judgment.summary, breakdown: judgment.breakdown,
+  });
+}
+
+function toJudgeArtifacts(
+  run: ExecutionRun | ResearchExecution,
+  runtime: JudgeWorkflowRuntimeResult,
+  artifactRefs: DurableArtifactRef[] = [],
+): JudgeArtifacts {
+  const { collected, thesis, challenge, rebuttal, judgeTurn, judgment } = runtime;
+  return {
+    run: run as ExecutionRun,
+    evidence: collected.evidence.slice(0, 2),
+    marketEvidence: collected.marketEvidence,
+    newsEvidence: collected.newsEvidence,
+    marketAvailable: collected.marketAvailable,
+    newsAvailable: collected.newsAvailable,
+    bull: thesis.response,
+    bear: challenge.response,
+    rebuttal: rebuttal.response,
+    judgment,
+    artifactRefs,
+    subagentAudit: { bull: thesis.result.skills, bear: challenge.result.skills, judge: judgeTurn.result.skills },
+    conditionalUsed: runtime.conditionalUsed,
+  };
+}
+
+/** Host adapter for canonical Judge lifecycle and direct legacy ExecutionRun calls. */
 export async function judgeWorkflow(
   ctx: HarnessContext,
   ticker: string,
@@ -168,171 +188,162 @@ export async function judgeWorkflow(
     evidence: ctx.db.evidence,
     contextSnapshots: ctx.db.contextSnapshots,
   };
-  let prepared: PreparedJudgeExecution | undefined;
-  let preparationFailure: unknown;
-  let preparationFailed = false;
-  let run: ExecutionRun | ResearchExecution;
+  const runtimeDependencies = {
+    node: {
+      capabilityGateway: ctx.capabilityGateway,
+      bull: ctx.bull,
+      bear: ctx.bear,
+      judge: ctx.judge,
+      validator: ctx.validator,
+      researchers: ctx.researchers,
+      evidence: ctx.db.evidence,
+      financialSnapshots: ctx.db.financialSnapshots,
+      conversation: ctx.db.conversation,
+      claims: ctx.db.claims,
+      counterpoints: ctx.db.counterpoints,
+      judgments: ctx.db.judgments,
+    },
+    trace: ctx.db.sessions,
+  };
+  let projectedNodes = new Map<string, ProjectedNode>();
+  const runtimeOptions: JudgeExecutionLifecycleRuntimeOptions = {
+    dependencies: runtimeDependencies,
+    progress,
+    signal: opts.signal,
+    onPlan: definition => {
+      projectedNodes = new Map<string, ProjectedNode>(definition.nodes.map(node => [node.id, node] as const));
+      events({
+        type: 'workflow.plan',
+        workflowId: definition.id,
+        nodes: definition.nodes.map(node => ({
+          id: node.id,
+          label: node.label,
+          parentIds: node.dependsOn ?? [],
+          ...(node.executor ? { owner: node.executor.id } : {}),
+        })),
+      });
+    },
+    onWorkflowEvent: event => events(projectWorkflowStep(event, projectedNodes)),
+    onJudgeNodeEvent: event => projectJudgeNodeEvent(event, events),
+    onToolEvent: event => projectFinancialToolEvent(event, { ticker, emit: events }),
+  };
+
   if (opts.lifecycle) {
+    let result;
     try {
-      prepared = await prepareJudgeExecution({
-        sessions: ctx.db.sessions,
-        executionProfiles: ctx.db.executionProfiles,
-        checkpointStores,
-        lifecycle: opts.lifecycle,
-        request: {
-          ticker,
-          command: 'judge',
-          reasoning: opts.reasoning,
-          conditional: opts.conditional,
-          researchers: ctx.researchers,
-          ...(opts.resumeExecutionId ? { resumeExecutionId: opts.resumeExecutionId } : {}),
+      const releaseStores = createJudgeReleaseStores(ctx.db);
+      result = await runJudgeExecutionLifecycle({
+        preparation: {
+          sessions: ctx.db.sessions,
+          executionProfiles: ctx.db.executionProfiles,
+          checkpointStores,
+          lifecycle: opts.lifecycle,
+          request: {
+            ticker,
+            command: 'judge',
+            reasoning: opts.reasoning,
+            conditional: opts.conditional,
+            researchers: ctx.researchers,
+            ...(opts.resumeExecutionId ? { resumeExecutionId: opts.resumeExecutionId } : {}),
+          },
+          currentRuntime: {
+            provider: ctx.config?.llm.agent.providerId ?? ctx.config?.llm.agent.provider,
+            model: ctx.config?.llm.agent.model,
+            capabilityPlan: ctx.judgeCapabilityPlan,
+            runtimePlan: ctx.runtimePlan as never,
+          },
         },
-        currentRuntime: {
-          provider: ctx.config?.llm.agent.providerId ?? ctx.config?.llm.agent.provider,
-          model: ctx.config?.llm.agent.model,
-          capabilityPlan: ctx.judgeCapabilityPlan,
-          runtimePlan: ctx.runtimePlan as never,
+        runtime: { ...runtimeOptions, projectionRepairStores: judgeProjectionRepairStores(ctx) },
+        completion: {
+          sessions: ctx.db.sessions,
+          releaseStores,
+          historicalArtifactStores: releaseStores,
+        },
+        isAbortError: error => error instanceof UserFriendlyError && error.code === 'ABORTED',
+        onExecutionKnown: execution => {
+          if (!opts.resumeExecutionId) {
+            events({ type: 'session.start', runId: execution.id, ...opts.lifecycle, executionId: execution.id, ticker });
+          }
         },
       });
-      run = prepared.execution;
     } catch (error) {
-      if (!(error instanceof JudgeExecutionPreparationError) || opts.resumeExecutionId) throw error;
-      run = error.execution;
-      preparationFailure = error.cause;
-      preparationFailed = true;
+      if (error instanceof JudgeExecutionSettlementError) {
+        throw new UserFriendlyError(
+          'PERSISTENCE_FAILED',
+          `Run ${error.execution.id} stopped, but its terminal status (${error.intendedStatus}) could not be saved: ${errorMessage(error.settlementCause)}`,
+          'Check database access before retrying.',
+        );
+      }
+      throw error;
     }
-  } else {
-    run = await ctx.db.execution.createRun({ ticker, command: 'judge' });
+
+    const lifecycleIds = { ...opts.lifecycle, executionId: result.execution.id };
+    switch (result.outcome) {
+      case 'failed':
+      case 'cancelled': {
+        const cancelled = result.outcome === 'cancelled';
+        const friendly = cancelled
+          ? result.cause instanceof UserFriendlyError && result.cause.code === 'ABORTED'
+            ? result.cause
+            : new UserFriendlyError('ABORTED', 'Aborted', 'Run cancelled at phase boundary')
+          : toUserFriendly(result.cause, result.execution.id);
+        events({
+          type: 'session.complete',
+          runId: result.execution.id,
+          ...lifecycleIds,
+          status: cancelled ? 'stopped' : 'failed',
+          error: { code: friendly.code, message: friendly.message, suggestion: friendly.suggestion },
+        });
+        throw friendly;
+      }
+      case 'completed-publication-failed':
+        projectJudgeVerdict(result.runtime, events);
+        events({ type: 'session.complete', runId: result.execution.id, ...lifecycleIds, status: 'completed' });
+        throw result.cause;
+      case 'completed':
+        projectJudgeVerdict(result.runtime, events);
+        events({ type: 'session.complete', runId: result.execution.id, ...lifecycleIds, status: 'completed' });
+        return toJudgeArtifacts(result.execution, result.runtime, result.artifacts.map(artifact => ({
+          kind: artifact.kind,
+          artifactId: artifact.artifactId,
+        })));
+    }
   }
-  const profile = prepared?.profile;
-  const resumePlan = prepared?.resumePlan;
-  const lifecycleIds = opts.lifecycle
-    ? { ...opts.lifecycle, executionId: run.id }
-    : {};
+
+  const run = await ctx.db.execution.createRun({ ticker, command: 'judge' });
   let executionSettled = false;
 
   try {
-    if (!opts.resumeExecutionId) events({ type: 'session.start', runId: run.id, ...lifecycleIds, ticker });
-    if (preparationFailed) throw preparationFailure;
-    const reasoning = prepared?.reasoning ?? Boolean(opts.reasoning);
-    const conditional = prepared?.conditional ?? Boolean(opts.conditional);
-    const researchers = prepared?.researchers ?? ctx.researchers;
-    let projectedNodes = new Map<string, ProjectedNode>();
+    events({ type: 'session.start', runId: run.id, ticker });
     const runtime = await runJudgeWorkflowRuntime({
+      ...runtimeOptions,
       run: { id: run.id, ticker, createdAt: run.createdAt },
-      dependencies: {
-        node: {
-          capabilityGateway: ctx.capabilityGateway,
-          bull: ctx.bull,
-          bear: ctx.bear,
-          judge: ctx.judge,
-          validator: ctx.validator,
-          researchers,
-          evidence: ctx.db.evidence,
-          financialSnapshots: ctx.db.financialSnapshots,
-          conversation: ctx.db.conversation,
-          claims: ctx.db.claims,
-          counterpoints: ctx.db.counterpoints,
-          judgments: ctx.db.judgments,
-        },
-        trace: ctx.db.sessions,
-      },
-      reasoning,
-      conditional,
-      progress,
-      signal: opts.signal,
-      ...(opts.lifecycle && profile ? {
-        canonical: {
-          execution: run as ResearchExecution,
-          profile,
-          checkpointStores,
-          ...(resumePlan ? { projectionRepairStores: judgeProjectionRepairStores(ctx) } : {}),
-        },
-      } : {}),
-      resumePlan,
-      onPlan: definition => {
-        projectedNodes = new Map<string, ProjectedNode>(definition.nodes.map(node => [node.id, node] as const));
-        events({
-          type: 'workflow.plan',
-          workflowId: definition.id,
-          nodes: definition.nodes.map(node => ({
-            id: node.id,
-            label: node.label,
-            parentIds: node.dependsOn ?? [],
-            ...(node.executor ? { owner: node.executor.id } : {}),
-          })),
-        });
-      },
-      onWorkflowEvent: event => events(projectWorkflowStep(event, projectedNodes)),
-      onJudgeNodeEvent: event => projectJudgeNodeEvent(event, events),
-      onToolEvent: event => projectFinancialToolEvent(event, { ticker, emit: events }),
+      reasoning: Boolean(opts.reasoning),
+      conditional: Boolean(opts.conditional),
     });
-    const { collected, thesis, challenge, rebuttal, judgeTurn, judgment, synthesis } = runtime;
 
     const executionTimeSeconds = (Date.now() - startedAt) / 1000;
-    let completed: ExecutionRun | ResearchExecution;
-    let artifactRefs: DurableArtifactRef[] = [];
-    if (opts.lifecycle) {
-      const releaseStores = createJudgeReleaseStores(ctx.db);
-      const completion = await completeJudgeExecution({
-        execution: run as ResearchExecution,
-        profile: profile!,
-        executionTimeSeconds,
-        sessions: ctx.db.sessions,
-        releaseStores,
-        historicalArtifactStores: releaseStores,
-      });
-      completed = completion.execution;
-      artifactRefs = completion.artifacts.map(artifact => ({ kind: artifact.kind, artifactId: artifact.artifactId }));
-    } else {
-      completed = await ctx.db.execution.completeRun(run.id, executionTimeSeconds);
-    }
+    const completed = await ctx.db.execution.completeRun(run.id, executionTimeSeconds);
     executionSettled = true;
-    events({
-      type: 'verdict',
-      stance: judgment.stance, score: judgment.score, confidence: judgment.confidence,
-      evidenceCount: collected.evidenceIds.length, rounds: synthesis.rounds,
-      summary: judgment.summary, breakdown: judgment.breakdown,
-    });
-    events({ type: 'session.complete', runId: run.id, ...lifecycleIds, status: 'completed' });
-    return {
-      run: completed as ExecutionRun,
-      evidence: collected.evidence.slice(0, 2),
-      marketEvidence: collected.marketEvidence,
-      newsEvidence: collected.newsEvidence,
-      marketAvailable: collected.marketAvailable,
-      newsAvailable: collected.newsAvailable,
-      bull: thesis.response,
-      bear: challenge.response,
-      rebuttal: rebuttal.response,
-      judgment,
-      artifactRefs,
-      subagentAudit: { bull: thesis.result.skills, bear: challenge.result.skills, judge: judgeTurn.result.skills },
-      conditionalUsed: runtime.conditionalUsed,
-    };
+    projectJudgeVerdict(runtime, events);
+    events({ type: 'session.complete', runId: run.id, status: 'completed' });
+    return toJudgeArtifacts(completed, runtime);
   } catch (error) {
     if (executionSettled) throw error;
-    if (error instanceof JudgeExecutionCompletionError && error.phase === 'after-settlement') throw error.cause;
-    // The runtime wraps required-step failures; the user must see the original cause.
-    const completionCause = error instanceof JudgeExecutionCompletionError ? error.cause : error;
-    const cause = completionCause instanceof WorkflowStepError ? completionCause.cause ?? completionCause : completionCause;
+    const cause = error instanceof WorkflowStepError ? error.cause ?? error : error;
     const aborted = Boolean(opts.signal?.aborted);
     const friendly = aborted
       ? new UserFriendlyError('ABORTED', 'Aborted', 'Run cancelled at phase boundary')
       : toUserFriendly(cause, run.id);
-    const cancelled = Boolean(opts.lifecycle) && (aborted || friendly.code === 'ABORTED');
     try {
-      if (opts.lifecycle) {
-        await ctx.db.sessions.settleExecution(run.id, cancelled ? 'cancelled' : 'failed', { error: aborted ? 'Aborted' : errorMessage(cause) });
-      } else {
-        await ctx.db.execution.failRun(run.id, aborted ? 'Aborted' : errorMessage(cause));
-      }
+      await ctx.db.execution.failRun(run.id, aborted ? 'Aborted' : errorMessage(cause));
       executionSettled = true;
     }
     catch (persistError) {
       throw new UserFriendlyError('PERSISTENCE_FAILED', `Run ${run.id} stopped, but its failed status could not be saved: ${errorMessage(persistError)}`, 'Check database access before retrying.');
     }
-    events({ type: 'session.complete', runId: run.id, ...lifecycleIds, status: cancelled ? 'stopped' : 'failed', error: { code: friendly.code, message: friendly.message, suggestion: friendly.suggestion } });
+    // The legacy direct ExecutionRun path historically reports cancellation as failed.
+    events({ type: 'session.complete', runId: run.id, status: 'failed', error: { code: friendly.code, message: friendly.message, suggestion: friendly.suggestion } });
     throw friendly;
   }
 }

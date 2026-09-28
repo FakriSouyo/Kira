@@ -468,6 +468,78 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
     ]);
   });
 
+  it('maps failed canonical settlement persistence to PERSISTENCE_FAILED and retains the action details', async () => {
+    const context = ctx();
+    const session = await db.sessions.createSession({
+      sessionId: 'conversation_settlement_persist_fail', title: 'Settlement persistence failure', provider: 'openai', model: 'mock', reasoningMode: 'usual',
+    });
+    const turn = await db.sessions.createTurn({ sessionId: session.id, input: '/judge ZZZZ', command: 'judge' });
+    const actionFailure = new Error('Company report unavailable');
+    const settlementFailure = new Error('database unavailable');
+    vi.spyOn(context.financialData, 'getCompanyReport').mockRejectedValue(actionFailure);
+    const settle = vi.spyOn(db.sessions, 'settleExecution').mockRejectedValue(settlementFailure);
+
+    await expect(judgeWorkflow(context, 'ZZZZ', () => {}, () => {}, {
+      lifecycle: { sessionId: session.id, turnId: turn.id },
+    })).rejects.toMatchObject({
+      code: 'PERSISTENCE_FAILED',
+      message: expect.stringContaining(settlementFailure.message),
+    });
+
+    expect(settle).toHaveBeenCalledOnce();
+    expect(settle.mock.calls[0][1]).toBe('failed');
+    expect(settle.mock.calls[0][2]).toEqual({ error: actionFailure.message });
+  });
+
+  it('maps cancelled canonical settlement persistence to PERSISTENCE_FAILED with the cancelled status', async () => {
+    const context = ctx();
+    const events: AgentEvent[] = [];
+    const session = await db.sessions.createSession({
+      sessionId: 'conversation_cancelled_settlement_persist_fail', title: 'Cancelled settlement persistence failure', provider: 'openai', model: 'mock', reasoningMode: 'usual',
+    });
+    const turn = await db.sessions.createTurn({ sessionId: session.id, input: '/judge BBCA', command: 'judge' });
+    const controller = new AbortController();
+    const analyze = context.bull.analyze.bind(context.bull);
+    vi.spyOn(context.bull, 'analyze').mockImplementation(async args => {
+      const result = await analyze(args);
+      controller.abort(new DOMException('Stopped by user', 'AbortError'));
+      return result;
+    });
+    const settlementFailure = new Error('database unavailable');
+    const settle = vi.spyOn(db.sessions, 'settleExecution').mockRejectedValue(settlementFailure);
+
+    await expect(judgeWorkflow(context, 'BBCA', () => {}, event => events.push(event), {
+      signal: controller.signal,
+      lifecycle: { sessionId: session.id, turnId: turn.id },
+    })).rejects.toMatchObject({
+      code: 'PERSISTENCE_FAILED',
+      message: expect.stringContaining('terminal status (cancelled)'),
+    });
+
+    expect(settle).toHaveBeenCalledOnce();
+    expect(settle.mock.calls[0][0]).toBe(runIdOf(events));
+    expect(settle.mock.calls[0][1]).toBe('cancelled');
+    expect(settle.mock.calls[0][2]).toEqual({ error: 'Aborted' });
+  });
+
+  it('does not resettle a completed canonical Execution when host verdict projection throws', async () => {
+    const context = ctx();
+    const session = await db.sessions.createSession({
+      sessionId: 'conversation_verdict_projection_fail', title: 'Verdict projection failure', provider: 'openai', model: 'mock', reasoningMode: 'usual',
+    });
+    const turn = await db.sessions.createTurn({ sessionId: session.id, input: '/judge BBCA', command: 'judge' });
+    const projectionFailure = new Error('verdict projection failed');
+    const settle = vi.spyOn(db.sessions, 'settleExecution');
+
+    await expect(judgeWorkflow(context, 'BBCA', () => {}, event => {
+      if (event.type === 'verdict') throw projectionFailure;
+    }, { lifecycle: { sessionId: session.id, turnId: turn.id } })).rejects.toBe(projectionFailure);
+
+    const execution = (await db.sessions.getSessionArtifacts(session.id)).executions[0]!;
+    expect(execution.status).toBe('completed');
+    expect(settle.mock.calls.map(call => call[1])).toEqual(['completed']);
+  });
+
   it('emits start before settling a fresh profile-preparation failure without invoking workflow, provider, or model work', async () => {
     const context = ctx();
     const events: AgentEvent[] = [];

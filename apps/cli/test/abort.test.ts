@@ -24,8 +24,11 @@ describe('Abort + getEmbedding (Phase 9A)', () => {
     const config = loadConfig({ homeDir: dir, mockSectors: true, mockLlm: true });
     const ctx = buildContext(db, config, { sessionId: 'abort-test-session' });
     const controller = new AbortController();
+    const events: Array<{ type: string; status?: string }> = [];
     controller.abort();
-    await expect(judgeWorkflow(ctx, 'BBCA', () => {}, () => {}, { signal: controller.signal })).rejects.toMatchObject({ code: 'ABORTED' });
+    await expect(judgeWorkflow(ctx, 'BBCA', () => {}, event => events.push(event), { signal: controller.signal }))
+      .rejects.toMatchObject({ code: 'ABORTED' });
+    expect(events.find(event => event.type === 'session.complete')?.status).toBe('failed');
     db.raw.close();
     rmSync(dir, { recursive: true, force: true });
   });
