@@ -72,15 +72,16 @@ publication cause so the CLI can project completion without settling it again.
 The host selects the resume target; the engine validates and plans it before
 calling the existing atomic same-Execution acquisition authority. CLI supplies
 the host abort classifier, maps engine errors to host-facing errors, and projects
-AgentEvents. UA17A, UA17B, and UA17C are complete on master. UA17D is the current
-implementation/source-review slice; later UA17 slices remain unselected
-pending a fresh source audit.
+AgentEvents. UA17A, UA17B, UA17C, and UA17D are complete on master. This closes
+the planned UA Kira Engine Extraction phase; KB Internal Kira Identity Migration
+is the next broad phase. Future engine or product development remains subject to
+its own source review.
 Engine coordinates the host-neutral attached-Turn lifecycle after CLI selects
 the existing Session, Turn, and Execution. Engine does not own
 ConversationController, AgentEvent presentation, host filesystem access, or
-persistence implementation. UA extraction is incomplete; do not assume
-broader engine APIs exist. Do not put new reusable application/core behavior
-in CLI when a host-neutral boundary is clearly required.
+persistence implementation. Do not assume unplanned engine APIs exist. Do not
+put new reusable application/core behavior in CLI when a host-neutral boundary
+is clearly required.
 
 For attached-Turn lifecycle behavior, preserve the source distinction: normal
 return maps a still-running target Execution to a failed Turn, while an action
