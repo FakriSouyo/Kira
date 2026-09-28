@@ -1,8 +1,8 @@
 # Kira CLI host
 
-This workspace package is still named @harness/cli internally. KB1 does not
-rename package namespaces; any later identity change requires separate source
-review and selection. Kira's canonical CLI command is pnpm kira.
+This workspace package is still named @harness/cli internally. KB1 and KB2 do
+not rename package namespaces; any later identity change requires separate
+source review and selection. Kira's canonical CLI command is pnpm kira.
 pnpm finharness remains as a compatibility script alias.
 
 ## Current responsibility
@@ -36,11 +36,13 @@ For the full current architecture and target host boundary, see
 [docs/ROADMAP.md](../../docs/ROADMAP.md), and mutable slice status is in
 [docs/PROGRESS.md](../../docs/PROGRESS.md).
 
-## Current legacy internal identities
+## Current internal identities
 
-The CLI runtime config type is CliConfig. Other internal symbols include
-FinharnessDatabase and MainFinHarnessAgent, and workspace imports use the
-@harness/* namespace. Those identities are outside KB1's type-only slice.
+The CLI runtime config type is CliConfig. The conversational host and prompt
+constant are MainKiraAgent and MAIN_KIRA_PROMPT. KB2 renamed those identifiers
+without changing behavior or prompt bytes. FinharnessDatabase and workspace
+imports under the @harness/* namespace remain unchanged; KB2 did not alter
+persistence or package identity.
 Storage and configuration still use ~/.finharness, including
 ~/.finharness/.credentials.json and FINHARNESS_* environment variables. These
 are current compatibility paths; Kira does not yet support ~/.kira.

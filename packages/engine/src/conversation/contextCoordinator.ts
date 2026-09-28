@@ -17,7 +17,7 @@ import type { ArtifactStore, WorkingContextStore } from '@harness/session-core';
 import {
   buildMainAgentPrompt,
   classifyConversationFocus,
-  MAIN_FINHARNESS_PROMPT,
+  MAIN_KIRA_PROMPT,
   renderContextPacket,
   type ConversationFocus,
 } from '@harness/orchestrator';
@@ -131,7 +131,7 @@ export function createConversationContextCoordinator(
         render: renderContextPacket,
         focus,
         modelCapabilities: budgetOptions.modelCapabilities,
-        basePrompt: MAIN_FINHARNESS_PROMPT,
+        basePrompt: MAIN_KIRA_PROMPT,
         // PR I does not pass retained conversation history into this model call.
         conversationHistory: '',
         currentUserMessage: buildMainAgentPrompt(message),

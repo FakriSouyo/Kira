@@ -1,10 +1,10 @@
-import type { MainAgentCallOptions, MainFinHarnessAgent } from '@harness/orchestrator';
+import type { MainAgentCallOptions, MainKiraAgent } from '@harness/orchestrator';
 import type { ResearchSessionStore } from '@harness/session-core';
 import type { ConversationContextCoordinator, PreparedConversationContext } from './contextCoordinator.js';
 
 export interface ConversationResponseDependencies {
   readonly context: ConversationContextCoordinator;
-  readonly agent: Pick<MainFinHarnessAgent, 'respond' | 'stream'>;
+  readonly agent: Pick<MainKiraAgent, 'respond' | 'stream'>;
   readonly sessions: Pick<ResearchSessionStore, 'recordModelCall'>;
 }
 

@@ -264,7 +264,7 @@ export async function createHarnessSession(db: FinharnessDatabase, initialConfig
     },
     /**
      * Conversational routing (Audit doc C1/C2): input tanpa prefix "/" selalu
-     * ditangani sebagai percakapan biasa oleh MainFinHarnessAgent — TIDAK
+     * ditangani sebagai percakapan biasa oleh MainKiraAgent — TIDAK
      * lewat Intent Router, sehingga "menurutmu BBCA bagus ga" tidak memicu
      * workflow research tanpa command eksplisit (/research, /judge, dst).
      */

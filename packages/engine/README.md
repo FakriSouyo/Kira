@@ -104,7 +104,7 @@ the host filesystem or implement persistence.
 
 `conversationRespondWorkflow` and `conversationStreamWorkflow` prepare
 conversational context with the supplied `ConversationContextCoordinator`,
-invoke the supplied `MainFinHarnessAgent`, and persist successful external
+invoke the supplied `MainKiraAgent`, and persist successful external
 model-call metadata through `ResearchSessionStore.recordModelCall`. The
 streaming workflow yields chunks in order and leaves presentation to its host.
 Both workflows accept the current dependencies per call so provider, model,

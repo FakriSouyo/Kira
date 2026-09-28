@@ -203,7 +203,7 @@ describe('E2E — /judge offline (mock sectors + mock LLM)', () => {
   }, CLI_TIMEOUT_MS);
 });
 
-describe('E2E — natural language → MainFinHarnessAgent', () => {
+describe('E2E — natural language → MainKiraAgent', () => {
   it('does not auto-route a company question into /judge', async () => {
     const home = freshHome();
     const run = await runCli(home, 'Apakah BBRI layak dibeli?\n/exit\n');
