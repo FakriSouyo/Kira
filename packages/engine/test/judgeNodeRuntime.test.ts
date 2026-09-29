@@ -157,9 +157,10 @@ function createRuntime() {
   const judgments = {
     save: vi.fn(async (value: unknown) => { judgmentWrites.push(value); return value; }),
   };
+  const researchers = { market: false, news: false };
   const deps = {
     capabilityGateway, bull, bear, judge, validator,
-    researchers: { market: false, news: false },
+    researchers,
     evidence, financialSnapshots, conversation, claims, counterpoints, judgments,
   } as unknown as JudgeNodeRuntimeDependencies;
   const emitted: unknown[] = [];
@@ -177,7 +178,7 @@ function createRuntime() {
   return {
     executors, emitted, rawToolEvents, capabilityGateway, evidenceRows, evidence, claims,
     counterpoints, conversation, judgmentWrites, snapshotWrites, checkpointNodes, tracedNodes,
-    bull, bear, judge, validator,
+    bull, bear, judge, validator, researchers,
   };
 }
 
@@ -245,6 +246,67 @@ describe('Judge node runtime', () => {
     expect(runtime.tracedNodes).toEqual(runtime.checkpointNodes);
     expect(runtime.emitted.some(event => (event as { type?: string }).type === 'evidence.found')).toBe(true);
     expect(evaluation).toBeDefined();
+  });
+
+  it('verifies both required sources before persisting either Evidence', async () => {
+    const runtime = createRuntime();
+
+    await expect(runtime.executors['collect-sources']({
+      'identify-company': {
+        data: { ticker, financials: { roe: 22.4 }, valuation: { pe: 12.1 } },
+        metadata: metadata('mock.company_report'),
+      },
+      'fetch-financials': {
+        data: { ticker: 'BBCA', quarters: [{ period: '2026-Q2', revenue: 100, netIncome: 12 }] },
+        metadata: metadata('mock.quarterly_financials'),
+      },
+    })).rejects.toMatchObject({ code: 'FINANCIAL_DATA_VERIFICATION_FAILED' });
+
+    expect(runtime.evidence.accept).not.toHaveBeenCalled();
+    expect(runtime.snapshotWrites).toHaveLength(0);
+  });
+
+  it('degrades a malformed optional market group without persisting its Evidence', async () => {
+    const runtime = createRuntime();
+    runtime.researchers.market = true;
+
+    const collected = await runtime.executors['collect-sources']({
+      'identify-company': {
+        data: { ticker, financials: { roe: 22.4 }, valuation: { pe: 12.1 } },
+        metadata: metadata('mock.company_report'),
+      },
+      'fetch-financials': {
+        data: { ticker, quarters: [{ period: '2026-Q2', revenue: 100, netIncome: 12 }] },
+        metadata: metadata('mock.quarterly_financials'),
+      },
+      'fetch-market-data': {
+        daily: {
+          data: { ticker, asOf: '2026-09-25', window: '1d', avgValueBillion: 20 },
+          metadata: metadata('mock.daily_transaction'),
+        },
+        foreign: {
+          data: { ticker: 'BBCA', asOf: '2026-09-25', window: '1d', netFlow: 'buy' },
+          metadata: metadata('mock.foreign_flow'),
+        },
+      },
+    }) as { evidenceIds: string[] };
+
+    expect(runtime.evidence.accept).toHaveBeenCalledTimes(2);
+    expect(runtime.evidenceRows.map(row => row.data)).toEqual([
+      { ticker, financials: { roe: 22.4 }, valuation: { pe: 12.1 } },
+      { ticker, quarters: [{ period: '2026-Q2', revenue: 100, netIncome: 12 }] },
+    ]);
+    expect(collected.evidenceIds).toHaveLength(2);
+
+    const snapshot = runtime.snapshotWrites[0] as {
+      observations: Array<{ kind: string; status: string; reason?: string; errorCode?: string }>;
+      materializedEvidenceIds: string[];
+    };
+    expect(snapshot.observations.slice(2, 4)).toEqual([
+      { kind: 'daily_transaction', status: 'UNAVAILABLE', reason: 'VERIFICATION_FAILED', errorCode: 'FINANCIAL_DATA_VERIFICATION_FAILED' },
+      { kind: 'foreign_flow', status: 'UNAVAILABLE', reason: 'VERIFICATION_FAILED', errorCode: 'FINANCIAL_DATA_VERIFICATION_FAILED' },
+    ]);
+    expect(snapshot.materializedEvidenceIds).toEqual(collected.evidenceIds);
   });
 
   it('stops at the node boundary when the supplied AbortSignal is already aborted', async () => {

@@ -989,12 +989,13 @@ evidence selection, fundamental/growth/valuation/risk analysis, source
 verification, period normalization, and contradiction resolution. Fixed APIs,
 node graphs, and package locations are not locked.
 
-U1A — Research Composition Contract Audit is complete. U1B — Research Report
-Publication Boundary is complete. U1B establishes the version 1 `RESEARCH_REPORT`
-Artifact and its atomic Research Execution completion/publication boundary; it
-does not implement `/research`. NEXT is U1C — Reusable Verified Research
-Acquisition. Deferred FinHarness compatibility identities remain deferred, and
-the KB gate remains closed.
+U1A — Research Composition Contract Audit, U1B — Research Report Publication
+Boundary, and U1C — Reusable Verified Research Acquisition are complete. U1B
+establishes the version 1 `RESEARCH_REPORT` Artifact and its atomic Research
+Execution completion/publication boundary; it does not implement `/research`.
+The U1 Research Foundation is complete. NEXT is U2 `/research`; `/research`
+remains unimplemented. Deferred FinHarness compatibility identities remain
+deferred, and the KB gate remains closed.
 
 ### U2 — `/research`
 
