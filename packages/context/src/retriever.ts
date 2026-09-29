@@ -2,6 +2,7 @@ import {
   ArtifactEnvelopeSchema,
   ArtifactRefSchema,
   ArtifactRetrievalQuerySchema,
+  type ArtifactKind,
   type ArtifactRetrievalQuery,
 } from '@harness/schemas';
 import type { ArtifactStore } from '@harness/session-core';
@@ -10,7 +11,6 @@ import {
   type ContextArtifactRole,
   type RetrievedArtifactCandidate,
 } from './contracts.js';
-import type { DurableArtifactRef } from '@harness/schemas';
 import { evaluateArtifactValidity } from './validity.js';
 
 export type ArtifactCandidate = RetrievedArtifactCandidate;
@@ -26,10 +26,11 @@ export interface ArtifactCandidateRetrievalResult {
   }[];
 }
 
-function roleFor(kind: DurableArtifactRef['kind']): ContextArtifactRole {
+function roleFor(kind: ArtifactKind): ContextArtifactRole | undefined {
   if (kind === 'BULL_CASE') return 'RETRIEVED_BULL_CASE';
   if (kind === 'BEAR_CASE') return 'RETRIEVED_BEAR_CASE';
-  return 'RETRIEVED_VERDICT';
+  if (kind === 'VERDICT') return 'RETRIEVED_VERDICT';
+  return undefined;
 }
 
 export async function retrieveArtifactCandidates(params: {
@@ -60,6 +61,11 @@ export async function retrieveArtifactCandidates(params: {
       diagnostics.push({ artifactId: parsed.data.artifactId, kind: parsed.data.kind, status: 'skipped', reason: 'WRONG_KIND' });
       continue;
     }
+    const role = roleFor(parsed.data.kind);
+    if (!role) {
+      diagnostics.push({ artifactId: parsed.data.artifactId, kind: parsed.data.kind, status: 'skipped', reason: 'UNSUPPORTED_ROLE' });
+      continue;
+    }
     if (seen.has(parsed.data.artifactId)) {
       diagnostics.push({ artifactId: parsed.data.artifactId, kind: parsed.data.kind, status: 'skipped', reason: 'DUPLICATE' });
       continue;
@@ -80,7 +86,7 @@ export async function retrieveArtifactCandidates(params: {
       continue;
     }
     const ref = ArtifactRefSchema.parse({ kind: parsed.data.kind, artifactId: parsed.data.artifactId });
-    candidates.push({ ref, artifact: parsed.data, role: roleFor(parsed.data.kind), source: 'RETRIEVED', validity });
+    candidates.push({ ref, artifact: parsed.data, role, source: 'RETRIEVED', validity });
     diagnostics.push({ artifactId: parsed.data.artifactId, kind: parsed.data.kind, status: 'discovered', reason: validity.status });
   }
   const latest = new Set<string>();

@@ -1,11 +1,22 @@
 import { z } from 'zod';
-import { ClaimSchema, JudgmentSchema } from './claim.js';
+import { CitedFigureSchema, ClaimSchema, JudgmentSchema } from './claim.js';
 import { BearCounterpointSchema, GroundedCounterpointSchema } from './debate.js';
 
-/** Artifact kinds currently produced by the canonical `/judge` workflow. */
-export const ARTIFACT_KINDS = ['BULL_CASE', 'BEAR_CASE', 'VERDICT'] as const;
+/** Judge release products retain their fixed order for release receipts and profiles. */
+export const JUDGE_ARTIFACT_KINDS = ['BULL_CASE', 'BEAR_CASE', 'VERDICT'] as const;
+export type JudgeArtifactKind = (typeof JUDGE_ARTIFACT_KINDS)[number];
+
+/** Durable products and the command that owns production for each kind. */
+export const ARTIFACT_KINDS = [...JUDGE_ARTIFACT_KINDS, 'RESEARCH_REPORT'] as const;
 export const ArtifactKindSchema = z.enum(ARTIFACT_KINDS);
 export type ArtifactKind = z.infer<typeof ArtifactKindSchema>;
+
+export const ARTIFACT_PRODUCER_BY_KIND = {
+  BULL_CASE: 'judge',
+  BEAR_CASE: 'judge',
+  VERDICT: 'judge',
+  RESEARCH_REPORT: 'research',
+} as const satisfies Record<ArtifactKind, string>;
 
 export const ArtifactRetrievalQuerySchema = z.object({
   sessionId: z.string().min(1),
@@ -59,6 +70,39 @@ export const VerdictArtifactPayloadSchema = z.object({
 }).strict();
 export type VerdictArtifactPayload = z.infer<typeof VerdictArtifactPayloadSchema>;
 
+export const ResearchFindingSchema = z.object({
+  statement: z.string().min(1),
+  evidenceIds: z.array(z.string().uuid()).min(1),
+  confidence: z.enum(['high', 'medium', 'low']),
+  citedFigures: z.array(CitedFigureSchema).optional(),
+}).strict();
+export type ResearchFinding = z.infer<typeof ResearchFindingSchema>;
+
+export const ResearchSourceAssessmentSchema = z.object({
+  evidenceId: z.string().uuid(),
+  quality: z.enum(['primary', 'secondary', 'weak']),
+  rationale: z.string().min(1),
+}).strict();
+export type ResearchSourceAssessment = z.infer<typeof ResearchSourceAssessmentSchema>;
+
+export const ResearchSourceCoverageSchema = z.discriminatedUnion('status', [
+  z.object({ source: z.string().min(1), status: z.literal('available'), evidenceIds: z.array(z.string().uuid()).min(1) }).strict(),
+  z.object({ source: z.string().min(1), status: z.literal('unavailable'), reason: z.string().min(1) }).strict(),
+  z.object({ source: z.string().min(1), status: z.literal('not_requested') }).strict(),
+]);
+export type ResearchSourceCoverage = z.infer<typeof ResearchSourceCoverageSchema>;
+
+/** Durable consumer-facing research output; findings are not canonical Claims. */
+export const ResearchReportPayloadSchema = z.object({
+  question: z.string().min(1),
+  summary: z.string().min(1),
+  findings: z.array(ResearchFindingSchema),
+  sourceAssessments: z.array(ResearchSourceAssessmentSchema),
+  gaps: z.array(z.string().min(1)),
+  coverage: z.array(ResearchSourceCoverageSchema),
+}).strict();
+export type ResearchReportPayload = z.infer<typeof ResearchReportPayloadSchema>;
+
 const EnvelopeBase = {
   artifactId: z.string().min(1),
   schemaVersion: z.literal(1),
@@ -74,5 +118,6 @@ export const ArtifactEnvelopeSchema = z.discriminatedUnion('kind', [
   z.object({ ...EnvelopeBase, kind: z.literal('BULL_CASE'), payload: BullCaseArtifactPayloadSchema }).strict(),
   z.object({ ...EnvelopeBase, kind: z.literal('BEAR_CASE'), payload: BearCaseArtifactPayloadSchema }).strict(),
   z.object({ ...EnvelopeBase, kind: z.literal('VERDICT'), payload: VerdictArtifactPayloadSchema }).strict(),
+  z.object({ ...EnvelopeBase, kind: z.literal('RESEARCH_REPORT'), payload: ResearchReportPayloadSchema }).strict(),
 ]);
 export type ArtifactEnvelope = z.infer<typeof ArtifactEnvelopeSchema>;

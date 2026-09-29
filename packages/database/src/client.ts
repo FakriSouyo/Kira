@@ -18,6 +18,7 @@ import { ResearchSessionStoreSqlite } from './researchSessionStoreSqlite';
 import { ConversationJournalSqlite } from './conversationJournalSqlite';
 import { WorkingContextStoreSqlite } from './workingContextStoreSqlite';
 import { ArtifactStoreSqlite } from './artifactStoreSqlite';
+import { ResearchReportPublicationStoreSqlite } from './researchReportPublicationStoreSqlite';
 import { ContextSnapshotStoreSqlite } from './contextSnapshotStoreSqlite';
 import { FinancialSnapshotStoreSqlite } from './financialSnapshotStoreSqlite';
 import { ExecutionProfileStoreSqlite } from './executionProfileStoreSqlite';
@@ -56,6 +57,7 @@ export interface FinharnessDatabase {
   journal: ConversationJournalSqlite;
   workingContext: WorkingContextStoreSqlite;
   artifacts: ArtifactStoreSqlite;
+  researchReportPublication: ResearchReportPublicationStoreSqlite;
   contextSnapshots: ContextSnapshotStoreSqlite;
   financialSnapshots: FinancialSnapshotStoreSqlite;
   executionProfiles: ExecutionProfileStoreSqlite;
@@ -97,6 +99,7 @@ export function openDb(options: { homeDir?: string; verbose?: boolean } = {}): F
     journal: new ConversationJournalSqlite(orm),
     workingContext: new WorkingContextStoreSqlite(orm),
     artifacts: new ArtifactStoreSqlite(orm),
+    researchReportPublication: new ResearchReportPublicationStoreSqlite(orm),
     contextSnapshots: new ContextSnapshotStoreSqlite(orm),
     financialSnapshots: new FinancialSnapshotStoreSqlite(orm),
     executionProfiles: new ExecutionProfileStoreSqlite(orm),

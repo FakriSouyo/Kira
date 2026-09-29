@@ -80,11 +80,12 @@ UA17C Host-neutral Judge Completion + Release Orchestration Extraction
 UA17D Host-neutral Judge Execution Lifecycle Orchestration
 UA Kira Engine Extraction (planned UA phase, including UA17, complete)
 
+KB BLOCKING GATE — CLOSED
+KB1 CLI Config Identity Rename complete
+KB2 Main Agent Identity Rename complete
+Remaining FinHarness compatibility identity work deferred and unscheduled
+
 CURRENT BROAD PHASE
-
-KB Internal Kira Identity Migration
-
-THEN
 
 U Research Composition / Product Completion
 U1 Reusable Research Subgraph
@@ -110,11 +111,13 @@ Z
 
 ## KB identity migration status
 
-KB is the current broad phase. KB1 renamed the CLI runtime config type from
-FinharnessConfig to CliConfig. KB2 renamed only the conversational agent class and prompt constant to their
-current Kira identities, without changing behavior or prompt bytes. These slices do not migrate storage, environment
-variables, or the package namespace. Later KB slices remain unselected and
-require their own source review.
+The KB blocking gate is closed. KB1 renamed the CLI runtime config type from
+FinharnessConfig to CliConfig. KB2 renamed only the conversational agent class
+and prompt constant to their current Kira identities, without changing behavior
+or prompt bytes. These slices did not migrate storage, environment variables,
+or the package namespace. Remaining FinHarness compatibility identity work is
+deferred and unscheduled, and is not a prerequisite to U. Later KB slices remain
+unselected and require their own source review.
 
 The sequence intentionally combines architecture evolution with user-visible
 research capability maturation. Discovery and design for later milestones may
@@ -124,9 +127,11 @@ boundaries established by earlier milestones.
 ## UA extraction status
 
 UA1-UA17D, including UA17 Judge Workflow Host-Neutralization, are complete on
-master. This closes the planned UA Kira Engine Extraction phase. KB Internal
-Kira Identity Migration is the current broad phase; KB1 and KB2 are complete
-as described above.
+master. This closes the planned UA Kira Engine Extraction phase. KB followed UA
+as the next broad phase; KB1 and KB2 are now complete, closing the KB blocking
+gate. Remaining FinHarness compatibility identity work is deferred and
+unscheduled. U Research Composition / Product Completion is the current broad
+phase.
 
 UA1 — Host-neutral Capability Runtime Extraction, UA2 — Host-neutral Workflow
 Trace Extraction, UA3 — Host-neutral Screen Workflow Extraction, and UA4 —
@@ -179,8 +184,9 @@ AgentEvent presentation, Judge orchestration/checkpointing, and provider
 composition remain CLI-owned. ResearchSessionStore remains lifecycle
 persistence authority, and WorkingContextPublisher remains publication policy
 authority. UA14, UA15, UA16, and UA17A-D are complete on master. The planned UA
-Kira Engine Extraction phase is closed; KB Internal Kira Identity Migration is
-the current broad phase.
+Kira Engine Extraction phase is closed. At this historical checkpoint, KB
+identity migration followed UA; the current KB gate is closed and U Research
+Composition / Product Completion is the current broad phase.
 
 UA10 extracts the reusable lifecycle around an already-selected existing Turn
 and Execution into `packages/engine`. `runAttachedSessionTurn` reloads the
@@ -208,8 +214,10 @@ switches the ConversationController, reconciles the journal, and commits the
 prepared context. The prior Session's user-selected model is not copied. Judge,
 provider composition, persistence, and journal authority remain unchanged; no
 schema migration is required. UA14, UA15, UA16, and UA17A-D are complete on
-master. The planned UA Kira Engine Extraction phase is closed; KB Internal Kira
-Identity Migration is the current broad phase.
+master. The planned UA Kira Engine Extraction phase is closed. At this
+historical checkpoint, KB identity migration followed UA; the current KB gate
+is closed and U Research Composition / Product Completion is the current broad
+phase.
 
 ## UA12 — Host-neutral Judge Node Runtime Extraction
 
@@ -251,8 +259,10 @@ artifact reconstruction semantics into engine while preserving CLI startup
 invocation timing. UA13 did not move the Judge workflow shell or alter checkpoint
 payloads, workflow graph/version, capability semantics, release contract,
 artifact kinds, database schema, or resumeGeneration ownership. UA12-UA17D are
-complete on master, closing the planned UA Kira Engine Extraction phase. KB
-Internal Kira Identity Migration is the current broad phase.
+complete on master, closing the planned UA Kira Engine Extraction phase. At
+this historical checkpoint, KB identity migration followed UA; the current KB
+gate is closed and U Research Composition / Product Completion is the current
+broad phase.
 
 ## UA14 — Host-neutral Judge Resume Projection Repair Extraction
 
@@ -389,7 +399,8 @@ friendly error mapping, provider composition, store adapters, and legacy direct
 artifact, persistence, provider, or model semantics.
 
 UA17A, UA17B, UA17C, and UA17D are complete on master. This closes the planned
-UA Kira Engine Extraction phase; KB Internal Kira Identity Migration is the
+UA Kira Engine Extraction phase. KB identity migration followed UA; the current
+KB gate is closed and U Research Composition / Product Completion is the
 current broad phase.
 
 ### UA17D — Judge Execution Lifecycle Orchestration
@@ -977,6 +988,13 @@ financial/market/news/filing retrieval, verified snapshot construction,
 evidence selection, fundamental/growth/valuation/risk analysis, source
 verification, period normalization, and contradiction resolution. Fixed APIs,
 node graphs, and package locations are not locked.
+
+U1A — Research Composition Contract Audit is complete. U1B — Research Report
+Publication Boundary is complete. U1B establishes the version 1 `RESEARCH_REPORT`
+Artifact and its atomic Research Execution completion/publication boundary; it
+does not implement `/research`. NEXT is U1C — Reusable Verified Research
+Acquisition. Deferred FinHarness compatibility identities remain deferred, and
+the KB gate remains closed.
 
 ### U2 — `/research`
 

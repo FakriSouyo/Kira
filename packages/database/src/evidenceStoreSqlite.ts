@@ -4,6 +4,7 @@ import { canonicalJson } from '@harness/shared';
 import { canonicalHash, EVIDENCE_POLICY_FINGERPRINT, EVIDENCE_POLICY_ID, type AcceptedEvidenceDecision, type EvidenceAcceptance, type EvidenceStore } from '@harness/evidence';
 import type { Evidence } from '@harness/schemas';
 import type { Orm } from './client';
+import { evidenceAcceptanceOf, type EvidenceMembership } from './evidenceMembership';
 import { evidence, runEvidence } from './schema';
 
 export interface EvidenceRow {
@@ -12,37 +13,9 @@ export interface EvidenceRow {
   data: string; provenance: string | null; createdAt: string;
 }
 
-type Membership = typeof runEvidence.$inferSelect;
-
-function acceptanceOf(membership: Membership): Evidence['acceptance'] {
-  if (membership.policyId === null) {
-    if (membership.policyFingerprint !== null || membership.candidateKind !== null || membership.sourceOrigin !== null
-      || membership.retrievedAt !== null || membership.acceptedAt !== null || membership.validAt !== null || membership.provenanceJson !== null) {
-      throw new Error(`Evidence membership ${membership.runId}/${membership.evidenceId} has partial acceptance metadata`);
-    }
-    return {
-      policyId: 'legacy-v0', policyFingerprint: null, candidateKind: 'legacy', sourceOrigin: null,
-      retrievedAt: null, acceptedAt: null, validAt: null, provenance: {}, legacy: true,
-    };
-  }
-  if (membership.policyId !== EVIDENCE_POLICY_ID || membership.policyFingerprint !== EVIDENCE_POLICY_FINGERPRINT || membership.candidateKind !== 'financial'
-    || !membership.sourceOrigin || !membership.acceptedAt || !membership.provenanceJson) {
-    throw new Error(`Evidence membership ${membership.runId}/${membership.evidenceId} is corrupt`);
-  }
-  const provenance = JSON.parse(membership.provenanceJson) as Record<string, unknown>;
-  if (!provenance || typeof provenance !== 'object' || Array.isArray(provenance)) {
-    throw new Error(`Evidence membership ${membership.runId}/${membership.evidenceId} has invalid provenance`);
-  }
-  return {
-    policyId: membership.policyId, policyFingerprint: membership.policyFingerprint, candidateKind: 'financial', sourceOrigin: membership.sourceOrigin,
-    retrievedAt: membership.retrievedAt, acceptedAt: membership.acceptedAt,
-    validAt: membership.validAt, provenance,
-  };
-}
-
 /** Global reads retain content-row provenance; scoped reads project the accepting Execution. */
-export function toEvidence(row: EvidenceRow, membership?: Membership): Evidence {
-  const acceptance = membership ? acceptanceOf(membership) : undefined;
+export function toEvidence(row: EvidenceRow, membership?: EvidenceMembership): Evidence {
+  const acceptance = membership ? evidenceAcceptanceOf(membership) : undefined;
   return {
     id: row.id, runId: membership?.runId ?? row.runId, ticker: row.ticker,
     source: row.source,

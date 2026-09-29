@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import {
+  ARTIFACT_PRODUCER_BY_KIND,
   ArtifactEnvelopeSchema,
   ArtifactRetrievalQuerySchema,
   type ArtifactEnvelope,
@@ -49,6 +50,9 @@ export class ArtifactStoreSqlite implements ArtifactStore {
   async saveMany(input: readonly ArtifactEnvelope[]): Promise<ArtifactEnvelope[]> {
     const validated = input.map(artifact => ArtifactEnvelopeSchema.parse(artifact));
     if (validated.length === 0) return [];
+    if (validated.some(artifact => artifact.kind === 'RESEARCH_REPORT')) {
+      throw new Error('RESEARCH_REPORT must be published through the Research Report publication boundary');
+    }
 
     return this.db.transaction((tx) => {
       const saved: ArtifactEnvelope[] = [];
@@ -56,7 +60,9 @@ export class ArtifactStoreSqlite implements ArtifactStore {
         const execution = tx.select().from(executions).where(eq(executions.id, artifact.executionId)).limit(1).get();
         if (!execution) throw new Error(`Artifact ${artifact.artifactId} execution ${artifact.executionId} not found`);
         if (execution.status !== 'completed') throw new Error(`Artifact ${artifact.artifactId} requires a completed execution`);
-        if (execution.command !== 'judge') throw new Error(`Artifact ${artifact.artifactId} requires a judge execution`);
+        if (execution.command !== ARTIFACT_PRODUCER_BY_KIND[artifact.kind]) {
+          throw new Error(`Artifact ${artifact.artifactId} requires a ${ARTIFACT_PRODUCER_BY_KIND[artifact.kind]} execution`);
+        }
         if (execution.sessionId !== artifact.sessionId || execution.turnId !== artifact.turnId) {
           throw new Error(`Artifact ${artifact.artifactId} lifecycle link does not match execution ${execution.id}`);
         }
@@ -104,7 +110,7 @@ export class ArtifactStoreSqlite implements ArtifactStore {
 
   async getByExecution(executionId: string): Promise<ArtifactEnvelope[]> {
     const rows = this.db.select().from(artifactRows).where(eq(artifactRows.executionId, executionId)).orderBy(asc(artifactRows.createdAt)).all();
-    const order = new Map<string, number>([['BULL_CASE', 0], ['BEAR_CASE', 1], ['VERDICT', 2]]);
+    const order = new Map<string, number>([['BULL_CASE', 0], ['BEAR_CASE', 1], ['VERDICT', 2], ['RESEARCH_REPORT', 3]]);
     return rows.map(row => toEnvelope(row as ArtifactRow)).sort((a, b) => (order.get(a.kind) ?? 99) - (order.get(b.kind) ?? 99));
   }
 
@@ -135,7 +141,7 @@ export class ArtifactStoreSqlite implements ArtifactStore {
       }
     }
 
-    const kindOrder = new Map<string, number>([['BULL_CASE', 0], ['BEAR_CASE', 1], ['VERDICT', 2]]);
+    const kindOrder = new Map<string, number>([['BULL_CASE', 0], ['BEAR_CASE', 1], ['VERDICT', 2], ['RESEARCH_REPORT', 3]]);
     rows.sort((left, right) => {
       const leftSequence = left.turn ? sourceSequences.get(left.turn.id) : undefined;
       const rightSequence = right.turn ? sourceSequences.get(right.turn.id) : undefined;

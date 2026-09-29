@@ -1,6 +1,7 @@
 export * from './conversation';
 export * from './workingContext';
 export * from './artifact';
+export * from './researchReportPublication';
 export * from './resumability';
 export * from './attachment';
 export type TurnStatus = 'running' | 'completed' | 'failed' | 'stopped';

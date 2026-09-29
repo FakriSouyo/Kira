@@ -1,4 +1,4 @@
-import { ArtifactEnvelopeSchema, type ArtifactEnvelope, type ArtifactKind } from '@harness/schemas';
+import { ARTIFACT_PRODUCER_BY_KIND, ArtifactEnvelopeSchema, type ArtifactEnvelope, type ArtifactKind } from '@harness/schemas';
 import type { ArtifactSourceExecution } from '@harness/session-core';
 import { type ArtifactValidityReason, type ArtifactValidityResult } from './contracts.js';
 
@@ -32,7 +32,7 @@ export function evaluateArtifactValidity(params: ArtifactValidityParams): Artifa
   if (params.sourceExecution.ticker !== artifact.ticker) {
     return { status: 'INVALID', reasons: [...reasons, 'WRONG_SUBJECT', 'DEPENDENCY_MISSING'] };
   }
-  if (params.sourceExecution.command !== 'judge') return { status: 'INVALID', reasons: [...reasons, 'DEPENDENCY_MISSING'] };
+  if (params.sourceExecution.command !== ARTIFACT_PRODUCER_BY_KIND[artifact.kind]) return { status: 'INVALID', reasons: [...reasons, 'DEPENDENCY_MISSING'] };
   if (params.sourceExecution && params.sourceExecution.status !== 'completed') {
     return { status: 'INVALID', reasons: [...reasons, 'SOURCE_EXECUTION_INCOMPLETE'] };
   }

@@ -31,6 +31,50 @@ function bull(artifactId: string, ticker: string, createdAt: string): ArtifactEn
   } as ArtifactEnvelope;
 }
 
+function bear(artifactId: string, ticker: string, createdAt: string): ArtifactEnvelope {
+  return {
+    artifactId, kind: 'BEAR_CASE', schemaVersion: 1, sessionId: 'session-1', turnId: artifactId,
+    executionId: `execution-${artifactId}`, ticker,
+    payload: {
+      messageId: 'bear-message',
+      reasoning: 'Margin pressure may weaken future returns.',
+      counterpoints: [{ targetClaimId: 'claim-1', argument: 'Margin pressure could persist.', strength: 'moderate' }],
+      evidenceIds: [EVIDENCE_ID],
+    },
+    createdAt,
+  } as ArtifactEnvelope;
+}
+
+function verdict(artifactId: string, ticker: string, createdAt: string): ArtifactEnvelope {
+  return {
+    artifactId, kind: 'VERDICT', schemaVersion: 1, sessionId: 'session-1', turnId: artifactId,
+    executionId: `execution-${artifactId}`, ticker,
+    payload: {
+      judgment: {
+        ticker, score: 70, stance: 'bullish', confidence: 'high',
+        breakdown: { financialHealth: 70, growth: 70, valuation: 70, marketMomentum: null, risk: null },
+        summary: 'The evidence supports a positive overall assessment.',
+      },
+      evidenceIds: [EVIDENCE_ID], claimIds: ['claim-1'], rounds: 1,
+    },
+    createdAt,
+  } as ArtifactEnvelope;
+}
+
+function researchReport(artifactId: string): ArtifactEnvelope {
+  return {
+    artifactId, kind: 'RESEARCH_REPORT', schemaVersion: 1, sessionId: 'session-1', turnId: artifactId,
+    executionId: `execution-${artifactId}`, ticker: 'BBRI',
+    payload: {
+      question: 'Assess revenue quality.', summary: 'Revenue grew based on the available filing.',
+      findings: [{ statement: 'Revenue increased.', evidenceIds: [EVIDENCE_ID], confidence: 'high' }],
+      sourceAssessments: [{ evidenceId: EVIDENCE_ID, quality: 'primary', rationale: 'Issuer filing.' }],
+      gaps: [], coverage: [{ source: 'company_report', status: 'available', evidenceIds: [EVIDENCE_ID] }],
+    },
+    createdAt: '2026-09-18T02:00:00.000Z',
+  } as ArtifactEnvelope;
+}
+
 function workingContext(ticker: string, activeBullCaseRef: { kind: 'BULL_CASE'; artifactId: string } | null = null): SessionWorkingContext {
   return applyWorkingContextPatch(null, {
     sessionId: 'session-1', sourceSequence: 1, updatedByTurnId: 'turn-1', updatedAt: '2026-09-18T00:00:00.000Z',
@@ -51,7 +95,12 @@ class RetrievalStore {
   }
   async getById(artifactId: string) { return this.values.find(candidate => candidate.artifactId === artifactId) ?? null; }
   async getSourceExecution(executionId: string) {
-    return { id: executionId, sessionId: 'session-1', turnId: executionId.replace('execution-', ''), attempt: 1, ticker: 'BBRI', command: 'judge', status: 'completed' as const, createdAt: '2026-09-18T00:00:00.000Z', completedAt: '2026-09-18T00:01:00.000Z' };
+    const artifact = this.values.find(candidate => candidate.executionId === executionId);
+    return {
+      id: executionId, sessionId: 'session-1', turnId: artifact?.turnId ?? executionId.replace('execution-', ''), attempt: 1,
+      ticker: artifact?.ticker ?? 'BBRI', command: artifact?.kind === 'RESEARCH_REPORT' ? 'research' : 'judge',
+      status: 'completed' as const, createdAt: '2026-09-18T00:00:00.000Z', completedAt: '2026-09-18T00:01:00.000Z',
+    };
   }
 }
 
@@ -77,6 +126,27 @@ describe('artifact candidate retrieval', () => {
     expect(result.diagnostics).toContainEqual(expect.objectContaining({ artifactId: 'bbri-old', reason: 'SUPERSEDED' }));
   });
 
+  it('maps only Judge kinds to retrieval roles and skips Research Reports as unsupported', async () => {
+    const values = [
+      bull('bull-prior', 'BBRI', '2026-09-18T01:00:00.000Z'),
+      bear('bear-prior', 'BBRI', '2026-09-18T02:00:00.000Z'),
+      verdict('verdict-prior', 'BBRI', '2026-09-18T03:00:00.000Z'),
+      researchReport('research-prior'),
+    ];
+    const result = await retrieveArtifactCandidates({
+      artifactStore: new RetrievalStore(values),
+      query: { sessionId: 'session-1', subjects: ['BBRI'], allowedKinds: ['BULL_CASE', 'BEAR_CASE', 'VERDICT', 'RESEARCH_REPORT'], focus: 'generic' },
+    });
+    expect(result.candidates.map(candidate => [candidate.artifact.kind, candidate.role])).toEqual([
+      ['BULL_CASE', 'RETRIEVED_BULL_CASE'],
+      ['BEAR_CASE', 'RETRIEVED_BEAR_CASE'],
+      ['VERDICT', 'RETRIEVED_VERDICT'],
+    ]);
+    expect(result.diagnostics).toContainEqual({
+      artifactId: 'research-prior', kind: 'RESEARCH_REPORT', status: 'skipped', reason: 'UNSUPPORTED_ROLE',
+    });
+  });
+
   it('accepts completed artifacts as prior context without inventing freshness', () => {
     const result = evaluateArtifactValidity({
       artifact: bull('bbri', 'BBRI', '2026-09-18T02:00:00.000Z'),
@@ -85,6 +155,22 @@ describe('artifact candidate retrieval', () => {
     });
     expect(result).toEqual(expect.objectContaining({ status: 'VALID_AS_PRIOR' }));
     expect(result.reasons).toContain('UNKNOWN_FRESHNESS');
+  });
+
+  it('validates each Artifact kind against its canonical producer command', () => {
+    const research = researchReport('research-1');
+    const source = {
+      id: research.executionId, sessionId: research.sessionId, turnId: research.turnId, attempt: 1, ticker: research.ticker,
+      status: 'completed' as const, createdAt: '2026-09-18T00:00:00.000Z', completedAt: '2026-09-18T01:00:00.000Z',
+    };
+    expect(evaluateArtifactValidity({ artifact: research, expectedSession: 'session-1', expectedSubjects: ['BBRI'], sourceExecution: { ...source, command: 'research' } })).toEqual({
+      status: 'VALID_AS_PRIOR', reasons: ['SCHEMA_VALID', 'SESSION_MATCH', 'SUBJECT_MATCH', 'SOURCE_EXECUTION_COMPLETED', 'UNKNOWN_FRESHNESS'],
+    });
+    expect(evaluateArtifactValidity({ artifact: research, expectedSession: 'session-1', expectedSubjects: ['BBRI'], sourceExecution: { ...source, command: 'judge' } }).status).toBe('INVALID');
+    const researchMismatch = bull('judge-1', 'BBRI', '2026-09-18T02:00:00.000Z');
+    const validJudge = bull('judge-2', 'BBRI', '2026-09-18T02:00:00.000Z');
+    expect(evaluateArtifactValidity({ artifact: researchMismatch, expectedSession: 'session-1', expectedSubjects: ['BBRI'], sourceExecution: { ...source, turnId: researchMismatch.turnId, command: 'research' } }).status).toBe('INVALID');
+    expect(evaluateArtifactValidity({ artifact: validJudge, expectedSession: 'session-1', expectedSubjects: ['BBRI'], sourceExecution: { ...source, turnId: validJudge.turnId, command: 'judge' } }).status).toBe('VALID_AS_PRIOR');
   });
 
   it.each([

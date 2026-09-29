@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { ARTIFACT_KINDS } from '@harness/schemas';
+import { JUDGE_ARTIFACT_KINDS } from '@harness/schemas';
 import {
   CLAIM_GRAPH_CONTRACT_FINGERPRINT,
   CLAIM_GRAPH_ID,
@@ -25,7 +25,7 @@ export const JUDGE_RELEASE_CONTRACT = Object.freeze({
     version: CLAIM_GRAPH_VERSION,
     fingerprint: CLAIM_GRAPH_CONTRACT_FINGERPRINT,
   }),
-  artifacts: Object.freeze({ kinds: Object.freeze([...ARTIFACT_KINDS]), schemaVersion: 1 }),
+  artifacts: Object.freeze({ kinds: Object.freeze([...JUDGE_ARTIFACT_KINDS]), schemaVersion: 1 }),
   artifactGraphProjectionVersion: 1,
 } as const);
 
