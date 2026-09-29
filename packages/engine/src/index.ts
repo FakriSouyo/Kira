@@ -11,6 +11,8 @@ import { createJudgeCapabilityPlan } from './capabilities/financial';
 export { attachmentToolIds } from './tools/attachment';
 export { documentToolIds } from './tools/document';
 export { financialToolIds } from './tools/financial';
+export { verifyAndPersistFinancialEvidence } from './financialEvidence.js';
+export type { VerifiedFinancialEvidenceResult } from './financialEvidence.js';
 export {
   COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL,
   COMMAND_FILES_CAPABILITY_PRINCIPAL,

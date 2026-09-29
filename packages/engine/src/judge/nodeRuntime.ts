@@ -12,16 +12,17 @@ import {
   type CompanyReport,
   type DailyTransaction,
   type Filing,
+  type FinancialDataByKind,
   type FinancialDataResult,
   type FinancialObservation,
+  type FinancialObservationKind,
   type ForeignFlow,
   type NewsArticle,
   type QuarterlyFinancials,
   type Sentiment,
-  type PresentFinancialObservation,
   type FinancialSnapshotStore,
 } from '@harness/financial-data';
-import { createFinancialEvidenceCandidate, EVIDENCE_POLICY, type EvidenceStore } from '@harness/evidence';
+import type { EvidenceStore } from '@harness/evidence';
 import type { ConversationStore } from '@harness/conversation';
 import { buildEvidenceZone, normalizeJudgmentScore, stanceForScore, UserFriendlyError, ValidationError } from '@harness/shared';
 import type { CapabilityGateway, CapabilityPrincipal } from '@harness/capability';
@@ -29,6 +30,7 @@ import type { ToolRuntimeEvent } from '@harness/tool-runtime';
 import type { BearAgent } from '@harness/subagent-bear';
 import type { BullAgent } from '@harness/subagent-bull';
 import type { JudgeAgent } from '@harness/subagent-judge';
+import { verifyAndPersistFinancialEvidence } from '../financialEvidence.js';
 import { financialToolIds } from '../tools/financial';
 import { JUDGE_CAPABILITY_PRINCIPALS } from '../capabilities/financial';
 
@@ -221,24 +223,22 @@ export function createJudgeNodeExecutors(deps: JudgeNodeRuntimeOptions): JudgeNo
     return 'PROVIDER_ERROR';
   };
 
-  const saveEvidence = async (observation: PresentFinancialObservation): Promise<Evidence> => {
-    const candidate = createFinancialEvidenceCandidate({ executionId: runId, ticker, observation });
-    const decision = EVIDENCE_POLICY.decide(candidate, new Date().toISOString());
-    if (!decision.accepted) {
-      throw new UserFriendlyError('EVIDENCE_REJECTED', `Evidence candidate was rejected: ${decision.reason}`, 'Verify the financial source and try again.');
-    }
-    const persisted = await ctx.evidence.accept({
-      runId, ticker, source: decision.source, data: decision.data, acceptance: decision,
+  const materialize = async <K extends FinancialObservationKind>(
+    kind: K,
+    result: FinancialDataResult<FinancialDataByKind[K]>,
+  ) => {
+    const acquired = await verifyAndPersistFinancialEvidence({
+      executionId: runId,
+      ticker,
+      kind,
+      result,
+      evidenceStore: ctx.evidence,
     });
-    events({ type: 'evidence.found', id: persisted.id, source: persisted.source });
-    return persisted;
-  };
-
-  const materialize = async <K extends FinancialObservation['kind']>(
-    observation: PresentFinancialObservation<K>,
-  ): Promise<{ observation: PresentFinancialObservation<K>; evidence: Evidence }> => {
-    const evidence = await saveEvidence(observation);
-    return { observation: { ...observation, evidenceIds: [evidence.id] }, evidence };
+    if (!acquired.accepted) {
+      throw new UserFriendlyError('EVIDENCE_REJECTED', `Evidence candidate was rejected: ${acquired.reason}`, 'Verify the financial source and try again.');
+    }
+    events({ type: 'evidence.found', id: acquired.evidence.id, source: acquired.evidence.source });
+    return acquired;
   };
 
   const record = async (nodeId: JudgeNodeId, result: SubagentResult<unknown>): Promise<void> => {
@@ -439,8 +439,8 @@ export function createJudgeNodeExecutors(deps: JudgeNodeRuntimeOptions): JudgeNo
       let marketAvailable = false;
       let newsAvailable = false;
 
-      const report = await materialize(reportObservation);
-      const financials = await materialize(financialsObservation);
+      const report = await materialize('company_report', reportResult);
+      const financials = await materialize('quarterly_financials', financialsResult);
       evidenceIds.push(report.evidence.id, financials.evidence.id);
       observations[0] = report.observation;
       observations[1] = financials.observation;
@@ -465,8 +465,8 @@ export function createJudgeNodeExecutors(deps: JudgeNodeRuntimeOptions): JudgeNo
           );
         }
         if (dailyObservation && foreignObservation) {
-          const daily = await materialize(dailyObservation);
-          const foreign = await materialize(foreignObservation);
+          const daily = await materialize('daily_transaction', market.daily);
+          const foreign = await materialize('foreign_flow', market.foreign);
           marketEvidence = [daily.evidence, foreign.evidence];
           marketAvailable = true;
           evidenceIds.push(daily.evidence.id, foreign.evidence.id);
@@ -503,9 +503,9 @@ export function createJudgeNodeExecutors(deps: JudgeNodeRuntimeOptions): JudgeNo
           );
         }
         if (newsObservation && filingsObservation && sentimentObservation) {
-          const item = await materialize(newsObservation);
-          const filings = await materialize(filingsObservation);
-          const sentiment = await materialize(sentimentObservation);
+          const item = await materialize('news', news.news);
+          const filings = await materialize('filings', news.filings);
+          const sentiment = await materialize('sentiment', news.sentiment);
           newsEvidence = [item.evidence, filings.evidence, sentiment.evidence];
           newsAvailable = true;
           evidenceIds.push(item.evidence.id, filings.evidence.id, sentiment.evidence.id);
