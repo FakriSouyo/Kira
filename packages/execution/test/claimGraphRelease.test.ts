@@ -18,6 +18,12 @@ const projections: ClaimGraphArtifactProjection[] = [
   { kind: 'VERDICT', artifactId: `artifact_verdict_${executionId}`, nodes: [claimA, claimB, counterpoint], edges: [edge] },
 ];
 
+const researchProjectionOutsideJudgeContract: ClaimGraphArtifactProjection = {
+  // @ts-expect-error Research Reports do not belong in Judge Claim Graph releases.
+  kind: 'RESEARCH_REPORT', artifactId: 'artifact_research_report_execution-t5', nodes: [], edges: [],
+};
+void researchProjectionOutsideJudgeContract;
+
 function receiptInput(overrides: Partial<Parameters<typeof createClaimGraphReleaseReceipt>[0]> = {}) {
   return {
     sessionId: 'session-t5',

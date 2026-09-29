@@ -72,4 +72,37 @@ describe('typed PR F artifact contracts', () => {
     expect(() => ArtifactEnvelopeSchema.parse({ ...envelope, schemaVersion: 2 })).toThrow();
     expect(() => ArtifactEnvelopeSchema.parse({ ...envelope, payload: { ...BULL_CASE, thesis: { ...BULL_ARGUMENT, claims: [] } } })).toThrow();
   });
+
+  it('accepts a durable Research Report without requiring Claim fields', () => {
+    const envelope = {
+      artifactId: 'artifact_research_report_run_research_1',
+      kind: 'RESEARCH_REPORT',
+      schemaVersion: 1,
+      sessionId: 'session_research_1',
+      turnId: 'turn_research_1',
+      executionId: 'run_research_1',
+      ticker: 'BBCA',
+      payload: {
+        question: 'Assess the quality of the company’s revenue growth.',
+        summary: 'Revenue growth is supported by a primary company filing.',
+        findings: [{
+          statement: 'Revenue increased during FY2025.',
+          evidenceIds: [EVIDENCE_ID],
+          confidence: 'high',
+          citedFigures: [{ evidenceId: EVIDENCE_ID, path: 'financials.revenueGrowthYoy', value: 12.4, periodLabel: 'FY2025' }],
+        }],
+        sourceAssessments: [{ evidenceId: EVIDENCE_ID, quality: 'primary', rationale: 'Company filing.' }],
+        gaps: ['The latest interim filing is not available.'],
+        coverage: [
+          { source: 'company_report', status: 'available', evidenceIds: [EVIDENCE_ID] },
+          { source: 'news', status: 'unavailable', reason: 'Provider returned no articles.' },
+          { source: 'market_data', status: 'not_requested' },
+        ],
+      },
+      createdAt: '2026-09-18T00:00:00.000Z',
+    };
+
+    expect(ArtifactEnvelopeSchema.safeParse(envelope).success).toBe(true);
+    expect(ArtifactEnvelopeSchema.safeParse({ ...envelope, payload: { ...envelope.payload, findings: [{ statement: '', evidenceIds: ['not-a-uuid'], confidence: 'certain' }] } }).success).toBe(false);
+  });
 });

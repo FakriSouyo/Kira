@@ -1,6 +1,6 @@
 # Kira Progress
 
-Last updated: 2026-09-28
+Last updated: 2026-09-29
 
 ## Current state
 
@@ -38,7 +38,8 @@ Last updated: 2026-09-28
 - Engine owns Judge workflow runtime composition through one canonical WorkflowRunner, WorkflowTraceRecorder, JudgeCheckpointWriter, post-acquisition projection repair, restore-state composition, and typed runtime results.
 - Engine owns host-neutral Judge Execution creation, immutable profile persistence, resume compatibility planning, and same-Execution acquisition through the existing Session, profile, and checkpoint store contracts. The host still selects `/resume` and `/continue` targets.
 - CLI still owns `/new` Session creation, configuration/provider/model rebinding, ConversationController switching, journal reconciliation and prepared-context commit, `/resume` and `/continue` argument validation and target selection, host abort classification and friendly error policy, concrete release/reconciliation store adapters, startup invocation timing, journal/transcript and AgentEvent projection, provider composition, streaming presentation, and reload/suspend behavior. Startup reconciliation remains before the Session artifact reload used for WorkingContext publication. The engine preparation operation completes resume planning before acquisition; engine projection repair follows acquisition and precedes WorkflowRunner execution.
-- KB Internal Kira Identity Migration is the current broad phase. KB1 CLI Config Identity Rename and KB2 Main Agent Identity Rename are complete on master. KB2 renamed the conversational agent class and prompt constant without changing behavior or prompt bytes; U Research Composition follows KB.
+- U Research Composition / Product Completion is the current broad phase. The KB blocking gate is closed: KB1 CLI Config Identity Rename and KB2 Main Agent Identity Rename are complete on master. Remaining FinHarness compatibility identities are deferred and unscheduled, and are not a prerequisite to U.
+- U1A Research Composition Contract Audit and U1B Research Report Publication Boundary are complete. NEXT is U1C Reusable Verified Research Acquisition; `/research` remains unimplemented.
 
 The canonical dependency sequence and future design boundaries live in
 [ROADMAP.md](ROADMAP.md). Current architecture facts live in

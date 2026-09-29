@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { ARTIFACT_KINDS, type ArtifactKind } from '@harness/schemas';
+import { JUDGE_ARTIFACT_KINDS, type JudgeArtifactKind } from '@harness/schemas';
 import { canonicalJson, ValidationError } from '@harness/shared';
 import {
   CLAIM_GRAPH_CONTRACT_FINGERPRINT,
@@ -12,7 +12,7 @@ import {
 export const CLAIM_GRAPH_RELEASE_RECEIPT_SCHEMA_VERSION = 1 as const;
 
 export interface ClaimGraphArtifactProjection {
-  readonly kind: ArtifactKind;
+  readonly kind: JudgeArtifactKind;
   readonly artifactId: string;
   readonly nodes: readonly ClaimGraphNodeRef[];
   readonly edges: readonly ClaimGraphEdge[];
@@ -88,7 +88,7 @@ function assertFingerprint(value: unknown, label: string): asserts value is stri
 }
 
 function validateProjection(projection: ClaimGraphArtifactProjection, executionId: string): void {
-  if (!projection || !ARTIFACT_KINDS.includes(projection.kind) || typeof projection.artifactId !== 'string' || !projection.artifactId.trim()
+  if (!projection || !JUDGE_ARTIFACT_KINDS.some(kind => kind === projection.kind) || typeof projection.artifactId !== 'string' || !projection.artifactId.trim()
     || !Array.isArray(projection.nodes) || !Array.isArray(projection.edges)) {
     throw new ValidationError('Claim Graph release receipt contains an invalid artifact projection');
   }
@@ -184,11 +184,11 @@ export function createClaimGraphReleaseReceipt(input: ClaimGraphReleaseReceiptIn
   }
   if (!Number.isInteger(input.artifactGraphProjectionVersion) || input.artifactGraphProjectionVersion < 1
     || !Number.isInteger(input.claimGraphVersion) || input.claimGraphVersion < 1
-    || !Array.isArray(input.artifactProjections) || input.artifactProjections.length !== ARTIFACT_KINDS.length) {
+    || !Array.isArray(input.artifactProjections) || input.artifactProjections.length !== JUDGE_ARTIFACT_KINDS.length) {
     throw new ValidationError('Claim Graph release receipt has invalid version or artifact projection fields');
   }
   const projections = input.artifactProjections.map((projection, index) => {
-    if (projection.kind !== ARTIFACT_KINDS[index]) {
+    if (projection.kind !== JUDGE_ARTIFACT_KINDS[index]) {
       throw new ValidationError('Claim Graph release receipt artifact projections are not in canonical order');
     }
     validateProjection(projection, input.executionId);

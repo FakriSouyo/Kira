@@ -51,6 +51,7 @@ function renderArtifact(artifact: RenderableArtifact, roles: readonly ContextArt
       renderClaims(artifact.payload.rebuttal.claims),
     ].join('\n');
   }
+  if (artifact.kind === 'RESEARCH_REPORT') throw new Error('Research Reports are not supported in conversation context');
   return [
     header, ...(prior ? [prior] : []),
     `  Bear reasoning: ${artifact.payload.reasoning}`,
