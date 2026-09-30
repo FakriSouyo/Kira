@@ -138,6 +138,12 @@ importers:
         specifier: ^3.25.0
         version: 3.25.76
 
+  packages/command/compare:
+    dependencies:
+      '@harness/command-core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/command/core:
     dependencies:
       '@harness/shared':
@@ -260,6 +266,9 @@ importers:
       '@harness/capability':
         specifier: workspace:*
         version: link:../capability
+      '@harness/command-compare':
+        specifier: workspace:*
+        version: link:../command/compare
       '@harness/command-core':
         specifier: workspace:*
         version: link:../command/core

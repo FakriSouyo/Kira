@@ -19,6 +19,15 @@ export type {
   ComparisonNormalizationErrorCode,
   NormalizeComparisonEvidenceParams,
 } from './compare/normalization.js';
+export { buildComparisonReportPayload } from './compare/report.js';
+export type {
+  ComparisonAcquisition,
+  ComparisonWorkflowRunIdentity,
+  ComparisonWorkflowRuntimeDependencies,
+  ComparisonWorkflowRuntimeOptions,
+  ComparisonWorkflowRuntimeResult,
+} from './compare/workflowRuntime.js';
+export { runComparisonWorkflowRuntime } from './compare/workflowRuntime.js';
 export {
   COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL,
   COMMAND_FILES_CAPABILITY_PRINCIPAL,
@@ -27,7 +36,9 @@ export { COMMAND_DOC_SEARCH_CAPABILITY_PRINCIPAL } from './capabilities/document
 export {
   JUDGE_CAPABILITY_PRINCIPALS,
   RESEARCH_CAPABILITY_PRINCIPALS,
+  COMPARE_CAPABILITY_PRINCIPALS,
   SCREEN_CAPABILITY_PRINCIPAL,
+  createCompareCapabilityPlan,
   createResearchCapabilityPlan,
 } from './capabilities/financial';
 export { createConversationContextCoordinator } from './conversation/contextCoordinator.js';

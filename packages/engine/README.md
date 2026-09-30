@@ -4,7 +4,9 @@ This package owns Kira's current host-neutral tool bindings and application
 registrations, grants, and capability composition for financial, Attachment,
 and Document tools. `createEngineCapabilityRuntime` receives the existing
 financial provider and Session-scoped stores, then returns the capability
-Gateway and Judge plan used by the current CLI host.
+Gateway and Judge/Research plans used by the current CLI host. Comparison
+capability planning is exposed separately and is not wired into the CLI host
+context in U3C.
 
 It also owns the host-neutral `WorkflowTraceRecorder`, which translates
 `WorkflowEvent` and subagent results into durable trace writes through a
@@ -301,3 +303,24 @@ workflow runtime composes `WorkflowRunner` and trace recording around the
 projection repair that follows acquisition. Current release planning/publication and completed
 release reconciliation live in the engine. Resume remains ordered: plan,
 acquire, repair, then `WorkflowRunner`.
+
+## Comparison command runtime (U3C)
+
+`@harness/command-compare` defines the required five-node graph from subject
+identification through report construction and depends only on
+`@harness/command-core`. `runComparisonWorkflowRuntime` accepts an existing
+Execution ID and ticker, ordered subjects, and narrow capability, Evidence, and
+trace contracts. It validates and normalizes the subject list before external
+operations, calls Company Report for each subject before requesting quarterly
+financials, verifies all outputs before its first Evidence acceptance, and
+persists company then quarterly Evidence in subject order. The U3A normalizer
+performs the runtime's sole Execution-scoped Evidence lookup. The report
+builder returns the strict `ComparisonReportPayloadSchema` parse of that
+matrix.
+
+The Compare capability plan grants `financial.company-report` only to
+`workflow.compare.identify-subjects` and
+`financial.quarterly-financials` only to
+`workflow.compare.fetch-financials`. The runtime has no model calls, Execution
+lifecycle, Artifact publication, WorkingContext, or CLI authority. U3D and U3E
+own those later integrations; `/compare` remains a stub in this slice.

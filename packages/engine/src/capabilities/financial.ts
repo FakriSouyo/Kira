@@ -20,6 +20,11 @@ export const RESEARCH_CAPABILITY_PRINCIPALS = Object.freeze({
   fetchNews: Object.freeze({ id: 'workflow.research.fetch-news' } as const),
 } as const);
 
+export const COMPARE_CAPABILITY_PRINCIPALS = Object.freeze({
+  identifySubjects: Object.freeze({ id: 'workflow.compare.identify-subjects' } as const),
+  fetchFinancials: Object.freeze({ id: 'workflow.compare.fetch-financials' } as const),
+} as const);
+
 function registration<TTool extends FinancialTools[keyof FinancialTools]>(
   tool: TTool,
   displayName: string,
@@ -116,6 +121,14 @@ export function createFinancialCapabilityGrants(): readonly CapabilityGrant[] {
       principalId: RESEARCH_CAPABILITY_PRINCIPALS.fetchNews.id,
       capabilityIds: [financialToolIds.news, financialToolIds.filings],
     },
+    {
+      principalId: COMPARE_CAPABILITY_PRINCIPALS.identifySubjects.id,
+      capabilityIds: [financialToolIds.companyReport],
+    },
+    {
+      principalId: COMPARE_CAPABILITY_PRINCIPALS.fetchFinancials.id,
+      capabilityIds: [financialToolIds.quarterlyFinancials],
+    },
   ]);
 }
 
@@ -129,4 +142,10 @@ export function createResearchCapabilityPlan(
   capabilityGateway: Pick<CapabilityGateway, 'list'>,
 ): CapabilityPlan {
   return createCapabilityPlan(capabilityGateway, Object.values(RESEARCH_CAPABILITY_PRINCIPALS));
+}
+
+export function createCompareCapabilityPlan(
+  capabilityGateway: Pick<CapabilityGateway, 'list'>,
+): CapabilityPlan {
+  return createCapabilityPlan(capabilityGateway, Object.values(COMPARE_CAPABILITY_PRINCIPALS));
 }
