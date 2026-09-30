@@ -73,7 +73,7 @@ export interface JudgeRun {
   sequence: number;
   subject: string;
   companyName?: string;
-  command: 'judge' | 'research';
+  command: 'judge' | 'research' | 'compare';
   state: RunState;
   phase: 'research' | 'bull' | 'bear' | 'debate' | 'judge' | 'complete';
   research: ResearchRun;
@@ -118,7 +118,7 @@ type ConversationEventPayload =
   | { type: 'message.settled'; id: string; state: Exclude<RunState, 'running'> }
   | { type: 'turn.started'; id: string }
   | { type: 'turn.settled'; id: string; state: Exclude<RunState, 'running'> }
-  | { type: 'run.started'; id: string; subject: string; command: 'judge' | 'research' }
+  | { type: 'run.started'; id: string; subject: string; command: 'judge' | 'research' | 'compare' }
   | { type: 'research.task'; id: string; task: ResearchTask; state?: ResearchState; companyName?: string }
   | { type: 'research.evidence'; id: string; evidence: DisplayEvidence }
   | { type: 'research.completed'; id: string; summary: string }

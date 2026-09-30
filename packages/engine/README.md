@@ -341,5 +341,9 @@ returns the wrong Execution identity/status, `ComparisonExecutionSettlementError
 retains both the action and settlement causes. Each invocation is a fresh
 attempt with no same-Execution retry or resume. The lifecycle uses only the
 Session and Comparison publication ports and has no CLI, database, model,
-provider, or WorkingContext dependency. U3E owns `/compare` CLI and
-WorkingContext integration, so the command remains a CLI stub in this slice.
+provider, or WorkingContext dependency. U3E supplies an explicit CLI adapter
+and deterministic renderer, while this Engine's WorkingContext publisher
+derives ordered subjects from the exact durable Comparison Report after its
+Turn has settled. The publisher verifies the report's Session, Turn,
+Execution, and anchor identities and uses the existing compare-and-set context
+boundary.

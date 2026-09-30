@@ -998,11 +998,12 @@ U2C Research Execution Lifecycle + Atomic Publication, and U2D Manual
 /research CLI Adapter + Renderer complete U2. U3 is in progress. U3A's
 growth-basis and deterministic matrix foundation, U3B's Comparison Report
 schema and atomic publication boundary, and U3C's command graph, least-
-privilege plan, and headless workflow runtime are complete on master. U3D's
-Engine lifecycle is implemented in this branch, pending independent source
-review; U3E CLI adapter/renderer remains planned. `/compare` remains a CLI stub
-until those slices are complete. Deferred FinHarness compatibility identities
-remain deferred, and the KB gate remains closed.
+privilege plan, headless workflow runtime, and U3D Engine lifecycle are
+complete on master. U3E's explicit CLI adapter, renderer, and artifact-backed
+WorkingContext integration are implemented in this branch, pending independent
+source review. `/compare` is enabled in this branch; U3 is pending review and
+merge. Deferred FinHarness compatibility identities remain deferred, and the
+KB gate remains closed.
 
 ### U2 — `/research`
 
@@ -1031,8 +1032,8 @@ deterministic CLI rendering → settled Turn → WorkingContext publication
 
 ### U3 — `/compare`
 
-Current status: **CLI stub; U3A, U3B, and U3C complete on master; U3D
-implemented in this branch, pending independent source review; U3E planned**.
+Current status: **U3A–U3D complete on master; U3E implemented in this branch,
+pending independent source review; full U3 pending review and merge**.
 
 U3A adds optional per-metric temporal proof for quarterly revenue and net
 income YoY growth, while preserving legacy Research/Judge observations without
@@ -1057,9 +1058,13 @@ operations, anchors the Execution to the first subject, composes U3C, and
 passes its exact report to U3B's atomic publisher. Notification, runtime, or
 publication failures settle the same Execution once as failed or cancelled;
 settlement errors preserve both causes. It has no retry/resume path or CLI,
-Turn, renderer, or WorkingContext integration. U3E will connect those host
-surfaces. U3 remains incomplete until U3D is reviewed and merged and U3E is
-implemented; the CLI command remains a stub meanwhile.
+Turn, renderer, or WorkingContext integration. U3E connects those host
+surfaces through the existing Session Turn lifecycle, renders only the
+returned canonical published report, and publishes the report's ordered
+subjects into WorkingContext only after a completed Turn. The publisher
+verifies report identity against its durable Turn and Execution and fails
+closed if that report is missing, duplicated, or mismatched. Generic
+conversation artifact retrieval remains Judge-only.
 
 Future `/compare` should normalize comparable companies before comparison; it
 should not produce unrelated reports and ask an LLM to compare them.
