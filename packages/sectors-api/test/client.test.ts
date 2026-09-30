@@ -80,6 +80,175 @@ describe('SectorsClient (v2)', () => {
     expect(fin.cumulativeYtd).toBeUndefined();
   });
 
+  it('attaches independent proven basis for finite raw same-quarter YoY inputs', async () => {
+    const body = [
+      { symbol: 'BBCA.JK', date: '2025-06-30', revenue: 120, earnings: 0 },
+      { symbol: 'BBCA.JK', date: '2024-06-30', revenue: 100, earnings: -2 },
+    ];
+    const result = await stubClient(body, cacheDir).getQuarterlyFinancials('BBCA');
+    const latest = result.data.quarters[0]!;
+
+    expect(latest).toMatchObject({
+      period: '2025-Q2',
+      revenueGrowthYoy: 20,
+      netIncomeGrowthYoy: 100,
+      growthBasis: {
+        revenueGrowthYoy: {
+          status: 'proven', method: 'same_quarter_prior_year', period: '2025-Q2',
+          comparisonPeriod: '2024-Q2', periodType: 'single_quarter', unit: 'percent',
+        },
+        netIncomeGrowthYoy: {
+          status: 'proven', method: 'same_quarter_prior_year', period: '2025-Q2',
+          comparisonPeriod: '2024-Q2', periodType: 'single_quarter', unit: 'percent',
+        },
+      },
+    });
+  });
+
+  it('does not prove growth when the prior-year row belongs to another ticker', async () => {
+    const body = [
+      { symbol: 'BBCA.JK', date: '2025-06-30', revenue: 120, earnings: 60 },
+      { symbol: 'BBRI.JK', date: '2024-06-30', revenue: 100, earnings: 50 },
+    ];
+    const result = await stubClient(body, cacheDir).getQuarterlyFinancials('BBCA');
+    const latest = result.data.quarters[0]!;
+
+    // Preserve legacy arithmetic while preventing a cross-ticker row from becoming proof.
+    expect(latest).toMatchObject({ revenueGrowthYoy: 20, netIncomeGrowthYoy: 20 });
+    expect(latest.growthBasis).toBeUndefined();
+  });
+
+  it('proves revenue independently when earnings are null-normalized to zero', async () => {
+    const calls: string[] = [];
+    const rows = [
+      { symbol: 'BBCA.JK', date: '2025-06-30', revenue: 120, earnings: null },
+      { symbol: 'BBCA.JK', date: '2024-06-30', revenue: 100, earnings: 5 },
+    ];
+    const client = new SectorsClient({
+      cacheDir,
+      fetchImpl: (async (url: string) => {
+        calls.push(url);
+        return jsonResponse(url.includes('/company/report') ? V2_REPORT : rows);
+      }) as typeof fetch,
+    });
+    const result = await client.getQuarterlyFinancials('BBCA');
+    const latest = result.data.quarters[0]!;
+
+    expect(latest).toMatchObject({
+      revenueGrowthYoy: 20,
+      netIncome: 0,
+      growthBasis: {
+        revenueGrowthYoy: {
+          status: 'proven', method: 'same_quarter_prior_year', period: '2025-Q2',
+          comparisonPeriod: '2024-Q2', periodType: 'single_quarter', unit: 'percent',
+        },
+      },
+    });
+    expect(latest.growthBasis?.netIncomeGrowthYoy).not.toMatchObject({ status: 'proven' });
+    expect(calls).toEqual([
+      'https://api.sectors.app/v2/financials/quarterly/BBCA/?n_quarters=1&approx=true',
+      'https://api.sectors.app/v2/company/report/BBCA/?sections=overview%2Cvaluation%2Cfinancials%2Cdividend',
+      'https://api.sectors.app/v2/financials/quarterly/BBCA/?n_quarters=5&approx=true',
+    ]);
+  });
+
+  it('does not prove growth from null-normalized earnings or duplicate raw periods', async () => {
+    const body = [
+      { symbol: 'BBCA.JK', date: '2025-06-30', revenue: 120, earnings: null },
+      { symbol: 'BBCA.JK', date: '2024-06-30', revenue: 100, earnings: 5 },
+      // A duplicate is ambiguous even though the legacy period map can pick one.
+      { symbol: 'BBCA.JK', date: '2024-06-30', revenue: 90, earnings: 4 },
+    ];
+    const result = await stubClient(body, cacheDir).getQuarterlyFinancials('BBCA');
+    const latest = result.data.quarters[0]!;
+
+    expect(latest.revenue).toBe(120);
+    expect(latest.netIncome).toBe(0);
+    expect(latest.growthBasis?.revenueGrowthYoy).not.toMatchObject({ status: 'proven' });
+    expect(latest.growthBasis?.netIncomeGrowthYoy).not.toMatchObject({ status: 'proven' });
+  });
+
+  it('does not prove a quarter against a different calendar quarter or zero denominator', async () => {
+    const mismatchedQuarter = await stubClient([
+      { symbol: 'BBCA.JK', date: '2025-06-30', revenue: 120, earnings: 6 },
+      { symbol: 'BBCA.JK', date: '2024-03-31', revenue: 100, earnings: 5 },
+    ], cacheDir).getQuarterlyFinancials('BBCA');
+    expect(mismatchedQuarter.data.quarters[0]?.growthBasis).toBeUndefined();
+
+    const zeroPrevious = await stubClient([
+      { symbol: 'BBCA.JK', date: '2025-06-30', revenue: 120, earnings: 6 },
+      { symbol: 'BBCA.JK', date: '2024-06-30', revenue: 0, earnings: 0 },
+    ], cacheDir).getQuarterlyFinancials('BBCA');
+    expect(zeroPrevious.data.quarters[0]?.growthBasis).toBeUndefined();
+  });
+
+  it('does not prove a same-quarter growth value from an invalid raw calendar date', async () => {
+    const invalidCurrentDate = await stubClient([
+      { symbol: 'BBCA.JK', date: '2025-06-31', revenue: 120, earnings: 6 },
+      { symbol: 'BBCA.JK', date: '2024-06-30', revenue: 100, earnings: 5 },
+    ], cacheDir).getQuarterlyFinancials('BBCA');
+
+    expect(invalidCurrentDate.data.quarters[0]).toMatchObject({ period: '2025-Q2', revenueGrowthYoy: 20, netIncomeGrowthYoy: 20 });
+    expect(invalidCurrentDate.data.quarters[0]?.growthBasis).toBeUndefined();
+  });
+
+  it('marks Company Report-filled growth unproven without changing its legacy numeric value', async () => {
+    const reportWithGrowth = {
+      ...V2_REPORT,
+      financials: {
+        ...V2_REPORT.financials,
+        yoy_quarter_revenue_growth: 0.1,
+        yoy_quarter_earnings_growth: 0.08,
+      },
+    };
+    const client = new SectorsClient({
+      cacheDir,
+      fetchImpl: (async (url: string) => jsonResponse(url.includes('/company/report')
+        ? reportWithGrowth
+        : [{ symbol: 'BBCA.JK', date: '2025-12-31', revenue: 110, earnings: 54 }])) as typeof fetch,
+    });
+    const result = await client.getQuarterlyFinancials('BBCA');
+
+    expect(result.data.quarters[0]).toMatchObject({ revenueGrowthYoy: 10, netIncomeGrowthYoy: 8 });
+    expect(result.data.quarters[0]?.growthBasis).toEqual({
+      revenueGrowthYoy: { status: 'unproven', reason: 'COMPANY_REPORT_PERIOD_UNVERIFIED' },
+      netIncomeGrowthYoy: { status: 'unproven', reason: 'COMPANY_REPORT_PERIOD_UNVERIFIED' },
+    });
+  });
+
+  it('annotates every mock fixture growth value with an explicit single-quarter basis without changing its value', async () => {
+    const expected: Record<string, Array<[number, number]>> = {
+      BBCA: [[9.8, 8.7], [9.1, 7.9], [8.6, 7.4], [8.2, 6.9]],
+      BBRI: [[7.4, 7.2], [6.9, 6.6], [6.4, 6.1], [5.8, 5.5]],
+      BMRI: [[6.8, 6.1], [6.2, 5.7], [5.6, 5.2], [5.1, 4.8]],
+      BBNI: [[4.6, 4.1], [4.2, 3.8], [3.9, 3.4], [3.5, 3.0]],
+      BJTM: [[2.4, 1.8], [2.1, 1.5], [1.7, 1.2], [1.4, 0.9]],
+    };
+    const mock = new MockSectorsApi();
+
+    for (const ticker of Object.keys(expected)) {
+      const result = await mock.getQuarterlyFinancials(ticker);
+      expect(result.data.quarters.map(row => [row.revenueGrowthYoy, row.netIncomeGrowthYoy]))
+        .toEqual(expected[ticker]);
+      for (const row of result.data.quarters) {
+        const comparisonPeriod = `${Number(row.period.slice(0, 4)) - 1}${row.period.slice(4)}`;
+        expect(row).toMatchObject({
+          periodType: 'single_quarter',
+          growthBasis: {
+            revenueGrowthYoy: {
+              status: 'proven', method: 'same_quarter_prior_year', period: row.period,
+              comparisonPeriod, periodType: 'single_quarter', unit: 'percent',
+            },
+            netIncomeGrowthYoy: {
+              status: 'proven', method: 'same_quarter_prior_year', period: row.period,
+              comparisonPeriod, periodType: 'single_quarter', unit: 'percent',
+            },
+          },
+        });
+      }
+    }
+  });
+
   it('fills missing ROE from bounded cached company reports for profitable screening', async () => {
     let reports = 0;
     const client = new SectorsClient({ cacheDir, fetchImpl: (async (url: string) => {
@@ -184,6 +353,10 @@ describe('SectorsClient (v2)', () => {
     expect(normalized.quarters[0]).toMatchObject({
       period: '2025-Q4', revenue: 110, netIncome: 54,
       revenueGrowthYoy: 10, netIncomeGrowthYoy: 8,
+      growthBasis: {
+        revenueGrowthYoy: { status: 'unproven', reason: 'COMPANY_REPORT_PERIOD_UNVERIFIED' },
+        netIncomeGrowthYoy: { status: 'unproven', reason: 'COMPANY_REPORT_PERIOD_UNVERIFIED' },
+      },
     });
     expect(quarterlyResult.metadata).toMatchObject({ dataAsOf: null, period: '2025-Q4', derivedFrom: ['company_report'] });
     const fullClient = new SectorsClient({
@@ -192,7 +365,17 @@ describe('SectorsClient (v2)', () => {
     });
     await fullClient.getCompanyReport('BBCA');
     const fullNormalized = dataOf(await fullClient.getQuarterlyFinancials('BBCA'));
-    expect(normalized.quarters[0]).toEqual(fullNormalized.quarters[0]);
+    expect(normalized.quarters[0]).toMatchObject({
+      period: fullNormalized.quarters[0]?.period,
+      revenue: fullNormalized.quarters[0]?.revenue,
+      netIncome: fullNormalized.quarters[0]?.netIncome,
+      revenueGrowthYoy: fullNormalized.quarters[0]?.revenueGrowthYoy,
+      netIncomeGrowthYoy: fullNormalized.quarters[0]?.netIncomeGrowthYoy,
+    });
+    expect(normalized.quarters[0]?.growthBasis?.revenueGrowthYoy).toEqual({
+      status: 'unproven', reason: 'COMPANY_REPORT_PERIOD_UNVERIFIED',
+    });
+    expect(fullNormalized.quarters[0]?.growthBasis?.revenueGrowthYoy).toMatchObject({ status: 'proven' });
   });
 
   it('normalizes the captured single-object n_quarters=1 response as one quarter', async () => {

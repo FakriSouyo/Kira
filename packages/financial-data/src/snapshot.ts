@@ -6,6 +6,8 @@ import type {
   ForeignFlow,
   NewsArticle,
   QuarterlyFinancials,
+  QuarterlyGrowthBasis,
+  QuarterlyGrowthMetric,
   Sentiment,
 } from './types';
 import type { FinancialDataMetadata, FinancialDataResult } from './provider';
@@ -139,6 +141,52 @@ function isStringOptional(value: unknown): boolean {
   return value === undefined || typeof value === 'string';
 }
 
+function canonicalQuarter(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-Q[1-4]$/.test(value);
+}
+
+function previousYearQuarter(period: string): string | null {
+  const match = /^(\d{4})-(Q[1-4])$/.exec(period);
+  if (!match) return null;
+  const year = Number(match[1]);
+  if (year < 1) return null;
+  return `${String(year - 1).padStart(4, '0')}-${match[2]}`;
+}
+
+function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const keys = Object.keys(value).sort();
+  return keys.length === expected.length && keys.every((key, index) => key === [...expected].sort()[index]);
+}
+
+function isGrowthBasis(value: unknown, period: string): value is QuarterlyGrowthBasis {
+  if (!isRecord(value)) return false;
+  if (value.status === 'unproven') {
+    return exactKeys(value, ['status', 'reason']) && value.reason === 'COMPANY_REPORT_PERIOD_UNVERIFIED';
+  }
+  if (value.status !== 'proven' || !exactKeys(value, ['status', 'method', 'period', 'comparisonPeriod', 'periodType', 'unit'])) return false;
+  const comparisonPeriod = previousYearQuarter(period);
+  return comparisonPeriod !== null
+    && value.method === 'same_quarter_prior_year'
+    && value.period === period
+    && canonicalQuarter(value.period)
+    && value.comparisonPeriod === comparisonPeriod
+    && canonicalQuarter(value.comparisonPeriod)
+    && value.periodType === 'single_quarter'
+    && value.unit === 'percent';
+}
+
+function isGrowthBasisByMetric(value: unknown, period: string, quarter: Record<string, unknown>): boolean {
+  if (!isRecord(value)) return false;
+  const allowed: QuarterlyGrowthMetric[] = ['revenueGrowthYoy', 'netIncomeGrowthYoy'];
+  if (Object.keys(value).some(key => !allowed.includes(key as QuarterlyGrowthMetric))) return false;
+  if (Object.keys(value).length > 0 && quarter.periodType !== undefined && quarter.periodType !== 'single_quarter') return false;
+  return allowed.every((metric) => {
+    const basis = value[metric];
+    if (!Object.prototype.hasOwnProperty.call(value, metric)) return true;
+    return typeof quarter[metric] === 'number' && Number.isFinite(quarter[metric]) && isGrowthBasis(basis, period);
+  });
+}
+
 function isCompanyReport(value: unknown): value is CompanyReport {
   if (!isRecord(value) || typeof value.ticker !== 'string') return false;
   const financials = value.financials;
@@ -156,7 +204,8 @@ function isQuarterlyFinancials(value: unknown): value is QuarterlyFinancials {
   const quarters = value.quarters.every((quarter) => {
     if (!isRecord(quarter) || typeof quarter.period !== 'string' || typeof quarter.revenue !== 'number' || !Number.isFinite(quarter.revenue)
       || typeof quarter.netIncome !== 'number' || !Number.isFinite(quarter.netIncome)) return false;
-    return isStringOptional(quarter.periodType) && isFiniteOptional(quarter.revenueGrowthYoy) && isFiniteOptional(quarter.netIncomeGrowthYoy);
+    return isStringOptional(quarter.periodType) && isFiniteOptional(quarter.revenueGrowthYoy) && isFiniteOptional(quarter.netIncomeGrowthYoy)
+      && (!Object.prototype.hasOwnProperty.call(quarter, 'growthBasis') || isGrowthBasisByMetric(quarter.growthBasis, quarter.period, quarter));
   });
   const cumulative = value.cumulativeYtd;
   return quarters && (cumulative === undefined || (

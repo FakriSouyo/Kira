@@ -315,6 +315,18 @@ function periodOfDate(date: string | undefined): string {
   return `${parsed[1]}-Q${quarter}`;
 }
 
+function canonicalPeriodOfDate(date: string | undefined): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date ?? '');
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const timestamp = Date.UTC(year, month - 1, day);
+  const parsed = new Date(timestamp);
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) return null;
+  return `${match[1]}-Q${Math.ceil(month / 3)}`;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -343,22 +355,55 @@ function normalizeQuarterlyPayload(raw: unknown): V2QuarterRow[] {
   return rows;
 }
 
-function toQuarterlyFinancials(raw: V2QuarterRow[]): QuarterlyFinancials {
+function toQuarterlyFinancials(raw: V2QuarterRow[], ticker: string): QuarterlyFinancials {
   const rows = [...(raw ?? [])].sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')));
+  const requestedTicker = ticker.trim().toUpperCase();
   const byPeriod = new Map(rows.map((row) => [periodOfDate(row.date), row]));
+  const periodCounts = new Map<string, number>();
+  for (const row of rows) {
+    const period = periodOfDate(row.date);
+    periodCounts.set(period, (periodCounts.get(period) ?? 0) + 1);
+  }
   const growth = (current?: number | null, previous?: number | null): number | undefined =>
     current !== undefined && current !== null && previous !== undefined && previous !== null && previous !== 0
       ? pct((current - previous) / Math.abs(previous)) : undefined;
   const quarters: QuarterlyFinancials['quarters'] = rows.map((r) => {
     const period = periodOfDate(r.date);
     const prev = byPeriod.get(`${Number(period.slice(0, 4)) - 1}${period.slice(4)}`);
+    const comparisonPeriod = `${Number(period.slice(0, 4)) - 1}${period.slice(4)}`;
+    const eligibleCurrentPeriod = canonicalPeriodOfDate(r.date) === period && periodCounts.get(period) === 1
+      && stripSuffix(r.symbol).toUpperCase() === requestedTicker;
+    const eligiblePreviousPeriod = prev !== undefined
+      && canonicalPeriodOfDate(prev.date) === comparisonPeriod
+      && periodCounts.get(comparisonPeriod) === 1
+      && stripSuffix(prev.symbol).toUpperCase() === requestedTicker;
+    const revenueGrowthYoy = growth(r.revenue, prev?.revenue);
+    const netIncomeGrowthYoy = growth(r.earnings, prev?.earnings);
+    const provenBasis = (value: number | undefined) => value !== undefined && eligibleCurrentPeriod && eligiblePreviousPeriod
+      ? {
+        status: 'proven' as const,
+        method: 'same_quarter_prior_year' as const,
+        period,
+        comparisonPeriod,
+        periodType: 'single_quarter' as const,
+        unit: 'percent' as const,
+      }
+      : undefined;
+    const revenueBasis = provenBasis(revenueGrowthYoy);
+    const netIncomeBasis = provenBasis(netIncomeGrowthYoy);
     return {
       period,
       periodType: 'single_quarter' as const,
       revenue: r.revenue ?? 0,
       netIncome: r.earnings ?? 0,
-      revenueGrowthYoy: growth(r.revenue, prev?.revenue),
-      netIncomeGrowthYoy: growth(r.earnings, prev?.earnings),
+      revenueGrowthYoy,
+      netIncomeGrowthYoy,
+      ...(revenueBasis || netIncomeBasis ? {
+        growthBasis: {
+          ...(revenueBasis ? { revenueGrowthYoy: revenueBasis } : {}),
+          ...(netIncomeBasis ? { netIncomeGrowthYoy: netIncomeBasis } : {}),
+        },
+      } : {}),
     };
   });
   // YTD is only defined with every Q1..latest quarter in both calendar years.
@@ -587,7 +632,7 @@ export class SectorsClient implements SectorsApi {
       `/financials/quarterly/${encodeURIComponent(ticker)}/?n_quarters=${nQuarters}&approx=true`,
       ticker,
     );
-    return toQuarterlyFinancials(normalizeQuarterlyPayload(raw));
+    return toQuarterlyFinancials(normalizeQuarterlyPayload(raw), ticker);
   }
 
   private async fillQuarterlyGrowth(ticker: string, fin: QuarterlyFinancials, onDerived?: () => void): Promise<QuarterlyFinancials> {
@@ -599,9 +644,17 @@ export class SectorsClient implements SectorsApi {
       onDerived?.();
       if (q0.revenueGrowthYoy === undefined && report.data.financials.yoyQuarterRevenueGrowth !== undefined) {
         q0.revenueGrowthYoy = report.data.financials.yoyQuarterRevenueGrowth;
+        q0.growthBasis = {
+          ...q0.growthBasis,
+          revenueGrowthYoy: { status: 'unproven', reason: 'COMPANY_REPORT_PERIOD_UNVERIFIED' },
+        };
       }
       if (q0.netIncomeGrowthYoy === undefined && report.data.financials.yoyQuarterEarningsGrowth !== undefined) {
         q0.netIncomeGrowthYoy = report.data.financials.yoyQuarterEarningsGrowth;
+        q0.growthBasis = {
+          ...q0.growthBasis,
+          netIncomeGrowthYoy: { status: 'unproven', reason: 'COMPANY_REPORT_PERIOD_UNVERIFIED' },
+        };
       }
     } catch {
       // Report unavailable → biarkan undefined, rubrik akan renorm.

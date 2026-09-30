@@ -25,6 +25,26 @@ export interface CompanyReport {
 }
 
 /** Quarterly financials — trend and growth data. */
+export type QuarterlyGrowthMetric = 'revenueGrowthYoy' | 'netIncomeGrowthYoy';
+
+export interface ProvenQuarterlyGrowthBasis {
+  status: 'proven';
+  method: 'same_quarter_prior_year';
+  period: string;
+  comparisonPeriod: string;
+  periodType: 'single_quarter';
+  unit: 'percent';
+}
+
+export interface UnprovenQuarterlyGrowthBasis {
+  status: 'unproven';
+  reason: 'COMPANY_REPORT_PERIOD_UNVERIFIED';
+}
+
+export type QuarterlyGrowthBasis = ProvenQuarterlyGrowthBasis | UnprovenQuarterlyGrowthBasis;
+
+export type QuarterlyGrowthBasisByMetric = Partial<Record<QuarterlyGrowthMetric, QuarterlyGrowthBasis>>;
+
 export interface QuarterlyFinancials {
   ticker: string;
   currency?: string;
@@ -35,6 +55,8 @@ export interface QuarterlyFinancials {
     netIncome: number;
     revenueGrowthYoy?: number;
     netIncomeGrowthYoy?: number;
+    /** Optional proof metadata. Missing legacy metadata never implies comparability. */
+    growthBasis?: QuarterlyGrowthBasisByMetric;
   }>;
   cumulativeYtd?: {
     periodLabel: string;
