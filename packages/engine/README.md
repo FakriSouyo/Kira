@@ -322,5 +322,24 @@ The Compare capability plan grants `financial.company-report` only to
 `workflow.compare.identify-subjects` and
 `financial.quarterly-financials` only to
 `workflow.compare.fetch-financials`. The runtime has no model calls, Execution
-lifecycle, Artifact publication, WorkingContext, or CLI authority. U3D and U3E
-own those later integrations; `/compare` remains a stub in this slice.
+lifecycle, Artifact publication, WorkingContext, or CLI authority.
+
+## Comparison Execution lifecycle (U3D)
+
+`runComparisonExecutionLifecycle` validates and normalizes two or three
+ordered IDX subjects before reading the clock or calling a store. It creates
+one fresh `compare` Execution anchored to the first subject, notifies the host
+of its identity, invokes the U3C runtime once, and passes the runtime's exact
+schema-validated report to the U3B atomic `completeAndPublish` port. Successful
+publication returns the completed Execution and Comparison Report Artifact;
+the lifecycle does not separately settle success or write an Artifact.
+
+Notification, runtime, and publication failures settle that Execution once as
+failed or cancelled. Only `WorkflowStepError` is unwrapped; its cause is
+retained in the result and settlement text. If terminal settlement fails or
+returns the wrong Execution identity/status, `ComparisonExecutionSettlementError`
+retains both the action and settlement causes. Each invocation is a fresh
+attempt with no same-Execution retry or resume. The lifecycle uses only the
+Session and Comparison publication ports and has no CLI, database, model,
+provider, or WorkingContext dependency. U3E owns `/compare` CLI and
+WorkingContext integration, so the command remains a CLI stub in this slice.
