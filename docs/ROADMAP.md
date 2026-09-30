@@ -992,40 +992,38 @@ node graphs, and package locations are not locked.
 U1A — Research Composition Contract Audit, U1B — Research Report Publication
 Boundary, and U1C — Reusable Verified Research Acquisition are complete. U1B
 establishes the version 1 `RESEARCH_REPORT` Artifact and its atomic Research
-Execution completion/publication boundary; it does not implement `/research`.
-The U1 Research Foundation is complete. NEXT is U2 `/research`; `/research`
-remains unimplemented. Deferred FinHarness compatibility identities remain
-deferred, and the KB gate remains closed.
+Execution completion/publication boundary. The U1 Research Foundation is
+complete. U2A Research Grounding, U2B Headless Research Workflow Runtime,
+U2C Research Execution Lifecycle + Atomic Publication, and U2D Manual
+/research CLI Adapter + Renderer complete U2.
+U3 `/compare` is next and
+not started. Deferred FinHarness compatibility identities remain deferred,
+and the KB gate remains closed.
 
 ### U2 — `/research`
 
-Current status: **stub**.
+Current status: **complete**.
 
-Future `/research` is a non-debate, evidence-backed company research product;
-`/research` is not `/judge`. Directional output may cover company overview,
-financial health, growth, profitability, valuation, market position, recent
-developments, risks, open questions, evidence coverage, data freshness, and
-confidence.
+`/research TICKER <QUESTION>` is an explicit, non-debate, evidence-backed
+company research command. It does not invoke Bull, Bear, or Judge. The command
+requires a company report and quarterly financials; it may acquire news and
+filings, and does not request daily transactions, foreign flow, or sentiment.
+The durable report contains a summary, findings with confidence and evidence
+references, source coverage, and gaps.
 
-Directional flow:
+Current lifecycle:
 
 ```text
-resolve company
-     |
-select required data/capabilities
-     |
-verified financial input
-     |
-evidence collection
-     |
-fundamentals / market / valuation / risk / developments
-     |
-claim verification
-     |
-research product
+CLI validates /research TICKER <QUESTION>
+     ↓
+existing Session Turn → Research Execution lifecycle
+     ↓
+Research workflow runtime and verified Evidence acquisition
+     ↓
+atomic RESEARCH_REPORT publication + completed Execution
+     ↓
+deterministic CLI rendering → settled Turn → WorkingContext publication
 ```
-
-Exact output schemas are not locked.
 
 ### U3 — `/compare`
 

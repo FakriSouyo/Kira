@@ -63,7 +63,17 @@ export async function runSessionTurn<Result>({
       const status = failureStatus
         ?? await resolveLiveFailureStatus(sessions, sessionId, turn.id, error, signal, isAbortError);
       await onTurnFailure?.(turn, status, error);
-      const settledTurn = await sessions.settleTurn(turn.id, status);
+      let settledTurn: ResearchTurn;
+      try {
+        settledTurn = await sessions.settleTurn(turn.id, status);
+      } catch (settlementError) {
+        const hasUnresolvedChild = await sessions.getSessionArtifacts(sessionId)
+          .then(artifacts => artifacts.executions.some(execution =>
+            execution.turnId === turn.id && (execution.status === 'running' || execution.status === 'interrupted')))
+          .catch(() => false);
+        if (hasUnresolvedChild) throw error;
+        throw settlementError;
+      }
       turnSettled = true;
       await onTurnSettled(settledTurn);
     }

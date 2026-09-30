@@ -5,7 +5,7 @@ import type {
   ResearchSessionStore,
   ResearchTurn,
 } from '@harness/session-core';
-import { runSessionTurn, type WorkingContextPublisher } from '../src/index.js';
+import { ResearchExecutionSettlementError, runSessionTurn, type WorkingContextPublisher } from '../src/index.js';
 
 const runningTurn: ResearchTurn = {
   id: 'turn_1',
@@ -366,13 +366,31 @@ describe('runSessionTurn', () => {
     expect(dependencies.publisher.publishAfterSettledTurn).not.toHaveBeenCalled();
   });
 
-  it('propagates failure settlement store errors', async () => {
+  it('propagates failure settlement store errors when there is no unresolved child Execution', async () => {
     const dependencies = lifecycleDependencies();
-    const error = new Error('settlement failed');
-    vi.mocked(dependencies.sessions.settleTurn).mockRejectedValue(error);
+    const actionError = new Error('action failed');
+    const settlementError = new Error('settlement failed');
+    vi.mocked(dependencies.sessions.settleTurn).mockRejectedValue(settlementError);
 
-    await expect(run(dependencies, { action: async () => { throw new Error('action failed'); } })).rejects.toBe(error);
+    await expect(run(dependencies, { action: async () => { throw actionError; } })).rejects.toBe(settlementError);
 
+    expect(dependencies.publisher.publishAfterSettledTurn).not.toHaveBeenCalled();
+  });
+
+  it('preserves the Research lifecycle persistence error when the same Turn has an unresolved child Execution', async () => {
+    const childExecution = execution('running', 'research_execution');
+    const dependencies = lifecycleDependencies([childExecution]);
+    const actionError = new ResearchExecutionSettlementError(
+      childExecution,
+      'failed',
+      new Error('required source failed'),
+      new Error('execution store unavailable'),
+    );
+    vi.mocked(dependencies.sessions.settleTurn).mockRejectedValue(new Error('parent Turn settlement failed'));
+
+    await expect(run(dependencies, { action: async () => { throw actionError; } })).rejects.toBe(actionError);
+
+    expect(dependencies.sessions.settleTurn).toHaveBeenCalledWith(runningTurn.id, 'failed');
     expect(dependencies.publisher.publishAfterSettledTurn).not.toHaveBeenCalled();
   });
 

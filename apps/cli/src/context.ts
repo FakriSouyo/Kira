@@ -77,7 +77,7 @@ export function buildContext(
     newsCacheTtlHours: config.sectors.newsCacheTtlHours,
     homeDir: config.homeDir,
   });
-  const { capabilityGateway, judgeCapabilityPlan } = createEngineCapabilityRuntime({
+  const { capabilityGateway, judgeCapabilityPlan, researchCapabilityPlan } = createEngineCapabilityRuntime({
     financialData,
     attachmentStore: db.attachments,
     documentStore: db.documents,
@@ -107,6 +107,7 @@ export function buildContext(
     financialData,
     capabilityGateway,
     judgeCapabilityPlan,
+    researchCapabilityPlan,
     researcher: new ResearcherAgent(specialist('researcher')),
     bull: new BullAgent(specialist('bull')),
     bear: new BearAgent(specialist('bear')),

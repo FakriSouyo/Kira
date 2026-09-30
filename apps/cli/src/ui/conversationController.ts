@@ -216,7 +216,7 @@ export class ConversationController {
       case 'session.start':
         this.currentRun = event.executionId ?? event.runId;
         if (this.activeTurn) this.activeTurn.executionId = this.currentRun;
-        this.append({ type: 'run.started', id: this.currentRun, subject: event.ticker ?? '', command: 'judge' });
+        this.append({ type: 'run.started', id: this.currentRun, subject: event.ticker ?? '', command: event.command ?? 'judge' });
         break;
       case 'session.complete':
         if (this.currentRun) this.append({ type: 'run.settled', id: this.currentRun, state: event.status === 'completed' ? 'completed' : event.status === 'stopped' || event.error?.code === 'ABORTED' ? 'cancelled' : 'failed', error: event.error ? this.publicText(event.error.message) : undefined });

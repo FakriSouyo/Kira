@@ -923,12 +923,25 @@ same Execution row and ID; it does not create a retry Execution.
 
 ## Command boundaries
 
-The implemented command surface includes `/judge`, `/screen`, `/search`,
+The implemented command surface includes `/judge`, `/research`, `/screen`, `/search`,
 `/attach`, `/files`, `/history`, `/session`, `/resume`, `/web`, `/export`, `/version`,
 setup/status commands, and local session controls. `/judge` is the current
-mature research vertical; `/screen` and `/search` are implemented, and
-`/attach` is explicit user-file ingestion. `/challenge`, `/compare`,
-`/investigate`, and `/research` remain planned stubs.
+mature debate vertical; `/research` is the explicit non-debate company research
+command. `/screen` and `/search` are implemented, and `/attach` is explicit
+user-file ingestion. `/challenge`, `/compare`, and `/investigate` remain
+planned stubs.
+
+`/research TICKER <QUESTION>` validates the explicit ticker and focused
+question, then calls the Engine Research Execution lifecycle. The runtime owns
+the research graph, provider access, evidence acceptance, and grounding; the
+Engine lifecycle owns atomic report publication and Execution settlement. The
+CLI supplies concrete stores and projects workflow and financial-tool events;
+its renderer reads the published `RESEARCH_REPORT` payload. The existing
+fresh-Turn runner settles the parent Turn and publishes WorkingContext only
+after success. Required inputs are the company report and quarterly
+financials; news and filings are optional, while daily transactions, foreign
+flow, and sentiment are not requested by this command. Research emits a
+Research run identity and does not invoke the Judge specialists.
 
 `/resume <executionId>` validates and continues an interrupted canonical Judge
 Execution in its original Turn. `/continue` selects exactly one interrupted

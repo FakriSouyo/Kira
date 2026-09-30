@@ -9,6 +9,7 @@ import { loadConfig } from '../src/config';
 import { buildContext } from '../src/context';
 
 const JUDGE_CAPABILITY_PLAN_BASELINE = '520f35cdbe2c9ebcc8d34c8095a911a1a940a47e619d1f5111281d828f1dcc73';
+const RESEARCH_CAPABILITY_PLAN_BASELINE = '3ea027f5f22cf80c303c60949a001d46670f11a10c0b96cf09877ce3f9ba05e6';
 const screened: ScreenerResult[] = [{ ticker: 'BBCA', matchScore: 100 }];
 
 function provider(): FinancialDataProvider {
@@ -75,7 +76,7 @@ describe('CLI financial capability composition', () => {
     expect(judgeCapabilityPlan.fingerprint).toBe(JUDGE_CAPABILITY_PLAN_BASELINE);
   });
 
-  it('buildContext exposes only the engine Gateway and Judge plan as capability runtime state', () => {
+  it('exposes both canonical capability plans from the engine runtime without changing their fingerprints', () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'kira-financial-capabilities-'));
     const db = openDb({ homeDir });
 
@@ -91,6 +92,7 @@ describe('CLI financial capability composition', () => {
       expect(() => context.capabilityGateway.describe(SCREEN_CAPABILITY_PRINCIPAL, financialToolIds.companyReport))
         .toThrowError(expect.objectContaining({ code: 'CAPABILITY_DENIED' }));
       expect(context.judgeCapabilityPlan.fingerprint).toBe(JUDGE_CAPABILITY_PLAN_BASELINE);
+      expect(context.researchCapabilityPlan.fingerprint).toBe(RESEARCH_CAPABILITY_PLAN_BASELINE);
       expect(context).not.toHaveProperty('capabilityRegistry');
       expect(context).not.toHaveProperty('capabilityPolicy');
     } finally {

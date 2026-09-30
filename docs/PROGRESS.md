@@ -38,8 +38,8 @@ Last updated: 2026-09-30
 - Engine owns Judge workflow runtime composition through one canonical WorkflowRunner, WorkflowTraceRecorder, JudgeCheckpointWriter, post-acquisition projection repair, restore-state composition, and typed runtime results.
 - Engine owns host-neutral Judge Execution creation, immutable profile persistence, resume compatibility planning, and same-Execution acquisition through the existing Session, profile, and checkpoint store contracts. The host still selects `/resume` and `/continue` targets.
 - CLI still owns `/new` Session creation, configuration/provider/model rebinding, ConversationController switching, journal reconciliation and prepared-context commit, `/resume` and `/continue` argument validation and target selection, host abort classification and friendly error policy, concrete release/reconciliation store adapters, startup invocation timing, journal/transcript and AgentEvent projection, provider composition, streaming presentation, and reload/suspend behavior. Startup reconciliation remains before the Session artifact reload used for WorkingContext publication. The engine preparation operation completes resume planning before acquisition; engine projection repair follows acquisition and precedes WorkflowRunner execution.
-- U Research Composition / Product Completion is the current broad phase. The KB blocking gate is closed: KB1 CLI Config Identity Rename and KB2 Main Agent Identity Rename are complete on master. Remaining FinHarness compatibility identities are deferred and unscheduled, and are not a prerequisite to U.
-- U1A Research Composition Contract Audit, U1B Research Report Publication Boundary, and U1C Reusable Verified Research Acquisition are complete. The U1 Research Foundation is complete. NEXT is U2 `/research`; `/research` remains unimplemented.
+- U Research Composition / Product Completion is complete through U2D in this reviewed change. The KB blocking gate is closed: KB1 CLI Config Identity Rename and KB2 Main Agent Identity Rename are complete on master. Remaining FinHarness compatibility identities are deferred and unscheduled, and are not a prerequisite to U.
+- U1A Research Composition Contract Audit, U1B Research Report Publication Boundary, and U1C Reusable Verified Research Acquisition are complete. U2A Research Grounding, U2B Headless Research Workflow Runtime, U2C Research Execution Lifecycle + Atomic Publication, and U2D Manual /research CLI Adapter + Renderer are complete. U3 `/compare` is next and not started.
 
 The canonical dependency sequence and future design boundaries live in
 [ROADMAP.md](ROADMAP.md). Current architecture facts live in
@@ -53,7 +53,8 @@ The canonical dependency sequence and future design boundaries live in
 - /screen and /search are implemented and remain open to future maturation.
 - Attachment and document commands are implemented for explicit user-selected
   files and deterministic local document search.
-- /research, /compare, /challenge, and /investigate are not implemented.
+- /research is implemented as explicit evidence-backed company research without the Judge debate.
+- /compare, /challenge, and /investigate are not implemented.
 
 See [README.md](../README.md) for the product entry point and current command
 distinctions.

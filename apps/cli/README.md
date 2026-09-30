@@ -26,8 +26,8 @@ while the CLI retains host-specific composition and presentation.
 | src/index.ts | CLI arguments, setup decision, initial database/context/session startup |
 | src/context.ts | Application composition for database, providers, tools, capabilities, commands, and conversational agent |
 | src/repl/ | Command parsing, Session lifecycle orchestration, conversation handling, terminal rendering, and local web preview |
-| src/commands/ | Explicit product commands, including Judge, Screen, Search, attachment/document, and session controls |
-| src/workflows/ | Current command workflow definitions and Judge checkpoint/resume coordination |
+| src/commands/ | Explicit product commands, including Judge, Research, Screen, Search, attachment/document, and session controls |
+| src/workflows/ | Host adapters for command workflows and Judge checkpoint/resume coordination |
 | src/runtime/ and src/ui/ | Conversation context preparation and interactive application state |
 | src/setup/ | Provider setup and terminal setup flow |
 
@@ -46,6 +46,10 @@ persistence or package identity.
 Storage and configuration still use ~/.finharness, including
 ~/.finharness/.credentials.json and FINHARNESS_* environment variables. These
 are current compatibility paths; Kira does not yet support ~/.kira.
+
+`/research TICKER <QUESTION>` composes the Engine Research lifecycle and runtime
+with CLI-owned stores, event projection, and deterministic terminal rendering.
+The command does not run the Bull/Bear/Judge debate.
 
 The current behavior and ownership for command workflows, Session → Turn →
 Execution, Context, Evidence, capabilities, ToolRuntime, and persistence are
