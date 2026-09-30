@@ -96,6 +96,8 @@ export {
 } from './judge/checkpointResume.js';
 export { repairJudgeProjections } from './judge/projectionRepair.js';
 export type { JudgeProjectionRepairStores } from './judge/projectionRepair.js';
+export { groundResearcherOutput } from './research/grounding.js';
+export type { GroundedResearchSynthesis } from './research/grounding.js';
 export type {
   JudgeCheckpointPlanningOptions,
   JudgeCheckpointRuntimeIdentity,

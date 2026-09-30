@@ -23,6 +23,7 @@
     "@harness/subagent-bull": "workspace:*",
     "@harness/subagent-core": "workspace:*",
     "@harness/subagent-judge": "workspace:*",
+    "@harness/subagent-researcher": "workspace:*",
     "@harness/tool-runtime": "workspace:*",
     "zod": "^3.25.0"
   },

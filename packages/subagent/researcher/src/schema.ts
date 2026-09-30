@@ -1,9 +1,11 @@
 import { z } from 'zod';
+import { CitedFigureSchema } from '@harness/schemas';
 
 export const ResearchFindingSchema = z.object({
   claim: z.string().min(1),
   evidenceIds: z.array(z.string().uuid()).min(1),
   confidence: z.enum(['high', 'medium', 'low']),
+  citedFigures: z.array(CitedFigureSchema).optional(),
 });
 
 export const SourceAssessmentSchema = z.object({

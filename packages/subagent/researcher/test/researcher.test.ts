@@ -25,15 +25,18 @@ describe('ResearcherAgent', () => {
 
   it('returns cited findings, source assessments, gaps, skill hashes, and model usage', async () => {
     let captured: GenerateObjectParams<unknown> | undefined;
+    let modelCalls = 0;
     const llm = {
       async generateObject<T>(params: GenerateObjectParams<T>): Promise<T> {
+        modelCalls += 1;
         captured = params as GenerateObjectParams<unknown>;
         return params.schema.parse({
           summary: 'Revenue expanded, but one primary filing is still missing.',
           findings: [{
-            claim: 'Reported revenue increased year over year.',
+            claim: 'ROE was 22.4%.',
             evidenceIds: [evidenceId],
             confidence: 'high',
+            citedFigures: [{ evidenceId, path: 'financials.roe', value: 22.4, periodLabel: 'FY 2025' }],
           }],
           sourceAssessments: [{
             evidenceId,
@@ -72,6 +75,10 @@ describe('ResearcherAgent', () => {
     ]);
     expect(captured?.system?.[1]).toContain('<skill name="source-quality">');
     expect(result.value.findings[0]?.evidenceIds).toEqual([evidenceId]);
+    expect(result.value.findings[0]?.citedFigures).toEqual([
+      { evidenceId, path: 'financials.roe', value: 22.4, periodLabel: 'FY 2025' },
+    ]);
+    expect(modelCalls).toBe(1);
     expect(result.skills).toHaveLength(2);
     expect(result.modelCall).toMatchObject({ model: 'research-model', totalTokens: 140 });
   });

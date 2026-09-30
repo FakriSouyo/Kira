@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@harness/llm": "workspace:*",
+    "@harness/schemas": "workspace:*",
     "@harness/skill-filesystem": "workspace:*",
     "@harness/subagent-core": "workspace:*",
     "zod": "^3.25.0"
