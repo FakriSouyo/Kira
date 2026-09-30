@@ -299,6 +299,9 @@ importers:
       '@harness/subagent-judge':
         specifier: workspace:*
         version: link:../subagent/judge
+      '@harness/subagent-researcher':
+        specifier: workspace:*
+        version: link:../subagent/researcher
       '@harness/tool-runtime':
         specifier: workspace:*
         version: link:../tool-runtime
@@ -502,6 +505,9 @@ importers:
       '@harness/llm':
         specifier: workspace:*
         version: link:../../llm
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../../schemas
       '@harness/skill-filesystem':
         specifier: workspace:*
         version: link:../../skill/filesystem
