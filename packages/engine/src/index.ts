@@ -108,6 +108,11 @@ export type {
   ResearchWorkflowRuntimeOptions,
   ResearchWorkflowRuntimeResult,
 } from './research/workflowRuntime.js';
+export { ResearchExecutionSettlementError, runResearchExecutionLifecycle } from './research/executionLifecycle.js';
+export type {
+  ResearchExecutionLifecycleOptions,
+  ResearchExecutionLifecycleResult,
+} from './research/executionLifecycle.js';
 export type {
   JudgeCheckpointPlanningOptions,
   JudgeCheckpointRuntimeIdentity,
