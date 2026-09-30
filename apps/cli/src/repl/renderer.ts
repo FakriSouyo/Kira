@@ -2,8 +2,8 @@ import type { JudgeArtifacts } from '../workflows/judgeWorkflow';
 import type { ScreenArtifacts } from '@harness/engine';
 import type { ExecutionArtifacts } from '@harness/execution';
 import type { UserFriendlyError } from '@harness/shared';
-import type { Attachment } from '@harness/schemas';
-import type { Document, DocumentSearchHit } from '@harness/schemas';
+import type { Attachment, Document, DocumentSearchHit, Evidence } from '@harness/schemas';
+import type { ResearchReportArtifact } from '@harness/session-core';
 
 /**
  * Output conversational (addendum §19) — icon per agent + warna.
@@ -49,6 +49,7 @@ export function renderHelp(): string {
     '',
     color.bold('Core:'),
     `  ${color.green('/judge [TICKER]')}           Full analysis + Debate ronde (Researcher → Bull → Bear → Bull → Judge)`,
+    `  ${color.green('/research TICKER <QUESTION>')} Evidence-backed company research without Bull/Bear/Judge debate`,
     `  ${color.green('/screen [CRITERIA]')}        Screen stocks (profitable, growing)`,
     `  ${color.green('/attach <path>')}           Import one user-selected file into Kira`,
     `  ${color.green('/files')}                   List files owned by the current Session`,
@@ -76,7 +77,7 @@ export function renderHelp(): string {
     color.bold('Roadmap (coming soon):'),
     `  /challenge [CLAIM]   Test specific claim`,
     `  /compare [TICKERS]   Compare multiple stocks`,
-    `  /research [TICKER]   Raw research without judgment`,
+    `  /investigate [TOPIC] Investigate a research topic`,
     '',
     color.bold('Natural Language:'),
     `  You can also ask questions naturally:`,
@@ -123,6 +124,46 @@ export function writeProgress(output: NodeJS.WritableStream, phase: string, line
     progressPhase = phase;
   }
   output.write(`  ${line}\n`);
+}
+
+/** Deterministic terminal projection of the already-published Research report. */
+export function renderResearchResult(artifact: ResearchReportArtifact, evidence: readonly Evidence[]): string {
+  const { payload } = artifact;
+  const sourceByEvidenceId = new Map(evidence.map(item => [item.id, item.source]));
+  const findingSources = (ids: readonly string[]) => [...new Set(ids
+    .map(id => sourceByEvidenceId.get(id))
+    .filter((source): source is string => source !== undefined))];
+
+  return [
+    HEAVY,
+    `  ${color.bold('KIRA · RESEARCH')}`,
+    `  ${artifact.ticker}`,
+    `  Question: ${payload.question}`,
+    '',
+    `Summary`,
+    `  ${payload.summary}`,
+    '',
+    `Findings`,
+    ...(payload.findings.length > 0
+      ? payload.findings.flatMap((finding, index) => {
+        const sources = findingSources(finding.evidenceIds);
+        return [
+          `  ${index + 1}. [${finding.confidence.toUpperCase()}] ${finding.statement}`,
+          ...(sources.length > 0 ? [`     Sources: ${sources.join(', ')}`] : []),
+        ];
+      })
+      : ['  No findings were returned.']),
+    '',
+    `Source coverage`,
+    ...payload.coverage.map(source => source.status === 'unavailable'
+      ? `  ${source.source}: unavailable (${source.reason})`
+      : `  ${source.source}: ${source.status === 'available' ? 'available' : 'not requested'}`),
+    ...(payload.gaps.length > 0 ? ['', 'Gaps', ...payload.gaps.map(gap => `  - ${gap}`)] : []),
+    '',
+    `Execution: ${artifact.executionId}`,
+    `Created: ${artifact.createdAt}`,
+    HEAVY,
+  ].join('\n');
 }
 
 /** Output penuh /judge — layout conversational addendum §19 + Debate ronde (Phase 1) + conditional (Phase 3). */

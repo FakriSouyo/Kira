@@ -10,6 +10,7 @@ import {
   renderDocumentIndexResult,
   renderDocumentSearchResult,
   renderJudgeResult,
+  renderResearchResult,
   renderScreenResult,
   renderStub,
   writeProgress,
@@ -18,6 +19,7 @@ import { judgeWorkflow } from '../workflows/judgeWorkflow';
 import { makeExportCommand } from './export';
 import { makeContinueCommand, makeHistoryCommand, makeResumeCommand, makeSessionCommand } from './history';
 import { makeSearchCommand } from './search';
+import { researchWorkflow } from '../workflows/researchWorkflow';
 import { createWebServer } from '../repl/web';
 import { makeVersionCommand } from './version';
 import { UserFriendlyError } from '@harness/shared';
@@ -35,13 +37,13 @@ import {
 
 const TICKER_RE = /^[A-Z]{2,6}$/;
 
-function assertTicker(value: string): string {
+function assertTicker(value: string, command = 'judge'): string {
   const ticker = value.toUpperCase();
   if (!TICKER_RE.test(ticker)) {
     throw new UserFriendlyError(
       'INVALID_TICKER',
       `Ticker "${value}" looks invalid`,
-      'Use an IDX ticker, e.g. /judge BBCA',
+      `Use an IDX ticker, e.g. /${command} BBCA`,
     );
   }
   return ticker;
@@ -78,6 +80,34 @@ function makeJudgeCommand(ctx: HarnessContext, options: {
       },
     );
     write(`\n${renderJudgeResult(artifacts)}\n\n`);
+  };
+}
+
+function makeResearchCommand(ctx: HarnessContext, options: {
+  write?: (text: string) => void;
+  events?: (event: AgentEvent) => void;
+} = {}): CommandHandler {
+  const write = options.write ?? ((text: string) => process.stdout.write(text));
+  const events = options.events ?? (() => undefined);
+  return async (args, execution) => {
+    if (!args[0]) {
+      throw new UserFriendlyError('MISSING_TICKER', 'No ticker provided', 'Usage: /research TICKER <focused question>');
+    }
+    const ticker = assertTicker(args[0], 'research');
+    const question = args.slice(1).join(' ').trim();
+    if (!question) {
+      throw new UserFriendlyError('MISSING_QUESTION', 'No focused Research question provided', 'Usage: /research TICKER <focused question>');
+    }
+    const lifecycle = execution?.lifecycle;
+    if (!lifecycle) {
+      throw new UserFriendlyError('MISSING_LIFECYCLE', 'Research requires an active Session Turn', 'Retry /research from the Kira command prompt.');
+    }
+
+    const result = await researchWorkflow(ctx, ticker, question, events, {
+      signal: execution?.signal,
+      lifecycle,
+    });
+    write(`\n${renderResearchResult(result.artifact, result.runtime.acquisition.evidence)}\n\n`);
   };
 }
 function makeScreenCommand(ctx: HarnessContext): CommandHandler {
@@ -356,6 +386,7 @@ export function buildCommands(ctx: HarnessContext, options: {
   const write = options.write ?? ((text: string) => process.stdout.write(text));
   const commands: Map<string, CommandHandler> = new Map([
     ['judge', makeJudgeCommand(ctx, options)],
+    ['research', makeResearchCommand(ctx, options)],
     ['screen', makeScreenCommand(ctx)],
     ['files', makeFilesCommand(ctx, write)],
     ['attach', makeAttachCommand(ctx, write)],
@@ -380,7 +411,7 @@ export function buildCommands(ctx: HarnessContext, options: {
       return { quit: true };
     }],
   ]);
-  for (const stub of ['challenge', 'compare', 'investigate', 'research']) commands.set(stub, makeStub(stub));
+  for (const stub of ['challenge', 'compare', 'investigate']) commands.set(stub, makeStub(stub));
   return commands;
 }
 /** Jembatan Intent Router → command (dipakai handleNaturalLanguage). */

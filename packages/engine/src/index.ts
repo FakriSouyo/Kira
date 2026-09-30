@@ -181,5 +181,4 @@ export function createEngineCapabilityRuntime({
   };
 }
 
-export type EngineCapabilityRuntime = Omit<ReturnType<typeof createEngineCapabilityRuntime>, 'researchCapabilityPlan'> &
-  Partial<Pick<ReturnType<typeof createEngineCapabilityRuntime>, 'researchCapabilityPlan'>>;
+export type EngineCapabilityRuntime = ReturnType<typeof createEngineCapabilityRuntime>;
