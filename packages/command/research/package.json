@@ -1,0 +1,13 @@
+{
+  "name": "@harness/command-research",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@harness/command-core": "workspace:*",
+    "@harness/subagent-researcher": "workspace:*"
+  }
+}

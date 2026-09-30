@@ -180,6 +180,15 @@ importers:
         specifier: workspace:*
         version: link:../../subagent/researcher
 
+  packages/command/research:
+    dependencies:
+      '@harness/command-core':
+        specifier: workspace:*
+        version: link:../core
+      '@harness/subagent-researcher':
+        specifier: workspace:*
+        version: link:../../subagent/researcher
+
   packages/context:
     dependencies:
       '@harness/schemas':
@@ -257,6 +266,9 @@ importers:
       '@harness/command-judge':
         specifier: workspace:*
         version: link:../command/judge
+      '@harness/command-research':
+        specifier: workspace:*
+        version: link:../command/research
       '@harness/context':
         specifier: workspace:*
         version: link:../context
