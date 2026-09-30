@@ -5,7 +5,7 @@ import { runEvidence } from './schema';
 export type EvidenceMembership = typeof runEvidence.$inferSelect;
 
 /** Shared decoder for persisted Evidence acceptance; EvidencePolicy remains the acceptance authority. */
-export function evidenceAcceptanceOf(membership: EvidenceMembership): Evidence['acceptance'] {
+export function evidenceAcceptanceOf(membership: EvidenceMembership): NonNullable<Evidence['acceptance']> {
   if (membership.policyId === null) {
     if (membership.policyFingerprint !== null || membership.candidateKind !== null || membership.sourceOrigin !== null
       || membership.retrievedAt !== null || membership.acceptedAt !== null || membership.validAt !== null || membership.provenanceJson !== null) {

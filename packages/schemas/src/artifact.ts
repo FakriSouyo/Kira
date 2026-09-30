@@ -1,13 +1,14 @@
 import { z } from 'zod';
 import { CitedFigureSchema, ClaimSchema, JudgmentSchema } from './claim.js';
 import { BearCounterpointSchema, GroundedCounterpointSchema } from './debate.js';
+import { ComparisonMatrixSchema, type ComparisonMatrix } from './comparison.js';
 
 /** Judge release products retain their fixed order for release receipts and profiles. */
 export const JUDGE_ARTIFACT_KINDS = ['BULL_CASE', 'BEAR_CASE', 'VERDICT'] as const;
 export type JudgeArtifactKind = (typeof JUDGE_ARTIFACT_KINDS)[number];
 
 /** Durable products and the command that owns production for each kind. */
-export const ARTIFACT_KINDS = [...JUDGE_ARTIFACT_KINDS, 'RESEARCH_REPORT'] as const;
+export const ARTIFACT_KINDS = [...JUDGE_ARTIFACT_KINDS, 'RESEARCH_REPORT', 'COMPARISON_REPORT'] as const;
 export const ArtifactKindSchema = z.enum(ARTIFACT_KINDS);
 export type ArtifactKind = z.infer<typeof ArtifactKindSchema>;
 
@@ -16,6 +17,7 @@ export const ARTIFACT_PRODUCER_BY_KIND = {
   BEAR_CASE: 'judge',
   VERDICT: 'judge',
   RESEARCH_REPORT: 'research',
+  COMPARISON_REPORT: 'compare',
 } as const satisfies Record<ArtifactKind, string>;
 
 export const ArtifactRetrievalQuerySchema = z.object({
@@ -103,6 +105,10 @@ export const ResearchReportPayloadSchema = z.object({
 }).strict();
 export type ResearchReportPayload = z.infer<typeof ResearchReportPayloadSchema>;
 
+/** The durable comparison contract reuses the canonical normalized matrix without another projection. */
+export const ComparisonReportPayloadSchema = ComparisonMatrixSchema;
+export type ComparisonReportPayload = ComparisonMatrix;
+
 const EnvelopeBase = {
   artifactId: z.string().min(1),
   schemaVersion: z.literal(1),
@@ -114,10 +120,20 @@ const EnvelopeBase = {
 } as const;
 
 /** Versioned discriminated envelope persisted by the artifact store. */
-export const ArtifactEnvelopeSchema = z.discriminatedUnion('kind', [
+const ArtifactEnvelopeUnionSchema = z.discriminatedUnion('kind', [
   z.object({ ...EnvelopeBase, kind: z.literal('BULL_CASE'), payload: BullCaseArtifactPayloadSchema }).strict(),
   z.object({ ...EnvelopeBase, kind: z.literal('BEAR_CASE'), payload: BearCaseArtifactPayloadSchema }).strict(),
   z.object({ ...EnvelopeBase, kind: z.literal('VERDICT'), payload: VerdictArtifactPayloadSchema }).strict(),
   z.object({ ...EnvelopeBase, kind: z.literal('RESEARCH_REPORT'), payload: ResearchReportPayloadSchema }).strict(),
+  z.object({ ...EnvelopeBase, kind: z.literal('COMPARISON_REPORT'), payload: ComparisonReportPayloadSchema }).strict(),
 ]);
+export const ArtifactEnvelopeSchema = ArtifactEnvelopeUnionSchema.superRefine((artifact, context) => {
+  if (artifact.kind === 'COMPARISON_REPORT' && artifact.ticker !== artifact.payload.subjects[0]?.ticker) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['ticker'],
+      message: 'Comparison Report ticker must match the first subject',
+    });
+  }
+});
 export type ArtifactEnvelope = z.infer<typeof ArtifactEnvelopeSchema>;

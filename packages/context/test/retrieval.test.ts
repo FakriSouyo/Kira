@@ -75,6 +75,31 @@ function researchReport(artifactId: string): ArtifactEnvelope {
   } as ArtifactEnvelope;
 }
 
+function comparisonReport(artifactId: string): ArtifactEnvelope {
+  return {
+    artifactId, kind: 'COMPARISON_REPORT', schemaVersion: 1, sessionId: 'session-1', turnId: artifactId,
+    executionId: `execution-${artifactId}`, ticker: 'BBRI',
+    payload: {
+      subjects: [{ ticker: 'BBRI' }, { ticker: 'BBCA' }], selectedPeriod: '2026-Q2',
+      metrics: [
+        { metric: 'revenueGrowthYoy', unit: 'percent', status: 'comparable', cells: [
+          { ticker: 'BBRI', status: 'available', value: 10, unit: 'percent', source: { evidenceId: EVIDENCE_ID, path: 'quarters.revenueGrowthYoy', periodLabel: '2026-Q2' } },
+          { ticker: 'BBCA', status: 'available', value: 5, unit: 'percent', source: { evidenceId: EVIDENCE_ID, path: 'quarters.revenueGrowthYoy', periodLabel: '2026-Q2' } },
+        ] },
+        { metric: 'netIncomeGrowthYoy', unit: 'percent', status: 'unavailable', cells: [
+          { ticker: 'BBRI', status: 'unavailable', reason: 'VALUE_MISSING', unit: 'percent', source: { evidenceId: EVIDENCE_ID, path: 'quarters.netIncomeGrowthYoy', periodLabel: '2026-Q2' } },
+          { ticker: 'BBCA', status: 'unavailable', reason: 'VALUE_MISSING', unit: 'percent', source: { evidenceId: EVIDENCE_ID, path: 'quarters.netIncomeGrowthYoy', periodLabel: '2026-Q2' } },
+        ] },
+      ],
+      differences: [{ metric: 'revenueGrowthYoy', leftTicker: 'BBRI', rightTicker: 'BBCA', value: 5, unit: 'percentage_points',
+        left: { evidenceId: EVIDENCE_ID, path: 'quarters.revenueGrowthYoy', periodLabel: '2026-Q2' },
+        right: { evidenceId: EVIDENCE_ID, path: 'quarters.revenueGrowthYoy', periodLabel: '2026-Q2' } }],
+      warnings: [],
+    },
+    createdAt: '2026-09-18T02:00:00.000Z',
+  };
+}
+
 function workingContext(ticker: string, activeBullCaseRef: { kind: 'BULL_CASE'; artifactId: string } | null = null): SessionWorkingContext {
   return applyWorkingContextPatch(null, {
     sessionId: 'session-1', sourceSequence: 1, updatedByTurnId: 'turn-1', updatedAt: '2026-09-18T00:00:00.000Z',
@@ -132,10 +157,11 @@ describe('artifact candidate retrieval', () => {
       bear('bear-prior', 'BBRI', '2026-09-18T02:00:00.000Z'),
       verdict('verdict-prior', 'BBRI', '2026-09-18T03:00:00.000Z'),
       researchReport('research-prior'),
+      comparisonReport('comparison-prior'),
     ];
     const result = await retrieveArtifactCandidates({
       artifactStore: new RetrievalStore(values),
-      query: { sessionId: 'session-1', subjects: ['BBRI'], allowedKinds: ['BULL_CASE', 'BEAR_CASE', 'VERDICT', 'RESEARCH_REPORT'], focus: 'generic' },
+      query: { sessionId: 'session-1', subjects: ['BBRI'], allowedKinds: ['BULL_CASE', 'BEAR_CASE', 'VERDICT', 'RESEARCH_REPORT', 'COMPARISON_REPORT'], focus: 'generic' },
     });
     expect(result.candidates.map(candidate => [candidate.artifact.kind, candidate.role])).toEqual([
       ['BULL_CASE', 'RETRIEVED_BULL_CASE'],
@@ -144,6 +170,9 @@ describe('artifact candidate retrieval', () => {
     ]);
     expect(result.diagnostics).toContainEqual({
       artifactId: 'research-prior', kind: 'RESEARCH_REPORT', status: 'skipped', reason: 'UNSUPPORTED_ROLE',
+    });
+    expect(result.diagnostics).toContainEqual({
+      artifactId: 'comparison-prior', kind: 'COMPARISON_REPORT', status: 'skipped', reason: 'UNSUPPORTED_ROLE',
     });
   });
 
