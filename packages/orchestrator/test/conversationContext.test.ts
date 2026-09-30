@@ -55,4 +55,19 @@ describe('conversation context focus and renderer', () => {
     expect(first).not.toContain('workingContextVersion');
     expect(first).not.toContain('createdAt');
   });
+
+  it('guards Comparison Reports from falling through to the Bear renderer', () => {
+    const artifact = {
+      artifactId: 'artifact_comparison_report_run_1', kind: 'COMPARISON_REPORT', schemaVersion: 1,
+      sessionId: 'session-conversation', turnId: 'turn-previous', executionId: 'run-1', ticker: 'BBCA',
+      payload: {}, createdAt: '2026-09-18T00:00:00.000Z',
+    } as unknown as ContextPacket['artifacts'][number]['artifact'];
+    const item = {
+      artifact, roles: ['PINNED_ARTIFACT'],
+      sourceRefs: [{ role: 'PINNED_ARTIFACT', source: 'PINNED', ref: { kind: 'COMPARISON_REPORT', artifactId: artifact.artifactId } }],
+    } as unknown as ContextPacket['artifacts'][number];
+
+    expect(() => renderContextPacket(packet({ artifacts: [item] })))
+      .toThrow('Comparison Reports are not supported in conversation context');
+  });
 });

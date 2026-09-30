@@ -50,8 +50,12 @@ export class ArtifactStoreSqlite implements ArtifactStore {
   async saveMany(input: readonly ArtifactEnvelope[]): Promise<ArtifactEnvelope[]> {
     const validated = input.map(artifact => ArtifactEnvelopeSchema.parse(artifact));
     if (validated.length === 0) return [];
-    if (validated.some(artifact => artifact.kind === 'RESEARCH_REPORT')) {
+    const publicationOnlyKind = validated.find(artifact => artifact.kind === 'RESEARCH_REPORT' || artifact.kind === 'COMPARISON_REPORT')?.kind;
+    if (publicationOnlyKind === 'RESEARCH_REPORT') {
       throw new Error('RESEARCH_REPORT must be published through the Research Report publication boundary');
+    }
+    if (publicationOnlyKind === 'COMPARISON_REPORT') {
+      throw new Error('COMPARISON_REPORT must be published through the Comparison Report publication boundary');
     }
 
     return this.db.transaction((tx) => {
@@ -110,7 +114,7 @@ export class ArtifactStoreSqlite implements ArtifactStore {
 
   async getByExecution(executionId: string): Promise<ArtifactEnvelope[]> {
     const rows = this.db.select().from(artifactRows).where(eq(artifactRows.executionId, executionId)).orderBy(asc(artifactRows.createdAt)).all();
-    const order = new Map<string, number>([['BULL_CASE', 0], ['BEAR_CASE', 1], ['VERDICT', 2], ['RESEARCH_REPORT', 3]]);
+    const order = new Map<string, number>([['BULL_CASE', 0], ['BEAR_CASE', 1], ['VERDICT', 2], ['RESEARCH_REPORT', 3], ['COMPARISON_REPORT', 4]]);
     return rows.map(row => toEnvelope(row as ArtifactRow)).sort((a, b) => (order.get(a.kind) ?? 99) - (order.get(b.kind) ?? 99));
   }
 

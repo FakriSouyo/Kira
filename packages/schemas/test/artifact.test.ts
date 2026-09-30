@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ARTIFACT_PRODUCER_BY_KIND,
+  ARTIFACT_KINDS,
   ArtifactEnvelopeSchema,
+  ArtifactKindSchema,
   ArtifactRefSchema,
   BearCaseArtifactPayloadSchema,
+  ComparisonReportPayloadSchema,
   BullCaseArtifactPayloadSchema,
   VerdictArtifactPayloadSchema,
 } from '@harness/schemas';
@@ -104,5 +108,70 @@ describe('typed PR F artifact contracts', () => {
 
     expect(ArtifactEnvelopeSchema.safeParse(envelope).success).toBe(true);
     expect(ArtifactEnvelopeSchema.safeParse({ ...envelope, payload: { ...envelope.payload, findings: [{ statement: '', evidenceIds: ['not-a-uuid'], confidence: 'certain' }] } }).success).toBe(false);
+  });
+
+  it('registers a strict Comparison Report envelope with the first subject as its anchor', () => {
+    const payload = {
+      subjects: [{ ticker: 'BBCA' }, { ticker: 'BBRI' }],
+      selectedPeriod: '2026-Q2',
+      metrics: [
+        {
+          metric: 'revenueGrowthYoy', unit: 'percent', status: 'comparable',
+          cells: [
+            { ticker: 'BBCA', status: 'available', value: 12, unit: 'percent', source: { evidenceId: '11111111-1111-4111-8111-111111111111', path: 'quarters[0].revenueGrowthYoy', periodLabel: '2026-Q2' } },
+            { ticker: 'BBRI', status: 'available', value: 8, unit: 'percent', source: { evidenceId: '22222222-2222-4222-8222-222222222222', path: 'quarters[0].revenueGrowthYoy', periodLabel: '2026-Q2' } },
+          ],
+        },
+        {
+          metric: 'netIncomeGrowthYoy', unit: 'percent', status: 'unavailable',
+          cells: [
+            { ticker: 'BBCA', status: 'unavailable', reason: 'VALUE_MISSING', unit: 'percent', source: { evidenceId: '11111111-1111-4111-8111-111111111111', path: 'quarters[0].netIncomeGrowthYoy', periodLabel: '2026-Q2' } },
+            { ticker: 'BBRI', status: 'unavailable', reason: 'VALUE_MISSING', unit: 'percent', source: { evidenceId: '22222222-2222-4222-8222-222222222222', path: 'quarters[0].netIncomeGrowthYoy', periodLabel: '2026-Q2' } },
+          ],
+        },
+      ],
+      differences: [{
+        metric: 'revenueGrowthYoy', leftTicker: 'BBCA', rightTicker: 'BBRI', value: 4, unit: 'percentage_points',
+        left: { evidenceId: '11111111-1111-4111-8111-111111111111', path: 'quarters[0].revenueGrowthYoy', periodLabel: '2026-Q2' },
+        right: { evidenceId: '22222222-2222-4222-8222-222222222222', path: 'quarters[0].revenueGrowthYoy', periodLabel: '2026-Q2' },
+      }],
+      warnings: [],
+    };
+    const envelope = {
+      artifactId: 'artifact_comparison_report_run_compare_1', kind: 'COMPARISON_REPORT', schemaVersion: 1,
+      sessionId: 'session_compare_1', turnId: 'turn_compare_1', executionId: 'run_compare_1', ticker: 'BBCA',
+      payload, createdAt: '2026-09-30T00:00:00.000Z',
+    };
+
+    expect(ArtifactKindSchema.safeParse('COMPARISON_REPORT').success).toBe(true);
+    expect(ARTIFACT_KINDS.slice(-2)).toEqual(['RESEARCH_REPORT', 'COMPARISON_REPORT']);
+    expect(ARTIFACT_PRODUCER_BY_KIND).toMatchObject({ COMPARISON_REPORT: 'compare' });
+    expect(ArtifactEnvelopeSchema.safeParse(envelope).success).toBe(true);
+    expect(ComparisonReportPayloadSchema.parse(payload)).toEqual(payload);
+    expect(ArtifactEnvelopeSchema.safeParse({ ...envelope, ticker: 'BBRI' }).success).toBe(false);
+    expect(ArtifactEnvelopeSchema.safeParse({ ...envelope, payload: { ...payload, recommendation: 'BBCA ranks first' } }).success).toBe(false);
+    expect(ArtifactEnvelopeSchema.safeParse({ ...envelope, payload: { ...payload, differences: [] } }).success).toBe(false);
+
+    const thirdSource = { evidenceId: '33333333-3333-4333-8333-333333333333', path: 'quarters[0].revenueGrowthYoy', periodLabel: '2026-Q2' };
+    const threeSubjects = {
+      ...payload,
+      subjects: [...payload.subjects, { ticker: 'BMRI' }],
+      metrics: [
+        { ...payload.metrics[0]!, cells: [
+          ...payload.metrics[0]!.cells,
+          { ticker: 'BMRI', status: 'available', value: 3, unit: 'percent', source: thirdSource },
+        ] },
+        { ...payload.metrics[1]!, cells: [
+          ...payload.metrics[1]!.cells,
+          { ticker: 'BMRI', status: 'unavailable', reason: 'VALUE_MISSING', unit: 'percent', source: { ...thirdSource, path: 'quarters[0].netIncomeGrowthYoy' } },
+        ] },
+      ],
+      differences: [
+        ...payload.differences,
+        { metric: 'revenueGrowthYoy', leftTicker: 'BBCA', rightTicker: 'BMRI', value: 9, unit: 'percentage_points', left: payload.metrics[0]!.cells[0]!.source, right: thirdSource },
+        { metric: 'revenueGrowthYoy', leftTicker: 'BBRI', rightTicker: 'BMRI', value: 5, unit: 'percentage_points', left: payload.metrics[0]!.cells[1]!.source, right: thirdSource },
+      ],
+    };
+    expect(ArtifactEnvelopeSchema.safeParse({ ...envelope, ticker: 'BBCA', payload: threeSubjects }).success).toBe(true);
   });
 });

@@ -67,6 +67,48 @@ describe('ArtifactStoreSqlite', () => {
     expect(await db.artifacts.getByExecution(ids.execution.id)).toEqual([saved]);
   });
 
+  it('keeps Comparison Reports after Research Reports in deterministic execution read order', async () => {
+    const ids = await completedExecution();
+    const bull = await db.artifacts.save(bullEnvelope(links(ids)));
+    const research = {
+      artifactId: `artifact_research_report_${ids.execution.id}`, kind: 'RESEARCH_REPORT', schemaVersion: 1,
+      sessionId: ids.session.id, turnId: ids.turn.id, executionId: ids.execution.id, ticker: 'BBCA',
+      payload: { question: 'Assess BBCA.', summary: 'The report is schema-valid.', findings: [], sourceAssessments: [], gaps: [], coverage: [] },
+      createdAt: '2026-09-18T00:00:00.000Z',
+    };
+    const comparison = {
+      artifactId: `artifact_comparison_report_${ids.execution.id}`, kind: 'COMPARISON_REPORT', schemaVersion: 1,
+      sessionId: ids.session.id, turnId: ids.turn.id, executionId: ids.execution.id, ticker: 'BBCA',
+      payload: {
+        subjects: [{ ticker: 'BBCA' }, { ticker: 'BBRI' }], selectedPeriod: '2026-Q2',
+        metrics: [
+          { metric: 'revenueGrowthYoy', unit: 'percent', status: 'comparable', cells: [
+            { ticker: 'BBCA', status: 'available', value: 10, unit: 'percent', source: { evidenceId: '11111111-1111-4111-8111-111111111111', path: 'quarters.revenueGrowthYoy', periodLabel: '2026-Q2' } },
+            { ticker: 'BBRI', status: 'available', value: 5, unit: 'percent', source: { evidenceId: '22222222-2222-4222-8222-222222222222', path: 'quarters.revenueGrowthYoy', periodLabel: '2026-Q2' } },
+          ] },
+          { metric: 'netIncomeGrowthYoy', unit: 'percent', status: 'unavailable', cells: [
+            { ticker: 'BBCA', status: 'unavailable', reason: 'VALUE_MISSING', unit: 'percent', source: { evidenceId: '11111111-1111-4111-8111-111111111111', path: 'quarters.netIncomeGrowthYoy', periodLabel: '2026-Q2' } },
+            { ticker: 'BBRI', status: 'unavailable', reason: 'VALUE_MISSING', unit: 'percent', source: { evidenceId: '22222222-2222-4222-8222-222222222222', path: 'quarters.netIncomeGrowthYoy', periodLabel: '2026-Q2' } },
+          ] },
+        ],
+        differences: [{ metric: 'revenueGrowthYoy', leftTicker: 'BBCA', rightTicker: 'BBRI', value: 5, unit: 'percentage_points',
+          left: { evidenceId: '11111111-1111-4111-8111-111111111111', path: 'quarters.revenueGrowthYoy', periodLabel: '2026-Q2' },
+          right: { evidenceId: '22222222-2222-4222-8222-222222222222', path: 'quarters.revenueGrowthYoy', periodLabel: '2026-Q2' } }],
+        warnings: [],
+      },
+      createdAt: '2026-09-18T00:00:00.000Z',
+    };
+    const insert = db.raw.prepare(`INSERT INTO artifacts
+      (artifact_id, kind, schema_version, session_id, turn_id, execution_id, ticker, payload_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    insert.run(research.artifactId, research.kind, research.schemaVersion, research.sessionId, research.turnId, research.executionId, research.ticker, JSON.stringify(research.payload), research.createdAt);
+    insert.run(comparison.artifactId, comparison.kind, comparison.schemaVersion, comparison.sessionId, comparison.turnId, comparison.executionId, comparison.ticker, JSON.stringify(comparison.payload), comparison.createdAt);
+
+    expect((await db.artifacts.getByExecution(ids.execution.id)).map(artifact => artifact.kind))
+      .toEqual(['BULL_CASE', 'RESEARCH_REPORT', 'COMPARISON_REPORT']);
+    expect(bull.kind).toBe('BULL_CASE');
+  });
+
   it('keeps one immutable row for repeated equivalent production', async () => {
     const ids = await completedExecution();
     const first = await db.artifacts.save(bullEnvelope(links(ids)));

@@ -52,6 +52,7 @@ function renderArtifact(artifact: RenderableArtifact, roles: readonly ContextArt
     ].join('\n');
   }
   if (artifact.kind === 'RESEARCH_REPORT') throw new Error('Research Reports are not supported in conversation context');
+  if (artifact.kind === 'COMPARISON_REPORT') throw new Error('Comparison Reports are not supported in conversation context');
   return [
     header, ...(prior ? [prior] : []),
     `  Bear reasoning: ${artifact.payload.reasoning}`,
