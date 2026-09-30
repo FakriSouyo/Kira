@@ -25,6 +25,34 @@ interface Fixture {
   financials: QuarterlyFinancials;
 }
 
+function fixtureQuarter(
+  period: string,
+  revenue: number,
+  netIncome: number,
+  revenueGrowthYoy: number,
+  netIncomeGrowthYoy: number,
+): QuarterlyFinancials['quarters'][number] {
+  const [year, quarter] = period.split('-');
+  const comparisonPeriod = `${Number(year) - 1}-${quarter}`;
+  const basis = {
+    status: 'proven' as const,
+    method: 'same_quarter_prior_year' as const,
+    period,
+    comparisonPeriod,
+    periodType: 'single_quarter' as const,
+    unit: 'percent' as const,
+  };
+  return {
+    period,
+    periodType: 'single_quarter',
+    revenue,
+    netIncome,
+    revenueGrowthYoy,
+    netIncomeGrowthYoy,
+    growthBasis: { revenueGrowthYoy: basis, netIncomeGrowthYoy: basis },
+  };
+}
+
 const UNIVERSE: Record<string, Fixture> = {
   BBCA: {
     report: {
@@ -39,10 +67,10 @@ const UNIVERSE: Record<string, Fixture> = {
       ticker: 'BBCA',
       currency: 'IDR',
       quarters: [
-        { period: '2024-Q4', revenue: 10_150, netIncome: 3_980, revenueGrowthYoy: 9.8, netIncomeGrowthYoy: 8.7 },
-        { period: '2024-Q3', revenue: 9_720, netIncome: 3_790, revenueGrowthYoy: 9.1, netIncomeGrowthYoy: 7.9 },
-        { period: '2024-Q2', revenue: 9_410, netIncome: 3_650, revenueGrowthYoy: 8.6, netIncomeGrowthYoy: 7.4 },
-        { period: '2024-Q1', revenue: 9_200, netIncome: 3_540, revenueGrowthYoy: 8.2, netIncomeGrowthYoy: 6.9 },
+        fixtureQuarter('2024-Q4', 10_150, 3_980, 9.8, 8.7),
+        fixtureQuarter('2024-Q3', 9_720, 3_790, 9.1, 7.9),
+        fixtureQuarter('2024-Q2', 9_410, 3_650, 8.6, 7.4),
+        fixtureQuarter('2024-Q1', 9_200, 3_540, 8.2, 6.9),
       ],
     },
   },
@@ -59,10 +87,10 @@ const UNIVERSE: Record<string, Fixture> = {
       ticker: 'BBRI',
       currency: 'IDR',
       quarters: [
-        { period: '2024-Q4', revenue: 8_900, netIncome: 2_850, revenueGrowthYoy: 7.4, netIncomeGrowthYoy: 7.2 },
-        { period: '2024-Q3', revenue: 8_540, netIncome: 2_730, revenueGrowthYoy: 6.9, netIncomeGrowthYoy: 6.6 },
-        { period: '2024-Q2', revenue: 8_310, netIncome: 2_640, revenueGrowthYoy: 6.4, netIncomeGrowthYoy: 6.1 },
-        { period: '2024-Q1', revenue: 8_120, netIncome: 2_560, revenueGrowthYoy: 5.8, netIncomeGrowthYoy: 5.5 },
+        fixtureQuarter('2024-Q4', 8_900, 2_850, 7.4, 7.2),
+        fixtureQuarter('2024-Q3', 8_540, 2_730, 6.9, 6.6),
+        fixtureQuarter('2024-Q2', 8_310, 2_640, 6.4, 6.1),
+        fixtureQuarter('2024-Q1', 8_120, 2_560, 5.8, 5.5),
       ],
     },
   },
@@ -79,10 +107,10 @@ const UNIVERSE: Record<string, Fixture> = {
       ticker: 'BMRI',
       currency: 'IDR',
       quarters: [
-        { period: '2024-Q4', revenue: 7_800, netIncome: 2_380, revenueGrowthYoy: 6.8, netIncomeGrowthYoy: 6.1 },
-        { period: '2024-Q3', revenue: 7_520, netIncome: 2_290, revenueGrowthYoy: 6.2, netIncomeGrowthYoy: 5.7 },
-        { period: '2024-Q2', revenue: 7_310, netIncome: 2_200, revenueGrowthYoy: 5.6, netIncomeGrowthYoy: 5.2 },
-        { period: '2024-Q1', revenue: 7_150, netIncome: 2_120, revenueGrowthYoy: 5.1, netIncomeGrowthYoy: 4.8 },
+        fixtureQuarter('2024-Q4', 7_800, 2_380, 6.8, 6.1),
+        fixtureQuarter('2024-Q3', 7_520, 2_290, 6.2, 5.7),
+        fixtureQuarter('2024-Q2', 7_310, 2_200, 5.6, 5.2),
+        fixtureQuarter('2024-Q1', 7_150, 2_120, 5.1, 4.8),
       ],
     },
   },
@@ -99,10 +127,10 @@ const UNIVERSE: Record<string, Fixture> = {
       ticker: 'BBNI',
       currency: 'IDR',
       quarters: [
-        { period: '2024-Q4', revenue: 5_400, netIncome: 1_420, revenueGrowthYoy: 4.6, netIncomeGrowthYoy: 4.1 },
-        { period: '2024-Q3', revenue: 5_260, netIncome: 1_360, revenueGrowthYoy: 4.2, netIncomeGrowthYoy: 3.8 },
-        { period: '2024-Q2', revenue: 5_140, netIncome: 1_310, revenueGrowthYoy: 3.9, netIncomeGrowthYoy: 3.4 },
-        { period: '2024-Q1', revenue: 5_050, netIncome: 1_270, revenueGrowthYoy: 3.5, netIncomeGrowthYoy: 3.0 },
+        fixtureQuarter('2024-Q4', 5_400, 1_420, 4.6, 4.1),
+        fixtureQuarter('2024-Q3', 5_260, 1_360, 4.2, 3.8),
+        fixtureQuarter('2024-Q2', 5_140, 1_310, 3.9, 3.4),
+        fixtureQuarter('2024-Q1', 5_050, 1_270, 3.5, 3.0),
       ],
     },
   },
@@ -119,10 +147,10 @@ const UNIVERSE: Record<string, Fixture> = {
       ticker: 'BJTM',
       currency: 'IDR',
       quarters: [
-        { period: '2024-Q4', revenue: 3_100, netIncome: 770, revenueGrowthYoy: 2.4, netIncomeGrowthYoy: 1.8 },
-        { period: '2024-Q3', revenue: 3_050, netIncome: 755, revenueGrowthYoy: 2.1, netIncomeGrowthYoy: 1.5 },
-        { period: '2024-Q2', revenue: 3_010, netIncome: 742, revenueGrowthYoy: 1.7, netIncomeGrowthYoy: 1.2 },
-        { period: '2024-Q1', revenue: 2_980, netIncome: 731, revenueGrowthYoy: 1.4, netIncomeGrowthYoy: 0.9 },
+        fixtureQuarter('2024-Q4', 3_100, 770, 2.4, 1.8),
+        fixtureQuarter('2024-Q3', 3_050, 755, 2.1, 1.5),
+        fixtureQuarter('2024-Q2', 3_010, 742, 1.7, 1.2),
+        fixtureQuarter('2024-Q1', 2_980, 731, 1.4, 0.9),
       ],
     },
   },

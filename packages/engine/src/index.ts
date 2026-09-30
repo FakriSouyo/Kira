@@ -13,6 +13,12 @@ export { documentToolIds } from './tools/document';
 export { financialToolIds } from './tools/financial';
 export { verifyAndPersistFinancialEvidence } from './financialEvidence.js';
 export type { VerifiedFinancialEvidenceResult } from './financialEvidence.js';
+export { ComparisonNormalizationError, normalizeComparisonEvidence } from './compare/normalization.js';
+export type {
+  ComparisonEvidenceSource,
+  ComparisonNormalizationErrorCode,
+  NormalizeComparisonEvidenceParams,
+} from './compare/normalization.js';
 export {
   COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL,
   COMMAND_FILES_CAPABILITY_PRINCIPAL,

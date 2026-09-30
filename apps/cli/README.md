@@ -11,8 +11,9 @@ The CLI is Kira's first host. Today apps/cli owns substantially more than
 terminal presentation: it composes configuration, database stores, model and
 financial providers, capabilities, command workflows, Session lifecycle,
 conversation context, and the REPL. The planned UA Kira Engine Extraction
-phase is complete; KB Internal Kira Identity Migration is the active broad
-phase.
+phase is complete. U Research Composition / Product Completion is the active
+broad phase; the KB blocking gate is closed and remaining compatibility
+identity work is deferred.
 
 Do not add new reusable application/core behavior to this host when a
 host-neutral boundary is clearly required. The planned UA extraction is
@@ -50,6 +51,10 @@ are current compatibility paths; Kira does not yet support ~/.kira.
 `/research TICKER <QUESTION>` composes the Engine Research lifecycle and runtime
 with CLI-owned stores, event projection, and deterministic terminal rendering.
 The command does not run the Bull/Bear/Judge debate.
+
+`/compare` remains a CLI stub. The U3A Engine foundation normalizes only
+execution-scoped accepted quarterly growth Evidence; later U3 slices own the
+durable report, lifecycle, and command adapter.
 
 The current behavior and ownership for command workflows, Session → Turn →
 Execution, Context, Evidence, capabilities, ToolRuntime, and persistence are

@@ -25,10 +25,11 @@ The CLI retains runtime and provider composition, command and resume-target
 selection, concrete store adapters, abort classification, host-facing errors,
 AgentEvent projection, presentation, and startup invocation timing. UA17 closes
 the planned UA Kira Engine Extraction phase; it does not complete future engine
-or product development. KB Internal Kira Identity Migration is the current broad
-phase. KB1 renamed the CLI runtime config type from FinharnessConfig to
-CliConfig. KB2 renamed the conversational agent class and prompt constant without changing
-behavior or prompt bytes.
+or product development. U Research Composition / Product Completion is the
+current broad phase. The KB blocking gate is closed, and remaining compatibility
+identity work is deferred. KB1 renamed the CLI runtime config type from
+FinharnessConfig to CliConfig. KB2 renamed the conversational agent class and
+prompt constant without changing behavior or prompt bytes.
 Future Desktop and Web hosts can reuse the existing host-neutral Judge,
 Session, Context, capability, and lifecycle behavior. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for the clearly labelled current facts and
@@ -54,7 +55,9 @@ command.
 The broader CLI also includes setup, provider selection, status, version,
 history, session inspection, export, resume, and a local web preview.
 
-These command names are future stubs and are not implemented research products:
+These command names remain CLI stubs and are not end-to-end research products.
+U3A adds a comparison normalization foundation in Engine, but does not enable
+the `/compare` command:
 
 - /compare
 - /challenge

@@ -146,10 +146,23 @@ The future engine coordinates these existing authorities; it does not become
 another Evidence authority, Claim authority, capability authorization
 authority, ToolRuntime, database authority, provider authority, or graph
 authority. UA15, UA16, and UA17A-D are complete on master, closing the planned
-UA Kira Engine Extraction phase. KB Internal Kira Identity Migration is the
-current broad phase. KB1 renamed the CLI runtime config type from FinharnessConfig to CliConfig.
+UA Kira Engine Extraction phase. U Research Composition / Product Completion
+is the current broad phase. KB1 renamed the CLI runtime config type from
+FinharnessConfig to CliConfig.
 KB2 renamed the conversational agent class and prompt constant without changing
 behavior or prompt bytes.
+
+The U3A comparison foundation adds optional per-metric basis metadata to
+quarterly YoY growth observations and validates present basis claims while
+leaving legacy observations usable by existing Research and Judge consumers.
+The Sectors adapter proves a basis only from finite raw values for the same
+calendar quarter one year apart; growth filled from Company Report data is
+marked unproven. Engine's comparison normalizer reads only Evidence scoped to
+the supplied Execution, selects the latest common explicitly single-quarter
+period, and returns a deterministic two-metric matrix with source paths,
+coverage warnings, and pairwise percentage-point differences. It introduces
+no provider, model, persistence-write, lifecycle, Artifact, or WorkingContext
+authority. The `/compare` CLI command remains a stub pending later U3 slices.
 
 ## Model runtime — Q1 / Q2
 
@@ -601,7 +614,8 @@ store adaptation, `/new` Session switching, and
 remains lifecycle persistence authority, WorkingContextPublisher remains publication
 policy authority, and no database migration is required. UA9 by itself did not
 complete the planned extraction; UA10-UA17D later completed the UA Kira Engine
-Extraction phase. KB Internal Kira Identity Migration is the current broad phase.
+Extraction phase. At that historical checkpoint, KB Internal Kira Identity
+Migration was the current broad phase.
 
 ## UA10 - Host-neutral Attached-Turn Lifecycle Orchestration Extraction
 
@@ -713,8 +727,8 @@ acquisition. UA13 did not
 move the Judge workflow shell, change checkpoint payloads, graph/version,
 capability plan, release contract, artifact kinds, persistence schema, or
 resumeGeneration ownership. UA12-UA17D are complete on master, closing the
-planned UA Kira Engine Extraction phase. KB Internal Kira Identity Migration is
-the current broad phase.
+planned UA Kira Engine Extraction phase. At that historical checkpoint, KB
+Internal Kira Identity Migration was the current broad phase.
 
 ## UA14 - Host-neutral Judge Resume Projection Repair Extraction
 
@@ -792,8 +806,8 @@ reload, then WorkingContext publication and journal reconciliation. Execution
 lifecycle, providers, and presentation remain CLI-owned. UA16 changes no schema,
 migration, workflow graph/version, capability plan,
 release contract, or artifact kinds. UA15, UA16, and UA17A-D are complete on
-master, closing the planned UA Kira Engine Extraction phase. KB Internal Kira
-Identity Migration is the current broad phase.
+master, closing the planned UA Kira Engine Extraction phase. At that historical
+checkpoint, KB Internal Kira Identity Migration was the current broad phase.
 
 ## UA17 - Judge Workflow Host-Neutralization
 
@@ -849,8 +863,8 @@ projection, concrete store adapters, provider composition, and direct legacy
 release or artifact schema, persistence migration, provider, or model semantics.
 
 UA17A, UA17B, UA17C, and UA17D are complete on master. This closes the planned
-UA Kira Engine Extraction phase; KB Internal Kira Identity Migration is the
-current broad phase.
+UA Kira Engine Extraction phase; at that historical checkpoint, KB Internal
+Kira Identity Migration was the current broad phase.
 
 ### UA17D — Judge Execution Lifecycle Orchestration
 

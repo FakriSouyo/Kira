@@ -75,6 +75,103 @@ describe('verified financial snapshot domain', () => {
     });
   });
 
+  it('keeps legacy quarterly observations valid when growth basis metadata is absent', () => {
+    const observation = verifyFinancialObservation('quarterly_financials', {
+      data: quarterly,
+      metadata: { ...metadata, source: 'sectors.quarterly_financials', dataAsOf: null, period: '2026-Q2' },
+    }, 'BBRI');
+
+    expect(observation.status).toBe('PRESENT');
+    expect(observation.data.quarters[0]).not.toHaveProperty('growthBasis');
+  });
+
+  it.each([
+    {
+      name: 'basis whose selected period differs from its quarter',
+      basis: { status: 'proven', method: 'same_quarter_prior_year', period: '2025-Q2', comparisonPeriod: '2024-Q2', periodType: 'single_quarter', unit: 'percent' },
+    },
+    {
+      name: 'basis whose comparison period is not the same quarter one year earlier',
+      basis: { status: 'proven', method: 'same_quarter_prior_year', period: '2025-Q2', comparisonPeriod: '2024-Q1', periodType: 'single_quarter', unit: 'percent' },
+    },
+    {
+      name: 'unsupported basis discriminator',
+      basis: { status: 'verified', method: 'same_quarter_prior_year', period: '2026-Q2', comparisonPeriod: '2025-Q2', periodType: 'single_quarter', unit: 'percent' },
+    },
+    {
+      name: 'unproven basis with an unsupported reason',
+      basis: { status: 'unproven', reason: 'MARKET_AS_OF_IS_CLOSE_ENOUGH' },
+    },
+  ])('rejects a malformed per-metric growth basis: $name', ({ basis }) => {
+    const malformed = {
+      ...quarterly,
+      quarters: [{
+        period: '2026-Q2', revenue: 100, netIncome: 10, revenueGrowthYoy: 5,
+        growthBasis: { revenueGrowthYoy: basis },
+      }],
+    } as unknown as QuarterlyFinancials;
+
+    expect(() => verifyFinancialObservation('quarterly_financials', {
+      data: malformed,
+      metadata: { ...metadata, source: 'sectors.quarterly_financials', dataAsOf: null, period: '2026-Q2' },
+    }, 'BBRI')).toThrow(FinancialDataVerificationError);
+  });
+
+  it.each([
+    { label: 'absent quarterly metric', quarter: { period: '2026-Q2', revenue: 100, netIncome: 10 } },
+    { label: 'explicitly undefined quarterly metric', quarter: { period: '2026-Q2', revenue: 100, netIncome: 10, revenueGrowthYoy: undefined } },
+  ])('rejects a proven basis when its growth value is $label', ({ quarter }) => {
+    const malformed = {
+      ...quarterly,
+      quarters: [{
+        ...quarter,
+        growthBasis: {
+          revenueGrowthYoy: {
+            status: 'proven', method: 'same_quarter_prior_year', period: '2026-Q2',
+            comparisonPeriod: '2025-Q2', periodType: 'single_quarter', unit: 'percent',
+          },
+        },
+      }],
+    } as unknown as QuarterlyFinancials;
+
+    expect(() => verifyFinancialObservation('quarterly_financials', {
+      data: malformed,
+      metadata: { ...metadata, source: 'sectors.quarterly_financials', dataAsOf: null, period: '2026-Q2' },
+    }, 'BBRI')).toThrow(FinancialDataVerificationError);
+  });
+
+  it('rejects basis-bearing quarters with a conflicting present periodType', () => {
+    const malformed = {
+      ...quarterly,
+      quarters: [{
+        period: '2026-Q2', periodType: 'year_to_date', revenue: 100, netIncome: 10, revenueGrowthYoy: 5,
+        growthBasis: {
+          revenueGrowthYoy: {
+            status: 'proven', method: 'same_quarter_prior_year', period: '2026-Q2',
+            comparisonPeriod: '2025-Q2', periodType: 'single_quarter', unit: 'percent',
+          },
+        },
+      }],
+    } as unknown as QuarterlyFinancials;
+
+    expect(() => verifyFinancialObservation('quarterly_financials', {
+      data: malformed,
+      metadata: { ...metadata, source: 'sectors.quarterly_financials', dataAsOf: null, period: '2026-Q2' },
+    }, 'BBRI')).toThrow(FinancialDataVerificationError);
+  });
+
+  it('rejects an explicitly undefined top-level growthBasis property', () => {
+    const malformed = {
+      ...quarterly,
+      quarters: [{ period: '2026-Q2', revenue: 100, netIncome: 10, growthBasis: undefined }],
+    } as unknown as QuarterlyFinancials;
+
+    expect(() => verifyFinancialObservation('quarterly_financials', {
+      data: malformed,
+      metadata: { ...metadata, source: 'sectors.quarterly_financials', dataAsOf: null, period: '2026-Q2' },
+    }, 'BBRI')).toThrow(FinancialDataVerificationError);
+  });
+
   it('rejects a returned ticker that does not match the requested subject', () => {
     expect(() => verifyFinancialObservation('company_report', result({ ...report, ticker: 'BBCA' }, 'sectors.company_report'), 'BBRI'))
       .toThrow(FinancialDataVerificationError);
