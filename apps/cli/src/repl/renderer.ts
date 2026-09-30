@@ -4,6 +4,8 @@ import type { ExecutionArtifacts } from '@harness/execution';
 import type { UserFriendlyError } from '@harness/shared';
 import type { Attachment, Document, DocumentSearchHit, Evidence } from '@harness/schemas';
 import type { ResearchReportArtifact } from '@harness/session-core';
+import type { ComparisonReportArtifact } from '@harness/session-core';
+import type { ComparisonWarning } from '@harness/schemas';
 
 /**
  * Output conversational (addendum §19) — icon per agent + warna.
@@ -74,9 +76,11 @@ export function renderHelp(): string {
     `  /judge BBCA --conditional   Extra debate round when neutral (Phase 3)`,
     `  /screen profitable          Uses ?where= SQL-native (Phase 3)`,
     '',
+    color.bold('Core:'),
+    `  ${color.green('/compare TICKER_A TICKER_B [TICKER_C]')} Compare quarterly growth across IDX companies`,
+    '',
     color.bold('Roadmap (coming soon):'),
     `  /challenge [CLAIM]   Test specific claim`,
-    `  /compare [TICKERS]   Compare multiple stocks`,
     `  /investigate [TOPIC] Investigate a research topic`,
     '',
     color.bold('Natural Language:'),
@@ -162,6 +166,61 @@ export function renderResearchResult(artifact: ResearchReportArtifact, evidence:
     '',
     `Execution: ${artifact.executionId}`,
     `Created: ${artifact.createdAt}`,
+    HEAVY,
+  ].join('\n');
+}
+
+function comparisonWarningDetail(warning: ComparisonWarning): string {
+  switch (warning.code) {
+    case 'SELECTED_PERIOD_OLDER_THAN_LATEST':
+      return `${warning.code}: ${warning.ticker} selected ${warning.selectedPeriod}; latest available ${warning.latestAvailablePeriod}`;
+    case 'BASIS_MISSING':
+    case 'BASIS_UNPROVEN':
+      return `${warning.code}: ${warning.ticker} · ${warning.metric}`;
+    case 'MISSING_SECTOR':
+    case 'COMPANY_REPORT_FRESHNESS_UNKNOWN':
+      return `${warning.code}: ${warning.ticker}`;
+    case 'MIXED_SECTORS':
+    case 'COMPANY_REPORT_TIMESTAMP_MISMATCH':
+      return `${warning.code}: ${warning.tickers.join(', ')}`;
+  }
+}
+
+/** Deterministic view of the canonical, atomically published Comparison artifact. */
+export function renderComparisonResult(artifact: ComparisonReportArtifact): string {
+  const metricLabels = {
+    revenueGrowthYoy: 'Revenue growth YoY',
+    netIncomeGrowthYoy: 'Net income growth YoY',
+  } as const;
+  const formatNumber = (value: number): string => new Intl.NumberFormat('en-US', {
+    useGrouping: false,
+    maximumFractionDigits: 10,
+  }).format(value);
+  const formatPercent = (value: number): string => `${value > 0 ? '+' : ''}${formatNumber(value)}%`;
+  const { payload } = artifact;
+  return [
+    HEAVY,
+    `  ${color.bold('KIRA · COMPARE')}`,
+    `  Subjects: ${payload.subjects.map(subject => subject.ticker).join(' → ')}`,
+    `  Selected quarter: ${payload.selectedPeriod}`,
+    '',
+    ...payload.metrics.flatMap(metric => [
+      `${metricLabels[metric.metric]}`,
+      `  Status: ${metric.status} · Coverage: ${metric.cells.filter(cell => cell.status === 'available').length}/${payload.subjects.length} subjects`,
+      ...metric.cells.map(cell => `  ${cell.ticker}: ${cell.status === 'available' ? formatPercent(cell.value) : `unavailable (${cell.reason})`}`),
+      '',
+    ]),
+    'Pairwise differences',
+    ...(payload.differences.length > 0
+      ? payload.differences.map(difference => `  ${metricLabels[difference.metric]} · ${difference.leftTicker} vs ${difference.rightTicker}: ${difference.value > 0 ? '+' : ''}${formatNumber(difference.value)} percentage points`)
+      : ['  None available.']),
+    '',
+    'Warnings',
+    ...(payload.warnings.length > 0 ? payload.warnings.map(warning => `  - ${comparisonWarningDetail(warning)}`) : ['  Warnings: none']),
+    '',
+    `Execution: ${artifact.executionId}`,
+    `Created: ${artifact.createdAt}`,
+    'No ranking or winner is reported.',
     HEAVY,
   ].join('\n');
 }

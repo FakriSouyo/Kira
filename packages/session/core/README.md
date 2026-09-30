@@ -36,10 +36,14 @@ relevant.
   (`STALE_CONTEXT_VERSION`) and an older journal prefix
   (`STALE_SOURCE_SEQUENCE`). Last-write-wins is never allowed.
 - `deriveWorkingContextPatch` publishes only what durable rows support:
-  `activeSubjects` and `currentIntent` for any settled Turn, plus typed
+  `activeSubjects` and `currentIntent` for generic settled Turns, plus typed
   `activeBullCaseRef`, `activeBearCaseRef`, and `activeVerdictRef` when PR F
   artifacts resolve. `activeThesisRef`, risk, and running-summary references
   remain null because no distinct producer exists.
+- `activeSubjects` is already an ordered array. The Engine Compare publisher
+  fills it from the validated subjects in the canonical report after checking
+  that report against its completed Turn and Execution; no session schema or
+  database migration is required.
 - The legacy `{ kind: 'judgment', executionId }` reference remains readable for
   pre-PR-F rows; new `/judge` contexts use `{ kind, artifactId }`.
 - User-state items (`USER_ASSERTION`, `ASSUMPTION`, `OPEN_QUESTION`) keep explicit

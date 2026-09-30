@@ -47,6 +47,7 @@ command.
 | Natural-language conversation | Bounded financial discussion and same-Session prior research context. It does not silently run a fresh research workflow. |
 | /judge TICKER | Mature evidence-backed workflow with deterministic claim and counterpoint checks, a 15-node graph, workflow version 2, and T5 release integrity complete on master. |
 | `/research TICKER <QUESTION>` | Explicit evidence-backed company research with a durable report and no Bull/Bear/Judge debate. |
+| `/compare TICKER_A TICKER_B [TICKER_C]` | Explicit comparison of two or three IDX companies using a durable canonical report. Implemented in the current branch, pending independent review. |
 | /screen CRITERIA | Implemented financial screening workflow using supported criteria. Future maturation is tracked separately. |
 | /search QUERY | Searches persisted Evidence. Ranking uses keyword overlap with a small mock-embedding tie-break; this remains a prototype, not production vector search. |
 | /attach PATH and /files | Explicitly imports a user-selected file and lists raw Attachment metadata for the current Session. Attachment bytes do not become Evidence or model context. |
@@ -55,11 +56,8 @@ command.
 The broader CLI also includes setup, provider selection, status, version,
 history, session inspection, export, resume, and a local web preview.
 
-These command names remain CLI stubs and are not end-to-end research products.
-U3A adds a comparison normalization foundation in Engine, but does not enable
-the `/compare` command:
+These command names remain CLI stubs and are not end-to-end research products:
 
-- /compare
 - /challenge
 - /investigate
 

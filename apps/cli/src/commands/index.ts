@@ -11,6 +11,7 @@ import {
   renderDocumentSearchResult,
   renderJudgeResult,
   renderResearchResult,
+  renderComparisonResult,
   renderScreenResult,
   renderStub,
   writeProgress,
@@ -20,6 +21,7 @@ import { makeExportCommand } from './export';
 import { makeContinueCommand, makeHistoryCommand, makeResumeCommand, makeSessionCommand } from './history';
 import { makeSearchCommand } from './search';
 import { researchWorkflow } from '../workflows/researchWorkflow';
+import { compareWorkflow } from '../workflows/compareWorkflow';
 import { createWebServer } from '../repl/web';
 import { makeVersionCommand } from './version';
 import { UserFriendlyError } from '@harness/shared';
@@ -108,6 +110,40 @@ function makeResearchCommand(ctx: HarnessContext, options: {
       lifecycle,
     });
     write(`\n${renderResearchResult(result.artifact, result.runtime.acquisition.evidence)}\n\n`);
+  };
+}
+
+function makeCompareCommand(ctx: HarnessContext, options: {
+  write?: (text: string) => void;
+  events?: (event: AgentEvent) => void;
+} = {}): CommandHandler {
+  const write = options.write ?? ((text: string) => process.stdout.write(text));
+  const events = options.events ?? (() => undefined);
+  return async (args, execution) => {
+    const usage = 'Usage: /compare TICKER_A TICKER_B [TICKER_C]';
+    if (args.length === 0) {
+      throw new UserFriendlyError('MISSING_TICKER', 'At least two IDX tickers are required', usage);
+    }
+    if (args.length < 2 || args.length > 3) {
+      throw new UserFriendlyError('INVALID_ARG', 'Compare requires exactly two or three tickers', usage);
+    }
+    const subjects = args.map(value => value.trim().toUpperCase());
+    const invalid = subjects.find(value => !TICKER_RE.test(value));
+    if (invalid !== undefined) {
+      throw new UserFriendlyError('INVALID_TICKER', `Ticker "${invalid}" looks invalid`, `Use two or three IDX tickers, e.g. ${usage}`);
+    }
+    if (new Set(subjects).size !== subjects.length) {
+      throw new UserFriendlyError('DUPLICATE_TICKER', 'Compare tickers must be unique after normalization', usage);
+    }
+    const lifecycle = execution?.lifecycle;
+    if (!lifecycle) {
+      throw new UserFriendlyError('MISSING_LIFECYCLE', 'Compare requires an active Session Turn', 'Retry /compare from the Kira command prompt.');
+    }
+    const result = await compareWorkflow(ctx, subjects, events, {
+      signal: execution?.signal,
+      lifecycle,
+    });
+    write(`\n${renderComparisonResult(result.artifact)}\n\n`);
   };
 }
 function makeScreenCommand(ctx: HarnessContext): CommandHandler {
@@ -387,6 +423,7 @@ export function buildCommands(ctx: HarnessContext, options: {
   const commands: Map<string, CommandHandler> = new Map([
     ['judge', makeJudgeCommand(ctx, options)],
     ['research', makeResearchCommand(ctx, options)],
+    ['compare', makeCompareCommand(ctx, options)],
     ['screen', makeScreenCommand(ctx)],
     ['files', makeFilesCommand(ctx, write)],
     ['attach', makeAttachCommand(ctx, write)],
@@ -411,7 +448,7 @@ export function buildCommands(ctx: HarnessContext, options: {
       return { quit: true };
     }],
   ]);
-  for (const stub of ['challenge', 'compare', 'investigate']) commands.set(stub, makeStub(stub));
+  for (const stub of ['challenge', 'investigate']) commands.set(stub, makeStub(stub));
   return commands;
 }
 /** Jembatan Intent Router → command (dipakai handleNaturalLanguage). */

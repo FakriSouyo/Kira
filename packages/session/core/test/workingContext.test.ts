@@ -64,6 +64,49 @@ describe('SessionWorkingContext contract', () => {
     expect(next.activeVerdictRef).toBeNull();
   });
 
+  it('preserves ordered multi-subject focus and user-authored state while clearing derived references', () => {
+    const current = committed('conversation_1', {
+      activeSubjects: [{ ticker: 'ADRO' }],
+      activeThesisRef: { kind: 'judgment', executionId: 'old-thesis' },
+      activeVerdictRef: { kind: 'judgment', executionId: 'old-verdict' },
+      activeBullCaseRef: { kind: 'BULL_CASE', artifactId: 'bull-old' },
+      activeBearCaseRef: { kind: 'BEAR_CASE', artifactId: 'bear-old' },
+      activeRiskAssessmentRef: { kind: 'VERDICT', artifactId: 'risk-old' },
+      runningSummaryRef: { kind: 'judgment', executionId: 'summary-old' },
+      pinnedArtifactRefs: [{ kind: 'VERDICT', artifactId: 'pinned-verdict' }],
+      userAssertions: [{ kind: 'USER_ASSERTION', id: 'assertion-1', text: 'user text', turnId: 'turn_3' }],
+      assumptions: [{ kind: 'ASSUMPTION', id: 'assumption-1', text: 'user assumption', turnId: 'turn_3' }],
+    });
+    const subjects = [{ ticker: 'BBCA' }, { ticker: 'BBRI' }, { ticker: 'BMRI' }];
+    const next = applyWorkingContextPatch(current, {
+      sessionId: 'conversation_1', sourceSequence: 14, updatedByTurnId: 'turn_4',
+      updatedAt: '2026-09-17T01:00:00.000Z',
+      patch: {
+        currentIntent: { command: 'compare' },
+        activeSubjects: subjects,
+        activeThesisRef: null,
+        activeVerdictRef: null,
+        activeBullCaseRef: null,
+        activeBearCaseRef: null,
+        activeRiskAssessmentRef: null,
+        runningSummaryRef: null,
+      },
+    });
+    expect(next.activeSubjects).toEqual(subjects);
+    expect(next.activeSubjects.map(subject => subject.ticker)).toEqual(['BBCA', 'BBRI', 'BMRI']);
+    expect(next.currentIntent).toEqual({ command: 'compare' });
+    expect(next.activeThesisRef).toBeNull();
+    expect(next.activeVerdictRef).toBeNull();
+    expect(next.activeBullCaseRef).toBeNull();
+    expect(next.activeBearCaseRef).toBeNull();
+    expect(next.activeRiskAssessmentRef).toBeNull();
+    expect(next.runningSummaryRef).toBeNull();
+    expect(next.pinnedArtifactRefs).toEqual(current.pinnedArtifactRefs);
+    expect(next.userAssertions).toEqual(current.userAssertions);
+    expect(next.assumptions).toEqual(current.assumptions);
+    expect(current.activeSubjects).toEqual([{ ticker: 'ADRO' }]);
+  });
+
   it('detects no-op patches so identical turns do not create versions', () => {
     const current = committed('conversation_1', { activeSubjects: [{ ticker: 'BBRI' }], currentIntent: { command: 'judge' } });
     expect(isWorkingContextPatchNoOp(current, { currentIntent: { command: 'judge' }, activeSubjects: [{ ticker: 'BBRI' }] })).toBe(true);

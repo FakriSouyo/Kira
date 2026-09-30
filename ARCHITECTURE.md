@@ -179,8 +179,14 @@ subject, notifies the host, invokes U3C once, and delegates success to U3B's
 atomic publisher. It settles notification, runtime, or publication failures
 once as failed or cancelled and preserves action and settlement causes. There
 is no same-Execution retry or resume, and U3D has no CLI, database, model,
-provider, or WorkingContext dependency. U3E owns CLI, Turn, renderer, and
-WorkingContext integration; `/compare` remains a stub until then.
+provider, or WorkingContext dependency. U3E adds an explicit-only `/compare`
+adapter through the existing Session Turn lifecycle, renders the returned
+canonical published artifact, and derives ordered `activeSubjects` from that
+artifact after the Turn settles. The context publisher checks artifact identity
+against the completed Turn and Execution, clears singular derived Judge refs,
+and preserves pinned/user-authored state through the existing CAS patch path.
+Generic conversation artifact retrieval remains Judge-only. U3E is implemented
+in the current branch, pending independent review.
 
 ## Model runtime — Q1 / Q2
 
@@ -960,8 +966,8 @@ The implemented command surface includes `/judge`, `/research`, `/screen`, `/sea
 setup/status commands, and local session controls. `/judge` is the current
 mature debate vertical; `/research` is the explicit non-debate company research
 command. `/screen` and `/search` are implemented, and `/attach` is explicit
-user-file ingestion. `/challenge`, `/compare`, and `/investigate` remain
-planned stubs.
+user-file ingestion. `/compare` is implemented in the current branch, pending
+independent review; `/challenge` and `/investigate` remain planned stubs.
 
 `/research TICKER <QUESTION>` validates the explicit ticker and focused
 question, then calls the Engine Research Execution lifecycle. The runtime owns

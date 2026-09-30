@@ -115,7 +115,7 @@ export interface UiJudgeReport {
 export type AgentEvent =
   | { type: 'conversation.snapshot'; session: ConversationSession }
   | { type: 'conversation.thinking'; active: boolean }
-  | { type: 'session.start'; runId: string; sessionId?: string; turnId?: string; executionId?: string; ticker?: string; command?: 'judge' | 'research' }
+  | { type: 'session.start'; runId: string; sessionId?: string; turnId?: string; executionId?: string; ticker?: string; subjects?: string[]; command?: 'judge' | 'research' | 'compare' }
   | { type: 'session.complete'; runId: string; sessionId?: string; turnId?: string; executionId?: string; status: 'completed' | 'failed' | 'stopped'; error?: AgentEventError }
   | { type: 'workflow.plan'; workflowId: string; nodes: UiWorkflowNode[] }
   | { type: 'workflow.step'; workflowId: string; nodeId: string; label: string; status: UiWorkflowStepStatus; parentIds?: string[]; owner?: string; durationMs?: number; error?: string }

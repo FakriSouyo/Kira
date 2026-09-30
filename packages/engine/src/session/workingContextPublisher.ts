@@ -8,9 +8,12 @@ import {
   type ConversationEvent,
   type ResearchSessionArtifacts,
   type SessionWorkingContext,
+  type WorkingContextPatch,
   type WorkingContextStore,
 } from '@harness/session-core';
 import type { DurableArtifactRef } from '@harness/schemas';
+import { ComparisonReportPayloadSchema } from '@harness/schemas';
+import type { ComparisonReportArtifact } from '@harness/session-core';
 
 /**
  * Publishes `SessionWorkingContext` from settled canonical work (PR D).
@@ -85,26 +88,65 @@ export function createWorkingContextPublisher(params: {
       if (!turn || turn.status !== 'completed' || NON_PUBLISHING_COMMANDS.has(turn.command)) {
         return { status: 'skipped', version: null };
       }
-      const executions = artifacts.executions
-        .filter(execution => execution.turnId === turn.id && execution.status === 'completed');
-      const judgedExecutionIds: string[] = [];
-      const artifactRefs: DurableArtifactRef[] = [];
-      for (const execution of executions) {
-        if (execution.command !== 'judge') continue;
-        const resolved = await artifactStore.getByExecution(execution.id);
-        if (resolved.length > 0) {
-          artifactRefs.push(...resolved.map(artifact => ({ kind: artifact.kind, artifactId: artifact.artifactId })));
-        } else if (await judgments.getByRun(execution.id)) {
-          // Defined legacy lookup: pre-PR-F rows keep their readable PR D ref.
-          judgedExecutionIds.push(execution.id);
+
+      let patch: WorkingContextPatch;
+      if (turn.command === 'compare') {
+        if (turn.sessionId !== sessionId) {
+          throw new Error(`Completed Compare Turn ${turn.id} does not belong to Session ${sessionId}`);
         }
+        const compareExecutions = artifacts.executions
+          .filter(execution => execution.turnId === turn.id && execution.command === 'compare' && execution.status === 'completed')
+          .sort((left, right) => right.attempt - left.attempt || right.createdAt.localeCompare(left.createdAt));
+        const execution = compareExecutions[0];
+        if (!execution) throw new Error(`Completed Compare Turn ${turn.id} has no completed Compare Execution`);
+        if (execution.sessionId !== sessionId || execution.turnId !== turn.id || execution.ticker.length === 0) {
+          throw new Error(`Compare Execution ${execution.id} does not match its settled Session Turn`);
+        }
+        const resolved = await artifactStore.getByExecution(execution.id);
+        if (resolved.length !== 1 || resolved[0]?.kind !== 'COMPARISON_REPORT') {
+          throw new Error(`Compare Execution ${execution.id} must have exactly one canonical Comparison Report`);
+        }
+        const artifact = resolved[0] as ComparisonReportArtifact;
+        const payload = ComparisonReportPayloadSchema.parse(artifact.payload);
+        if (artifact.sessionId !== sessionId
+          || artifact.turnId !== turn.id
+          || artifact.executionId !== execution.id
+          || artifact.ticker !== execution.ticker
+          || payload.subjects[0]?.ticker !== execution.ticker) {
+          throw new Error(`Comparison Report for Execution ${execution.id} does not match its canonical identity or anchor`);
+        }
+        patch = {
+          currentIntent: { command: 'compare' },
+          activeSubjects: payload.subjects.map(subject => ({ ticker: subject.ticker })),
+          activeThesisRef: null,
+          activeVerdictRef: null,
+          activeBullCaseRef: null,
+          activeBearCaseRef: null,
+          activeRiskAssessmentRef: null,
+          runningSummaryRef: null,
+        };
+      } else {
+        const executions = artifacts.executions
+          .filter(execution => execution.turnId === turn.id && execution.status === 'completed');
+        const judgedExecutionIds: string[] = [];
+        const artifactRefs: DurableArtifactRef[] = [];
+        for (const execution of executions) {
+          if (execution.command !== 'judge') continue;
+          const resolved = await artifactStore.getByExecution(execution.id);
+          if (resolved.length > 0) {
+            artifactRefs.push(...resolved.map(artifact => ({ kind: artifact.kind, artifactId: artifact.artifactId })));
+          } else if (await judgments.getByRun(execution.id)) {
+            // Defined legacy lookup: pre-PR-F rows keep their readable PR D ref.
+            judgedExecutionIds.push(execution.id);
+          }
+        }
+        patch = deriveWorkingContextPatch({
+          command: turn.command,
+          executions: executions.map(execution => ({ executionId: execution.id, ticker: execution.ticker, command: execution.command })),
+          judgedExecutionIds,
+          artifactRefs: artifactRefs.length > 0 ? artifactRefs : undefined,
+        });
       }
-      const patch = deriveWorkingContextPatch({
-        command: turn.command,
-        executions: executions.map(execution => ({ executionId: execution.id, ticker: execution.ticker, command: execution.command })),
-        judgedExecutionIds,
-        artifactRefs: artifactRefs.length > 0 ? artifactRefs : undefined,
-      });
       const current = await workingContext.current(sessionId);
       if (isWorkingContextPatchNoOp(current, patch)) return { status: 'skipped', version: current?.version ?? null };
       const sourceSequence = turnSourceSequence(readJournal, sessionId, turn.id);

@@ -17,20 +17,24 @@ function errorMessage(error: unknown): string {
 
 export function projectFinancialToolEvent(
   event: ToolRuntimeEvent,
-  params: { readonly ticker: string; readonly emit: (event: AgentEvent) => void },
+  params: { readonly ticker?: string; readonly emit: (event: AgentEvent) => void },
 ): void {
   const tool = agentToolByRuntimeId[event.toolId];
   if (!tool) return;
 
   if (event.type === 'tool.started') {
-    params.emit({ type: 'tool.start', tool, ticker: params.ticker, agent: 'researcher' });
+    params.emit({
+      type: 'tool.start',
+      tool,
+      ...(params.ticker ? { ticker: params.ticker, agent: 'researcher' as const } : {}),
+    });
     return;
   }
 
   params.emit({
     type: 'tool.complete',
     tool,
-    agent: 'researcher',
+    ...(params.ticker ? { agent: 'researcher' as const } : {}),
     durationMs: event.durationMs,
     ...(event.type === 'tool.failed'
       ? { error: errorMessage(event.error) }

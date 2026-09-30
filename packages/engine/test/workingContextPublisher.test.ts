@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { JudgmentStore } from '@harness/execution';
 import {
+  applyWorkingContextPatch,
   deriveWorkingContextPatch,
   StaleWorkingContextError,
   type ArtifactStore,
@@ -12,7 +13,8 @@ import {
   type SessionWorkingContext,
   type WorkingContextStore,
 } from '@harness/session-core';
-import type { ArtifactEnvelope, DurableArtifactRef } from '@harness/schemas';
+import type { ArtifactEnvelope, ComparisonMatrix, DurableArtifactRef } from '@harness/schemas';
+import type { ComparisonReportArtifact } from '@harness/session-core';
 import { createWorkingContextPublisher } from '../src/index.js';
 
 const SESSION_ID = 'session-1';
@@ -117,6 +119,48 @@ function artifact(kind: ArtifactEnvelope['kind'], artifactId: string): ArtifactE
     payload: {},
     createdAt: CREATED_AT,
   } as ArtifactEnvelope;
+}
+
+function comparisonReportArtifact(overrides: Partial<ComparisonReportArtifact> = {}): ComparisonReportArtifact {
+  const quarterlyA = { evidenceId: '00000000-0000-4000-8000-000000000002', path: 'quarters[0].revenueGrowthYoy', periodLabel: '2024-Q4' };
+  const quarterlyB = { evidenceId: '00000000-0000-4000-8000-000000000003', path: 'quarters[0].revenueGrowthYoy', periodLabel: '2024-Q4' };
+  const payload: ComparisonMatrix = {
+    subjects: [{ ticker: 'BBCA', name: 'BCA' }, { ticker: 'BBRI', name: 'BRI' }],
+    selectedPeriod: '2024-Q4',
+    metrics: [
+      {
+        metric: 'revenueGrowthYoy', unit: 'percent', status: 'comparable',
+        cells: [
+          { ticker: 'BBCA', status: 'available', value: 9.8, unit: 'percent', source: quarterlyA },
+          { ticker: 'BBRI', status: 'available', value: 7.4, unit: 'percent', source: quarterlyB },
+        ],
+      },
+      {
+        metric: 'netIncomeGrowthYoy', unit: 'percent', status: 'unavailable',
+        cells: [
+          { ticker: 'BBCA', status: 'unavailable', reason: 'BASIS_UNPROVEN', unit: 'percent', source: { ...quarterlyA, path: 'quarters[0].netIncomeGrowthYoy' } },
+          { ticker: 'BBRI', status: 'unavailable', reason: 'BASIS_MISSING', unit: 'percent', source: { ...quarterlyB, path: 'quarters[0].netIncomeGrowthYoy' } },
+        ],
+      },
+    ],
+    differences: [{
+      metric: 'revenueGrowthYoy', leftTicker: 'BBCA', rightTicker: 'BBRI', value: 9.8 - 7.4,
+      unit: 'percentage_points', left: quarterlyA, right: quarterlyB,
+    }],
+    warnings: [],
+  };
+  return {
+    artifactId: 'artifact-compare-1',
+    kind: 'COMPARISON_REPORT',
+    schemaVersion: 1,
+    sessionId: SESSION_ID,
+    turnId: TURN_ID,
+    executionId: 'compare-latest',
+    ticker: 'BBCA',
+    payload,
+    createdAt: CREATED_AT,
+    ...overrides,
+  };
 }
 
 interface HarnessOptions {
@@ -238,6 +282,86 @@ describe('host-neutral WorkingContext publisher', () => {
       }),
     }));
     expect(harness.commitStore.mock.calls[0]?.[0].patch.activeVerdictRef).toBeUndefined();
+  });
+
+  it('derives ordered Compare subjects only from the latest canonical published report and clears singular derived refs', async () => {
+    const existing = context({
+      activeSubjects: [{ ticker: 'ADRO' }],
+      currentIntent: { command: 'judge' },
+      activeThesisRef: { kind: 'judgment', executionId: 'old-thesis' },
+      activeVerdictRef: { kind: 'judgment', executionId: 'old-verdict' },
+      activeBullCaseRef: { kind: 'BULL_CASE', artifactId: 'bull-old' },
+      activeBearCaseRef: { kind: 'BEAR_CASE', artifactId: 'bear-old' },
+      activeRiskAssessmentRef: { kind: 'VERDICT', artifactId: 'risk-old' },
+      runningSummaryRef: { kind: 'judgment', executionId: 'summary-old' },
+      pinnedArtifactRefs: [{ kind: 'VERDICT', artifactId: 'pinned-verdict' }],
+      userAssertions: [{ kind: 'USER_ASSERTION', id: 'assertion-1', text: 'user text', turnId: TURN_ID }],
+      assumptions: [{ kind: 'ASSUMPTION', id: 'assumption-1', text: 'user assumption', turnId: TURN_ID }],
+    });
+    const harness = makeHarness({
+      turn: { command: 'compare' },
+      executions: [
+        execution('compare-old', { command: 'compare', attempt: 1, ticker: 'BBCA' }),
+        execution('compare-latest', { command: 'compare', attempt: 2, ticker: 'BBCA', createdAt: '2026-09-25T00:00:00.000Z' }),
+        execution('judge-later', { command: 'judge', attempt: 3, ticker: 'BBRI' }),
+      ],
+      current: existing,
+      typedArtifacts: [comparisonReportArtifact()],
+    });
+
+    await expect(harness.publisher.publishAfterSettledTurn({
+      sessionId: SESSION_ID, turnId: TURN_ID, artifacts: harness.sessionArtifacts,
+    })).resolves.toMatchObject({ status: 'committed', version: 2 });
+
+    expect(harness.getByExecution).toHaveBeenCalledExactlyOnceWith('compare-latest');
+    expect(harness.getByRun).not.toHaveBeenCalled();
+    const patch = harness.commitStore.mock.calls[0]![0].patch;
+    expect(patch).toEqual({
+      currentIntent: { command: 'compare' },
+      activeSubjects: [{ ticker: 'BBCA' }, { ticker: 'BBRI' }],
+      activeThesisRef: null,
+      activeVerdictRef: null,
+      activeBullCaseRef: null,
+      activeBearCaseRef: null,
+      activeRiskAssessmentRef: null,
+      runningSummaryRef: null,
+    });
+    expect(JSON.stringify(patch)).not.toContain('COMPARISON_REPORT');
+    const next = applyWorkingContextPatch(existing, {
+      sessionId: SESSION_ID,
+      sourceSequence: 17,
+      updatedByTurnId: TURN_ID,
+      updatedAt: CREATED_AT,
+      patch,
+    });
+    expect(next.pinnedArtifactRefs).toEqual(existing.pinnedArtifactRefs);
+    expect(next.userAssertions).toEqual(existing.userAssertions);
+    expect(next.assumptions).toEqual(existing.assumptions);
+    expect(next.activeSubjects).toEqual([{ ticker: 'BBCA' }, { ticker: 'BBRI' }]);
+  });
+
+  it.each([
+    ['missing report', []],
+    ['duplicate reports', [comparisonReportArtifact(), { ...comparisonReportArtifact(), artifactId: 'artifact-compare-duplicate' }]],
+    ['cross-session report', [comparisonReportArtifact({ sessionId: 'session-other' })]],
+    ['cross-turn report', [comparisonReportArtifact({ turnId: 'turn-other' })]],
+    ['wrong-execution report', [comparisonReportArtifact({ executionId: 'compare-old' })]],
+    ['wrong artifact anchor', [comparisonReportArtifact({ ticker: 'BBRI' })]],
+    ['wrong payload anchor', [comparisonReportArtifact({ payload: { ...comparisonReportArtifact().payload, subjects: [{ ticker: 'BBRI' }, { ticker: 'BBCA' }] } as ComparisonMatrix })]],
+  ])('fails closed for a %s without an anchor-only context commit', async (_label, typedArtifacts) => {
+    const harness = makeHarness({
+      turn: { command: 'compare' },
+      executions: [execution('compare-latest', { command: 'compare', ticker: 'BBCA' })],
+      typedArtifacts: typedArtifacts as ArtifactEnvelope[],
+    });
+
+    await expect(harness.publisher.publishAfterSettledTurn({
+      sessionId: SESSION_ID, turnId: TURN_ID, artifacts: harness.sessionArtifacts,
+    })).rejects.toThrow();
+    expect(harness.getByExecution).toHaveBeenCalledExactlyOnceWith('compare-latest');
+    expect(harness.currentStore).not.toHaveBeenCalled();
+    expect(harness.commitStore).not.toHaveBeenCalled();
+    expect(harness.appendAuditEvent).not.toHaveBeenCalled();
   });
 
   it('prefers typed Artifact refs and passes them through existing patch derivation', async () => {
