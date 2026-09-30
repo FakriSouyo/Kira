@@ -7,6 +7,8 @@ import {
   COMMAND_FILES_CAPABILITY_PRINCIPAL,
   documentToolIds,
   financialToolIds,
+  COMPARE_CAPABILITY_PRINCIPALS,
+  createCompareCapabilityPlan,
   JUDGE_CAPABILITY_PRINCIPALS,
   RESEARCH_CAPABILITY_PRINCIPALS,
   SCREEN_CAPABILITY_PRINCIPAL,
@@ -237,6 +239,7 @@ describe('host-neutral capability runtime', () => {
       'workflow.research.fetch-news',
       'workflow.research.identify-company',
     ]);
+    expect(researchCapabilityPlan.fingerprint).toBe('3ea027f5f22cf80c303c60949a001d46670f11a10c0b96cf09877ce3f9ba05e6');
 
     for (const [principal, denied] of [
       [RESEARCH_CAPABILITY_PRINCIPALS.identifyCompany, [
@@ -254,6 +257,41 @@ describe('host-neutral capability runtime', () => {
     ] as const) {
       for (const capabilityId of denied) {
         await expect(gateway.invoke(principal, capabilityId, { ticker: 'BBRI' }))
+          .rejects.toMatchObject({ code: 'CAPABILITY_DENIED' });
+      }
+    }
+  });
+
+  it('grants Compare only Company Report and Quarterly Financials and fingerprints only its two principals', async () => {
+    const { capabilityGateway: gateway, judgeCapabilityPlan, researchCapabilityPlan } = runtimeFor();
+    const compareCapabilityPlan = createCompareCapabilityPlan(gateway);
+
+    expect(COMPARE_CAPABILITY_PRINCIPALS).toEqual({
+      identifySubjects: { id: 'workflow.compare.identify-subjects' },
+      fetchFinancials: { id: 'workflow.compare.fetch-financials' },
+    });
+    expect(gateway.list(COMPARE_CAPABILITY_PRINCIPALS.identifySubjects).map(({ id }) => id))
+      .toEqual([financialToolIds.companyReport]);
+    expect(gateway.list(COMPARE_CAPABILITY_PRINCIPALS.fetchFinancials).map(({ id }) => id))
+      .toEqual([financialToolIds.quarterlyFinancials]);
+    expect(compareCapabilityPlan.schemaVersion).toBe(1);
+    expect(compareCapabilityPlan.principals.map(({ principalId }) => principalId)).toEqual([
+      'workflow.compare.fetch-financials', 'workflow.compare.identify-subjects',
+    ]);
+    expect(compareCapabilityPlan.fingerprint).toBe('e91d13175fc044f843302779c5416f8d9b67976f09f658b3f0ffbeb941b42771');
+    expect(createCompareCapabilityPlan(gateway)).toEqual(compareCapabilityPlan);
+    expect(Object.isFrozen(compareCapabilityPlan)).toBe(true);
+    expect(Object.isFrozen(compareCapabilityPlan.principals)).toBe(true);
+    expect(Object.isFrozen(compareCapabilityPlan.principals[0]?.capabilities)).toBe(true);
+    expect(judgeCapabilityPlan.fingerprint).toBe('520f35cdbe2c9ebcc8d34c8095a911a1a940a47e619d1f5111281d828f1dcc73');
+    expect(researchCapabilityPlan.fingerprint).toBe('3ea027f5f22cf80c303c60949a001d46670f11a10c0b96cf09877ce3f9ba05e6');
+
+    for (const [principal, allowed] of [
+      [COMPARE_CAPABILITY_PRINCIPALS.identifySubjects, financialToolIds.companyReport],
+      [COMPARE_CAPABILITY_PRINCIPALS.fetchFinancials, financialToolIds.quarterlyFinancials],
+    ] as const) {
+      for (const capabilityId of Object.values(financialToolIds).filter(id => id !== allowed)) {
+        await expect(gateway.invoke(principal, capabilityId, { ticker: 'BBCA' }))
           .rejects.toMatchObject({ code: 'CAPABILITY_DENIED' });
       }
     }

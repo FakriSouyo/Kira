@@ -162,7 +162,21 @@ the supplied Execution, selects the latest common explicitly single-quarter
 period, and returns a deterministic two-metric matrix with source paths,
 coverage warnings, and pairwise percentage-point differences. It introduces
 no provider, model, persistence-write, lifecycle, Artifact, or WorkingContext
-authority. The `/compare` CLI command remains a stub pending later U3 slices.
+authority.
+
+U3B defines the strict version 1 `COMPARISON_REPORT` payload as the canonical
+comparison matrix and adds its narrow atomic publication contract. U3C adds the
+static `@harness/command-compare` DAG and a headless Engine runtime for an
+already selected Execution identity. Compare receives only a capability
+gateway, Evidence acceptance/scoped-read methods, and a workflow trace store.
+Its financial grants are limited to Company Report and Quarterly Financials;
+it verifies every provider response before its first Evidence write, accepts
+Evidence in subject order, and delegates its only scoped Evidence lookup to the
+existing U3A normalizer. The report builder returns the schema-validated matrix
+unchanged in meaning. This slice does not create or settle an Execution,
+publish an Artifact, write WorkingContext, or connect the runtime to the CLI.
+U3D owns the remaining lifecycle/publication integration and U3E owns the CLI
+adapter; `/compare` remains a stub until those slices are complete.
 
 ## Model runtime — Q1 / Q2
 
