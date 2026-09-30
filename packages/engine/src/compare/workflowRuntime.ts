@@ -16,6 +16,7 @@ import { COMPARE_CAPABILITY_PRINCIPALS } from '../capabilities/financial.js';
 import { financialToolIds } from '../tools/financial.js';
 import { normalizeComparisonEvidence, type ComparisonEvidenceSource } from './normalization.js';
 import { buildComparisonReportPayload } from './report.js';
+import { normalizeComparisonSubjects } from './subjects.js';
 import { WorkflowTraceRecorder, type WorkflowTraceStore } from '../runtime/workflowTraceRecorder.js';
 
 export interface ComparisonWorkflowRunIdentity {
@@ -49,22 +50,11 @@ export interface ComparisonWorkflowRuntimeResult {
   report: ComparisonReportPayload;
 }
 
-const IDX_TICKER_PATTERN = /^[A-Z]{2,6}$/;
-
 function assertRuntimeInput(options: ComparisonWorkflowRuntimeOptions): string[] {
   if (typeof options.run.id !== 'string' || options.run.id.trim().length === 0) {
     throw new Error('Comparison runtime requires a non-empty Execution ID');
   }
-  if (!Array.isArray(options.subjects) || options.subjects.length < 2 || options.subjects.length > 3) {
-    throw new Error('Comparison runtime requires two or three IDX subjects');
-  }
-  const subjects = options.subjects.map(subject => typeof subject === 'string' ? subject.trim().toUpperCase() : '');
-  if (subjects.some(ticker => !IDX_TICKER_PATTERN.test(ticker))) {
-    throw new Error('Comparison subjects must be valid IDX tickers');
-  }
-  if (new Set(subjects).size !== subjects.length) {
-    throw new Error('Comparison subjects must be unique');
-  }
+  const subjects = normalizeComparisonSubjects(options.subjects);
   if (options.run.ticker !== subjects[0]) {
     throw new Error('Comparison Execution ticker must equal the first normalized subject');
   }

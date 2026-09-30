@@ -173,10 +173,14 @@ Its financial grants are limited to Company Report and Quarterly Financials;
 it verifies every provider response before its first Evidence write, accepts
 Evidence in subject order, and delegates its only scoped Evidence lookup to the
 existing U3A normalizer. The report builder returns the schema-validated matrix
-unchanged in meaning. This slice does not create or settle an Execution,
-publish an Artifact, write WorkingContext, or connect the runtime to the CLI.
-U3D owns the remaining lifecycle/publication integration and U3E owns the CLI
-adapter; `/compare` remains a stub until those slices are complete.
+unchanged in meaning. U3D's Engine lifecycle normalizes ordered subjects before
+any authority call, creates one fresh `compare` Execution anchored to the first
+subject, notifies the host, invokes U3C once, and delegates success to U3B's
+atomic publisher. It settles notification, runtime, or publication failures
+once as failed or cancelled and preserves action and settlement causes. There
+is no same-Execution retry or resume, and U3D has no CLI, database, model,
+provider, or WorkingContext dependency. U3E owns CLI, Turn, renderer, and
+WorkingContext integration; `/compare` remains a stub until then.
 
 ## Model runtime — Q1 / Q2
 

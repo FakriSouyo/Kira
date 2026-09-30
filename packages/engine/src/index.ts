@@ -28,6 +28,11 @@ export type {
   ComparisonWorkflowRuntimeResult,
 } from './compare/workflowRuntime.js';
 export { runComparisonWorkflowRuntime } from './compare/workflowRuntime.js';
+export { ComparisonExecutionSettlementError, runComparisonExecutionLifecycle } from './compare/executionLifecycle.js';
+export type {
+  ComparisonExecutionLifecycleOptions,
+  ComparisonExecutionLifecycleResult,
+} from './compare/executionLifecycle.js';
 export {
   COMMAND_DOC_INDEX_CAPABILITY_PRINCIPAL,
   COMMAND_FILES_CAPABILITY_PRINCIPAL,

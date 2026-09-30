@@ -996,12 +996,11 @@ Execution completion/publication boundary. The U1 Research Foundation is
 complete. U2A Research Grounding, U2B Headless Research Workflow Runtime,
 U2C Research Execution Lifecycle + Atomic Publication, and U2D Manual
 /research CLI Adapter + Renderer complete U2. U3 is in progress. U3A's
-growth-basis and deterministic matrix foundation and U3B's Comparison Report
-schema and atomic publication boundary are complete on master. U3C's static
-command graph, least-privilege plan, and headless workflow runtime are
-implemented in this branch, pending independent source review and canonical
-merge verification. U3D lifecycle/publication integration and U3E CLI
-adapter/renderer remain separate planned slices. `/compare` remains a CLI stub
+growth-basis and deterministic matrix foundation, U3B's Comparison Report
+schema and atomic publication boundary, and U3C's command graph, least-
+privilege plan, and headless workflow runtime are complete on master. U3D's
+Engine lifecycle is implemented in this branch, pending independent source
+review; U3E CLI adapter/renderer remains planned. `/compare` remains a CLI stub
 until those slices are complete. Deferred FinHarness compatibility identities
 remain deferred, and the KB gate remains closed.
 
@@ -1032,9 +1031,8 @@ deterministic CLI rendering → settled Turn → WorkingContext publication
 
 ### U3 — `/compare`
 
-Current status: **CLI stub; U3A and U3B complete on master; U3C implemented in
-this branch, pending independent source review and canonical merge
-verification; U3D and U3E planned**.
+Current status: **CLI stub; U3A, U3B, and U3C complete on master; U3D
+implemented in this branch, pending independent source review; U3E planned**.
 
 U3A adds optional per-metric temporal proof for quarterly revenue and net
 income YoY growth, while preserving legacy Research/Judge observations without
@@ -1053,11 +1051,15 @@ five-node command graph, two-principal least-privilege capability plan, and
 headless deterministic Engine runtime. It performs sequential Company Report
 and Quarterly Financials calls, verifies every response before accepting
 Evidence, performs one Execution-scoped Evidence lookup through the U3A
-normalizer, and builds the schema-validated matrix payload. U3C does not own
-Execution lifecycle, Artifact publication, WorkingContext, or CLI integration.
-U3D will add lifecycle/publication integration and U3E will connect the CLI
-adapter and renderer. U3 is incomplete until those slices are reviewed and
-merged; the CLI command remains a stub meanwhile.
+normalizer, and builds the schema-validated matrix payload. U3D adds the
+host-neutral fresh Execution lifecycle: it validates subjects before store
+operations, anchors the Execution to the first subject, composes U3C, and
+passes its exact report to U3B's atomic publisher. Notification, runtime, or
+publication failures settle the same Execution once as failed or cancelled;
+settlement errors preserve both causes. It has no retry/resume path or CLI,
+Turn, renderer, or WorkingContext integration. U3E will connect those host
+surfaces. U3 remains incomplete until U3D is reviewed and merged and U3E is
+implemented; the CLI command remains a stub meanwhile.
 
 Future `/compare` should normalize comparable companies before comparison; it
 should not produce unrelated reports and ask an LLM to compare them.
