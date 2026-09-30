@@ -8,6 +8,7 @@ import {
   documentToolIds,
   financialToolIds,
   JUDGE_CAPABILITY_PRINCIPALS,
+  RESEARCH_CAPABILITY_PRINCIPALS,
   SCREEN_CAPABILITY_PRINCIPAL,
 } from '../src/index';
 import type { Attachment, AttachmentStore } from '@harness/session-core';
@@ -221,6 +222,41 @@ describe('host-neutral capability runtime', () => {
       'workflow.judge.identify-company',
     ]);
     expect(judgeCapabilityPlan.fingerprint).toBe('520f35cdbe2c9ebcc8d34c8095a911a1a940a47e619d1f5111281d828f1dcc73');
+  });
+
+  it('grants Research only its three source principals and builds a separate capability plan', async () => {
+    const { capabilityGateway: gateway, researchCapabilityPlan } = runtimeFor();
+    expect(gateway.list(RESEARCH_CAPABILITY_PRINCIPALS.identifyCompany).map(({ id }) => id))
+      .toEqual([financialToolIds.companyReport]);
+    expect(gateway.list(RESEARCH_CAPABILITY_PRINCIPALS.fetchFinancials).map(({ id }) => id))
+      .toEqual([financialToolIds.quarterlyFinancials]);
+    expect(gateway.list(RESEARCH_CAPABILITY_PRINCIPALS.fetchNews).map(({ id }) => id))
+      .toEqual([financialToolIds.filings, financialToolIds.news]);
+    expect(researchCapabilityPlan.principals.map(({ principalId }) => principalId)).toEqual([
+      'workflow.research.fetch-financials',
+      'workflow.research.fetch-news',
+      'workflow.research.identify-company',
+    ]);
+
+    for (const [principal, denied] of [
+      [RESEARCH_CAPABILITY_PRINCIPALS.identifyCompany, [
+        financialToolIds.quarterlyFinancials, financialToolIds.news, financialToolIds.filings,
+        financialToolIds.dailyTransaction, financialToolIds.foreignFlow, financialToolIds.sentiment, financialToolIds.screen,
+      ]],
+      [RESEARCH_CAPABILITY_PRINCIPALS.fetchFinancials, [
+        financialToolIds.companyReport, financialToolIds.news, financialToolIds.filings,
+        financialToolIds.dailyTransaction, financialToolIds.foreignFlow, financialToolIds.sentiment, financialToolIds.screen,
+      ]],
+      [RESEARCH_CAPABILITY_PRINCIPALS.fetchNews, [
+        financialToolIds.companyReport, financialToolIds.quarterlyFinancials,
+        financialToolIds.dailyTransaction, financialToolIds.foreignFlow, financialToolIds.sentiment, financialToolIds.screen,
+      ]],
+    ] as const) {
+      for (const capabilityId of denied) {
+        await expect(gateway.invoke(principal, capabilityId, { ticker: 'BBRI' }))
+          .rejects.toMatchObject({ code: 'CAPABILITY_DENIED' });
+      }
+    }
   });
 
   it('keeps direct attachment description lookup Session-scoped inside the package', async () => {

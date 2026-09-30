@@ -14,6 +14,12 @@ export const JUDGE_CAPABILITY_PRINCIPALS = Object.freeze({
   fetchNews: Object.freeze({ id: 'workflow.judge.fetch-news' } as const),
 } as const);
 
+export const RESEARCH_CAPABILITY_PRINCIPALS = Object.freeze({
+  identifyCompany: Object.freeze({ id: 'workflow.research.identify-company' } as const),
+  fetchFinancials: Object.freeze({ id: 'workflow.research.fetch-financials' } as const),
+  fetchNews: Object.freeze({ id: 'workflow.research.fetch-news' } as const),
+} as const);
+
 function registration<TTool extends FinancialTools[keyof FinancialTools]>(
   tool: TTool,
   displayName: string,
@@ -98,6 +104,18 @@ export function createFinancialCapabilityGrants(): readonly CapabilityGrant[] {
       principalId: JUDGE_CAPABILITY_PRINCIPALS.fetchNews.id,
       capabilityIds: [financialToolIds.news, financialToolIds.filings, financialToolIds.sentiment],
     },
+    {
+      principalId: RESEARCH_CAPABILITY_PRINCIPALS.identifyCompany.id,
+      capabilityIds: [financialToolIds.companyReport],
+    },
+    {
+      principalId: RESEARCH_CAPABILITY_PRINCIPALS.fetchFinancials.id,
+      capabilityIds: [financialToolIds.quarterlyFinancials],
+    },
+    {
+      principalId: RESEARCH_CAPABILITY_PRINCIPALS.fetchNews.id,
+      capabilityIds: [financialToolIds.news, financialToolIds.filings],
+    },
   ]);
 }
 
@@ -105,4 +123,10 @@ export function createJudgeCapabilityPlan(
   capabilityGateway: Pick<CapabilityGateway, 'list'>,
 ): CapabilityPlan {
   return createCapabilityPlan(capabilityGateway, Object.values(JUDGE_CAPABILITY_PRINCIPALS));
+}
+
+export function createResearchCapabilityPlan(
+  capabilityGateway: Pick<CapabilityGateway, 'list'>,
+): CapabilityPlan {
+  return createCapabilityPlan(capabilityGateway, Object.values(RESEARCH_CAPABILITY_PRINCIPALS));
 }

@@ -7,6 +7,7 @@
   },
   "dependencies": {
     "@harness/capability": "workspace:*",
+    "@harness/command-research": "workspace:*",
     "@harness/command-judge": "workspace:*",
     "@harness/command-core": "workspace:*",
     "@harness/context": "workspace:*",

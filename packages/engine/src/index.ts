@@ -6,7 +6,7 @@ import { createApplicationCapabilityGateway } from './capabilities/application';
 import { createAttachmentTools } from './tools/attachment';
 import { createDocumentTools } from './tools/document';
 import { createFinancialTools } from './tools/financial';
-import { createJudgeCapabilityPlan } from './capabilities/financial';
+import { createJudgeCapabilityPlan, createResearchCapabilityPlan } from './capabilities/financial';
 
 export { attachmentToolIds } from './tools/attachment';
 export { documentToolIds } from './tools/document';
@@ -20,7 +20,9 @@ export {
 export { COMMAND_DOC_SEARCH_CAPABILITY_PRINCIPAL } from './capabilities/document';
 export {
   JUDGE_CAPABILITY_PRINCIPALS,
+  RESEARCH_CAPABILITY_PRINCIPALS,
   SCREEN_CAPABILITY_PRINCIPAL,
+  createResearchCapabilityPlan,
 } from './capabilities/financial';
 export { createConversationContextCoordinator } from './conversation/contextCoordinator.js';
 export type {
@@ -98,6 +100,14 @@ export { repairJudgeProjections } from './judge/projectionRepair.js';
 export type { JudgeProjectionRepairStores } from './judge/projectionRepair.js';
 export { groundResearcherOutput } from './research/grounding.js';
 export type { GroundedResearchSynthesis } from './research/grounding.js';
+export { runResearchWorkflowRuntime } from './research/workflowRuntime.js';
+export type {
+  ResearchAcquisition,
+  ResearchWorkflowRunIdentity,
+  ResearchWorkflowRuntimeDependencies,
+  ResearchWorkflowRuntimeOptions,
+  ResearchWorkflowRuntimeResult,
+} from './research/workflowRuntime.js';
 export type {
   JudgeCheckpointPlanningOptions,
   JudgeCheckpointRuntimeIdentity,
@@ -162,7 +172,9 @@ export function createEngineCapabilityRuntime({
   return {
     capabilityGateway,
     judgeCapabilityPlan: createJudgeCapabilityPlan(capabilityGateway),
+    researchCapabilityPlan: createResearchCapabilityPlan(capabilityGateway),
   };
 }
 
-export type EngineCapabilityRuntime = ReturnType<typeof createEngineCapabilityRuntime>;
+export type EngineCapabilityRuntime = Omit<ReturnType<typeof createEngineCapabilityRuntime>, 'researchCapabilityPlan'> &
+  Partial<Pick<ReturnType<typeof createEngineCapabilityRuntime>, 'researchCapabilityPlan'>>;
