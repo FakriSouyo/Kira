@@ -47,7 +47,7 @@ command.
 | Natural-language conversation | Bounded financial discussion and same-Session prior research context. It does not silently run a fresh research workflow. |
 | /judge TICKER | Mature evidence-backed workflow with deterministic claim and counterpoint checks, a 15-node graph, workflow version 2, and T5 release integrity complete on master. |
 | `/research TICKER <QUESTION>` | Explicit evidence-backed company research with a durable report and no Bull/Bear/Judge debate. |
-| `/compare TICKER_A TICKER_B [TICKER_C]` | Explicit comparison of two or three IDX companies using a durable canonical report. Implemented in the current branch, pending independent review. |
+| `/compare TICKER_A TICKER_B [TICKER_C]` | Explicit comparison of two or three IDX companies using a durable canonical report. Implemented on master. |
 | /screen CRITERIA | Implemented financial screening workflow using supported criteria. Future maturation is tracked separately. |
 | /search QUERY | Searches persisted Evidence. Ranking uses keyword overlap with a small mock-embedding tie-break; this remains a prototype, not production vector search. |
 | /attach PATH and /files | Explicitly imports a user-selected file and lists raw Attachment metadata for the current Session. Attachment bytes do not become Evidence or model context. |
@@ -60,6 +60,10 @@ These command names remain CLI stubs and are not end-to-end research products:
 
 - /challenge
 - /investigate
+
+The U4A Challenge contract and Engine grounding foundation are implemented.
+`/challenge` remains a CLI stub. U4B and later U4 slices remain planned; U4
+remains incomplete.
 
 `/research` also remains separate from `/judge`; neither command is inferred
 from natural-language conversation.

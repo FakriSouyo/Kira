@@ -185,8 +185,19 @@ canonical published artifact, and derives ordered `activeSubjects` from that
 artifact after the Turn settles. The context publisher checks artifact identity
 against the completed Turn and Execution, clears singular derived Judge refs,
 and preserves pinned/user-authored state through the existing CAS patch path.
-Generic conversation artifact retrieval remains Judge-only. U3E is implemented
-in the current branch, pending independent review.
+Generic conversation artifact retrieval remains Judge-only. U3E is complete on
+master as part of U3.
+
+U4A adds a strict Challenge payload schema and a dedicated Challenge Analyst
+subagent. Engine accepts its output only after one Execution-scoped read of
+current accepted Company Report and Quarterly Financials Evidence, verifying
+acceptance provenance, canonical data hashes, source paths, values, periods,
+units, numeric statements, and source coverage. It derives metric semantics
+from canonical paths and performs no provider call, model repair pass, Evidence
+write, lifecycle operation, Artifact publication, or WorkingContext update.
+U4A contract and grounding foundation are implemented. The `/challenge`
+command remains a CLI stub. U4B and later U4 slices remain planned; U4 remains
+incomplete.
 
 ## Model runtime — Q1 / Q2
 
@@ -966,8 +977,10 @@ The implemented command surface includes `/judge`, `/research`, `/screen`, `/sea
 setup/status commands, and local session controls. `/judge` is the current
 mature debate vertical; `/research` is the explicit non-debate company research
 command. `/screen` and `/search` are implemented, and `/attach` is explicit
-user-file ingestion. `/compare` is implemented in the current branch, pending
-independent review; `/challenge` and `/investigate` remain planned stubs.
+user-file ingestion. `/compare` is implemented on master; `/challenge` remains
+a CLI stub with its U4A contract and grounding foundation implemented. U4B
+and later U4 slices remain planned; U4 remains incomplete. `/investigate`
+remains a planned stub.
 
 `/research TICKER <QUESTION>` validates the explicit ticker and focused
 question, then calls the Engine Research Execution lifecycle. The runtime owns

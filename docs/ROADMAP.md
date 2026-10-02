@@ -1000,10 +1000,10 @@ growth-basis and deterministic matrix foundation, U3B's Comparison Report
 schema and atomic publication boundary, and U3C's command graph, least-
 privilege plan, headless workflow runtime, and U3D Engine lifecycle are
 complete on master. U3E's explicit CLI adapter, renderer, and artifact-backed
-WorkingContext integration are implemented in this branch, pending independent
-source review. `/compare` is enabled in this branch; U3 is pending review and
-merge. Deferred FinHarness compatibility identities remain deferred, and the
-KB gate remains closed.
+WorkingContext integration are complete on master. U3 is complete on master,
+and `/compare` is implemented on master.
+Deferred FinHarness compatibility identities remain deferred, and the KB gate
+remains closed.
 
 ### U2 — `/research`
 
@@ -1032,8 +1032,7 @@ deterministic CLI rendering → settled Turn → WorkingContext publication
 
 ### U3 — `/compare`
 
-Current status: **U3A–U3D complete on master; U3E implemented in this branch,
-pending independent source review; full U3 pending review and merge**.
+Current status: **U3 COMPLETE on master; U3A–U3E and `/compare` are implemented on master**.
 
 U3A adds optional per-metric temporal proof for quarterly revenue and net
 income YoY growth, while preserving legacy Research/Judge observations without
@@ -1092,10 +1091,20 @@ and evidence coverage. Exact metrics and workflow graph are not locked.
 
 ### U4 — `/challenge`
 
-Current status: **stub**.
+Current status: **U4A contract and grounding foundation are implemented. `/challenge` remains a CLI stub. U4B and later U4 slices remain planned; U4 remains incomplete.**
 
 Future `/challenge` stress-tests an explicit thesis or research claim; it is
 not simply “run Bear”.
+
+U4A adds a strict, non-verdict Challenge payload contract, a dedicated
+Challenge Analyst subagent and deterministic mock response, and Engine
+grounding over only current accepted Company Report and Quarterly Financials
+Evidence in the supplied Execution. Engine derives metric, unit, period, and
+currency semantics from canonical Evidence paths, checks cited values and
+numeric statements, and requires source coverage to match accepted Evidence.
+This foundation does not create a Challenge Artifact, publication boundary,
+command workflow, Execution lifecycle, CLI adapter, or WorkingContext
+authority; those remain later U4 slices.
 
 ```text
 parse thesis

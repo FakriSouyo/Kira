@@ -152,6 +152,32 @@ describe('MockLLMClient — Intent Router', () => {
   });
 });
 
+describe('MockLLMClient — Challenge Analyst', () => {
+  it('returns evidence-addressable thesis stress-test content from the supplied prompt zones', async () => {
+    const challengeSchema = z.object({
+      thesis: z.string(),
+      summary: z.string(),
+      supportingCase: z.array(z.object({ statement: z.string(), evidenceIds: z.array(z.string().uuid()) })),
+      counterCase: z.array(z.unknown()),
+      sourceAssessments: z.array(z.object({ evidenceId: z.string().uuid(), quality: z.string() })),
+      coverage: z.array(z.object({ source: z.string(), evidenceIds: z.array(z.string().uuid()) })),
+    });
+    const output = await new MockLLMClient().generateObject({
+      schema: challengeSchema,
+      system: [EVIDENCE_BLOCK, 'You are the Challenge Analyst Agent.'],
+      prompt: 'Challenge target: BBCA\nExplicit thesis: BBCA can sustain profitability.',
+    });
+
+    expect(output.thesis).toBe('BBCA can sustain profitability.');
+    expect(output.supportingCase[0]!.evidenceIds).toEqual([E1]);
+    expect(output.sourceAssessments.map(item => item.evidenceId)).toEqual([E1, E2]);
+    expect(output.coverage).toEqual([
+      { source: 'sectors.company_report', evidenceIds: [E1] },
+      { source: 'sectors.quarterly_financials', evidenceIds: [E2] },
+    ]);
+  });
+});
+
 describe('MockModelRuntime', () => {
   it('uses the same one-shot prepared-call contract with explicit mock metadata', async () => {
     const runtime = createMockModelRuntime();

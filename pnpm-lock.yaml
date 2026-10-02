@@ -314,6 +314,9 @@ importers:
       '@harness/subagent-bull':
         specifier: workspace:*
         version: link:../subagent/bull
+      '@harness/subagent-challenger':
+        specifier: workspace:*
+        version: link:../subagent/challenger
       '@harness/subagent-core':
         specifier: workspace:*
         version: link:../subagent/core
@@ -481,6 +484,27 @@ importers:
       '@harness/subagent-core':
         specifier: workspace:*
         version: link:../core
+
+  packages/subagent/challenger:
+    dependencies:
+      '@harness/llm':
+        specifier: workspace:*
+        version: link:../../llm
+      '@harness/schemas':
+        specifier: workspace:*
+        version: link:../../schemas
+      '@harness/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@harness/skill-filesystem':
+        specifier: workspace:*
+        version: link:../../skill/filesystem
+      '@harness/subagent-core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
 
   packages/subagent/core:
     dependencies:
