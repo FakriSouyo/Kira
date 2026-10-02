@@ -122,6 +122,8 @@ export { repairJudgeProjections } from './judge/projectionRepair.js';
 export type { JudgeProjectionRepairStores } from './judge/projectionRepair.js';
 export { groundResearcherOutput } from './research/grounding.js';
 export type { GroundedResearchSynthesis } from './research/grounding.js';
+export { ChallengeGroundingError, groundChallengeOutput } from './challenge/grounding.js';
+export type { ChallengeGroundingErrorCode } from './challenge/grounding.js';
 export { runResearchWorkflowRuntime } from './research/workflowRuntime.js';
 export type {
   ResearchAcquisition,

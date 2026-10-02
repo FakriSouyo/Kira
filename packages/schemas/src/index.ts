@@ -7,3 +7,4 @@ export * from "./artifact";
 export * from './attachment';
 export * from './document';
 export * from './comparison';
+export * from './challenge';

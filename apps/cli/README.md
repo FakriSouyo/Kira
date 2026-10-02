@@ -56,6 +56,10 @@ The command does not run the Bull/Bear/Judge debate.
 execution-scoped accepted quarterly growth Evidence; later U3 slices own the
 durable report, lifecycle, and command adapter.
 
+`/challenge` also remains a CLI stub. U4A adds its strict report contract,
+dedicated analyst subagent, and Engine grounding over Execution-scoped
+accepted financial Evidence; publication and CLI integration remain planned.
+
 The current behavior and ownership for command workflows, Session → Turn →
 Execution, Context, Evidence, capabilities, ToolRuntime, and persistence are
 defined by source and summarized in ARCHITECTURE.md.

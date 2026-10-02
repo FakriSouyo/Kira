@@ -55,6 +55,7 @@ function mockRuntimeMetadata(descriptor: ModelRuntimeDescriptor): ModelInvocatio
  *   "Bear Agent"    → challenge (menarget klaim Bull dari prompt, angka dari evidence)
  *   "Judge Agent"   → judgment (dibangun dari claims di prompt; menyebut
  *                     debat bila conversation berisi challenge Bear)
+ *   "Challenge Analyst Agent" → thesis stress-test with exact supplied sources
  *   specialist marker Researcher/Fundamentals/Market/Valuation/Risk →
  *                     output evidence-addressable untuk workflow offline
  * Marker ini wajib dipertahankan di prompt agents.
@@ -490,6 +491,37 @@ function generateResearcher(system: string) {
   };
 }
 
+function generateChallenger(system: string, prompt: string) {
+  const evidence = parseEvidenceBlock(system);
+  const thesis = prompt.match(/Explicit thesis:\s*(.+)/i)?.[1]?.trim() ?? 'The supplied thesis';
+  const sourceGroups = new Map<string, string[]>();
+  for (const item of evidence) {
+    const ids = sourceGroups.get(item.source) ?? [];
+    ids.push(item.id);
+    sourceGroups.set(item.source, ids);
+  }
+  return {
+    thesis,
+    summary: 'The supplied sources provide relevant facts, while future performance remains uncertain.',
+    supportingCase: evidence.slice(0, 1).map(item => ({
+      statement: `The supplied ${item.source} evidence is relevant to testing this thesis.`,
+      evidenceIds: [item.id],
+      confidence: 'medium' as const,
+    })),
+    counterCase: [],
+    unsupportedAssumptions: ['The thesis assumes that current business conditions will persist.'],
+    failureConditions: ['A sustained deterioration in the relevant business conditions would weaken the thesis.'],
+    evidenceThatWouldChangeThesis: ['A later company report or quarterly record that materially changes the current picture.'],
+    sourceAssessments: evidence.map(item => ({
+      evidenceId: item.id,
+      quality: item.source.startsWith('sectors.') ? 'primary' as const : 'secondary' as const,
+      rationale: 'This source is present in the supplied Evidence block.',
+    })),
+    gaps: ['The supplied records do not establish future performance.'],
+    coverage: [...sourceGroups].map(([source, ids]) => ({ source, evidenceIds: ids })),
+  };
+}
+
 function generateFundamentals(system: string) {
   const evidence = firstEvidence(system);
   return {
@@ -638,6 +670,7 @@ export class MockLLMClient implements LLMClientLike {
   private generate(system: string | string[] | undefined, prompt: string): unknown {
     const systemText = Array.isArray(system) ? system.join('\n') : system ?? '';
     if (systemText.includes('Intent Router')) return routeIntent(prompt);
+    if (systemText.includes('Challenge Analyst Agent')) return generateChallenger(systemText, prompt);
     if (systemText.includes('Researcher Agent')) return generateResearcher(systemText);
     if (systemText.includes('Fundamentals Agent')) return generateFundamentals(systemText);
     if (systemText.includes('Market Agent')) return generateMarket(systemText);
