@@ -10,6 +10,8 @@ import {
   JUDGE_RELEASE_CONTRACT_FINGERPRINT,
   JUDGE_RELEASE_CONTRACT_ID,
   JUDGE_RELEASE_CONTRACT_VERSION,
+  JUDGE_RELEASE_CONTRACT_V1,
+  JUDGE_RELEASE_CONTRACT_V1_FINGERPRINT,
 } from '../src/release';
 import {
   CLAIM_GRAPH_CONTRACT_FINGERPRINT,
@@ -53,11 +55,11 @@ describe('Q2 Judge execution profiles', () => {
       capabilityPlan, createdAt: '2026-09-20T00:00:00.000Z',
     });
 
-    expect(JUDGE_RELEASE_CONTRACT_ID).toBe('judge-release-v1');
-    expect(JUDGE_RELEASE_CONTRACT_VERSION).toBe(1);
+    expect(JUDGE_RELEASE_CONTRACT_ID).toBe('judge-release-v2');
+    expect(JUDGE_RELEASE_CONTRACT_VERSION).toBe(2);
     expect(JUDGE_RELEASE_CONTRACT).toEqual({
       id: JUDGE_RELEASE_CONTRACT_ID,
-      version: 1,
+      version: 2,
       claimPolicy: { id: CLAIM_POLICY_ID, fingerprint: CLAIM_POLICY_FINGERPRINT },
       counterpointPolicy: { id: COUNTERPOINT_POLICY_ID, fingerprint: COUNTERPOINT_POLICY_FINGERPRINT },
       claimGraph: { id: CLAIM_GRAPH_ID, version: CLAIM_GRAPH_VERSION, fingerprint: CLAIM_GRAPH_CONTRACT_FINGERPRINT },
@@ -69,6 +71,10 @@ describe('Q2 Judge execution profiles', () => {
     expect(profile.payload.releaseContract).toEqual(JUDGE_RELEASE_CONTRACT);
     expect(profile.payload.releaseContractFingerprint).toBe(JUDGE_RELEASE_CONTRACT_FINGERPRINT);
     expect(classifyJudgeReleaseProfilePayload(profile.payload)).toBe('current');
+    expect(classifyJudgeReleaseProfilePayload({
+      releaseContract: JUDGE_RELEASE_CONTRACT_V1,
+      releaseContractFingerprint: JUDGE_RELEASE_CONTRACT_V1_FINGERPRINT,
+    })).toBe('historical-v1');
     const { releaseContract: _contract, releaseContractFingerprint: _fingerprint, ...legacyPayload } = profile.payload;
     const legacyProfile = createExecutionProfile({
       executionId: profile.executionId, workflowId: profile.workflowId, workflowVersion: profile.workflowVersion,
@@ -82,7 +88,7 @@ describe('Q2 Judge execution profiles', () => {
     expect(classifyJudgeReleaseProfilePayload({ provider: 'openai', model: 'legacy' })).toBe('legacy');
   });
 
-  it('fails closed when only one release marker exists or the current pin differs', () => {
+  it('fails closed when only one release marker exists or a release pin differs', () => {
     expect(() => classifyJudgeReleaseProfilePayload({ releaseContract: JUDGE_RELEASE_CONTRACT })).toThrow(/incomplete/);
     expect(() => classifyJudgeReleaseProfilePayload({ releaseContractFingerprint: JUDGE_RELEASE_CONTRACT_FINGERPRINT })).toThrow(/incomplete/);
     expect(() => classifyJudgeReleaseProfilePayload({
@@ -90,7 +96,7 @@ describe('Q2 Judge execution profiles', () => {
       releaseContractFingerprint: '0'.repeat(64),
     })).toThrow(/unsupported/);
     expect(() => classifyJudgeReleaseProfilePayload({
-      releaseContract: { ...JUDGE_RELEASE_CONTRACT, version: 2 },
+      releaseContract: { ...JUDGE_RELEASE_CONTRACT, version: 3 },
       releaseContractFingerprint: JUDGE_RELEASE_CONTRACT_FINGERPRINT,
     })).toThrow(/unsupported/);
   });

@@ -3,7 +3,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ClaimPolicy, CLAIM_POLICY_FINGERPRINT, CLAIM_POLICY_ID } from '@harness/execution';
+import {
+  ClaimPolicy, CLAIM_POLICY_FINGERPRINT, CLAIM_POLICY_ID, CLAIM_POLICY_V1_FINGERPRINT, CLAIM_POLICY_V1_ID,
+} from '@harness/execution';
 import { openDb, type FinharnessDatabase } from '@harness/database';
 import { insertLegacyEvidenceFixture } from './helpers/legacyEvidenceFixture';
 
@@ -55,6 +57,18 @@ describe('canonical Claim grounding persistence', () => {
     }
   });
 
+  it('reads exact historical v1 Claim identity without changing it to v2', async () => {
+    const claim = await grounded();
+    await db.claims.save({ runId, messageId: 'bull_1', claim });
+    db.raw.prepare('UPDATE claims SET policy_id = ?, policy_fingerprint = ? WHERE run_id = ? AND claim_id = ?')
+      .run(CLAIM_POLICY_V1_ID, CLAIM_POLICY_V1_FINGERPRINT, runId, claim.claimId);
+
+    const stored = (await db.claims.getByRun(runId))[0]!;
+    expect(stored.policyId).toBe(CLAIM_POLICY_V1_ID);
+    expect(stored.policyFingerprint).toBe(CLAIM_POLICY_V1_FINGERPRINT);
+    expect((await db.execution.getExecutionWithArtifacts(runId)).claims[0]!.policyId).toBe(CLAIM_POLICY_V1_ID);
+  });
+
   it('is idempotent for identical current Claims and rejects every grounding conflict', async () => {
     const claim = await grounded();
     const first = await db.claims.save({ runId, messageId: 'bull_1', claim });
@@ -95,6 +109,9 @@ describe('canonical Claim grounding persistence', () => {
     await expect(db.claims.save({ runId, messageId: 'bull_1', claim: { ...claim, policyId: undefined } as never })).rejects.toThrow(/policy|ground/i);
     await expect(db.claims.save({ runId, messageId: 'bull_1', claim: { ...claim, policyId: 'claim-policy-v999' } as never }))
       .rejects.toThrow(/policy|ground/i);
+    await expect(db.claims.save({ runId, messageId: 'bull_1', claim: {
+      ...claim, policyId: CLAIM_POLICY_V1_ID, policyFingerprint: CLAIM_POLICY_V1_FINGERPRINT,
+    } as never })).rejects.toThrow(/policy|ground/i);
     await expect(db.claims.save({ runId, messageId: 'bull_1', claim: { ...claim, policyFingerprint: `${CLAIM_POLICY_FINGERPRINT}wrong` } as never }))
       .rejects.toThrow(/policy|ground/i);
   });

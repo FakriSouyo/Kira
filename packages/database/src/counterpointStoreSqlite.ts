@@ -10,6 +10,8 @@ import {
 import {
   COUNTERPOINT_POLICY_FINGERPRINT,
   COUNTERPOINT_POLICY_ID,
+  COUNTERPOINT_POLICY_V1_FINGERPRINT,
+  COUNTERPOINT_POLICY_V1_ID,
   type CounterpointStore,
   type StoredCounterpoint,
 } from '@harness/execution';
@@ -49,7 +51,8 @@ export function toStoredCounterpoint(row: CounterpointRow): StoredCounterpoint {
   const evidenceIds = JSON.parse(row.evidenceIds) as string[];
   const citedFigures = row.citedFigures === null ? undefined : CitedFigureSchema.array().parse(JSON.parse(row.citedFigures));
   const evidenceLinks = CounterpointEvidenceLinkSchema.array().parse(JSON.parse(row.evidenceLinks));
-  if (row.policyId !== COUNTERPOINT_POLICY_ID || row.policyFingerprint !== COUNTERPOINT_POLICY_FINGERPRINT) {
+  if (!((row.policyId === COUNTERPOINT_POLICY_ID && row.policyFingerprint === COUNTERPOINT_POLICY_FINGERPRINT)
+    || (row.policyId === COUNTERPOINT_POLICY_V1_ID && row.policyFingerprint === COUNTERPOINT_POLICY_V1_FINGERPRINT))) {
     throw new Error(`Counterpoint ${row.runId}/${row.counterpointId} has corrupt grounding metadata`);
   }
   const stored: StoredCounterpoint = {

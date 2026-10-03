@@ -36,7 +36,7 @@ export async function completeJudgeExecution(params: {
   let releasePlan: Awaited<ReturnType<typeof prepareJudgeReleasePlan>> | undefined;
   try {
     releaseKind = judgeReleaseKind(params.profile);
-    if (releaseKind === 'current') {
+    if (releaseKind !== 'legacy') {
       releasePlan = await prepareJudgeReleasePlan({
         stores: params.releaseStores,
         execution: params.execution,
@@ -60,7 +60,7 @@ export async function completeJudgeExecution(params: {
   }
 
   try {
-    const artifacts = releaseKind === 'current'
+    const artifacts = releaseKind !== 'legacy'
       ? (await publishJudgeRelease({
         stores: params.releaseStores,
         execution,

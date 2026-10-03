@@ -1,7 +1,7 @@
 import type { EvidenceStore } from '@harness/evidence';
 import { canonicalHash, EVIDENCE_POLICY_FINGERPRINT, EVIDENCE_POLICY_ID } from '@harness/evidence';
 import { verifyFinancialObservation, type FinancialDataMetadata, type FinancialObservationKind } from '@harness/financial-data';
-import { numericValueAtPath } from '@harness/execution';
+import { financialAssertionMatches, numericValueAtPath, resolveFinancialPathMeaning } from '@harness/execution';
 import { canonicalJson, hasTransactionDirective } from '@harness/shared';
 import type { Evidence } from '@harness/schemas';
 import { ChallengeReportPayloadSchema, type ChallengeCitedFigure, type ChallengeMetric, type ChallengeReportPayload } from '@harness/schemas';
@@ -23,33 +23,6 @@ interface GroundedEvidence {
   kind: FinancialKind;
   metadata: FinancialDataMetadata;
 }
-
-interface MetricDefinition {
-  metric: ChallengeMetric;
-  unitClass: ChallengeCitedFigure['unitClass'];
-}
-
-const COMPANY_REPORT_PATHS: Record<string, MetricDefinition> = {
-  'financials.roe': { metric: 'roe', unitClass: 'percent' },
-  'financials.roa': { metric: 'roa', unitClass: 'percent' },
-  'financials.netMargin': { metric: 'netMargin', unitClass: 'percent' },
-  'financials.grossMargin': { metric: 'grossMargin', unitClass: 'percent' },
-  'financials.debtToEquity': { metric: 'debtToEquity', unitClass: 'ratio' },
-  'financials.currentRatio': { metric: 'currentRatio', unitClass: 'ratio' },
-  'financials.yoyQuarterRevenueGrowth': { metric: 'revenueGrowthYoy', unitClass: 'percent' },
-  'financials.yoyQuarterEarningsGrowth': { metric: 'netIncomeGrowthYoy', unitClass: 'percent' },
-  'valuation.price': { metric: 'price', unitClass: 'nominal' },
-  'valuation.pe': { metric: 'pe', unitClass: 'multiple' },
-  'valuation.pb': { metric: 'pb', unitClass: 'multiple' },
-  'valuation.dividendYield': { metric: 'dividendYield', unitClass: 'percent' },
-};
-
-const QUARTERLY_FIELDS: Record<string, MetricDefinition> = {
-  revenue: { metric: 'revenue', unitClass: 'currency' },
-  netIncome: { metric: 'netIncome', unitClass: 'currency' },
-  revenueGrowthYoy: { metric: 'revenueGrowthYoy', unitClass: 'percent' },
-  netIncomeGrowthYoy: { metric: 'netIncomeGrowthYoy', unitClass: 'percent' },
-};
 
 const CURRENCY_CODES = new Set([
   'AED', 'ARS', 'AUD', 'BDT', 'BHD', 'BND', 'BRL', 'CAD', 'CHF', 'CLP', 'CNY', 'COP', 'CZK', 'DKK',
@@ -254,22 +227,20 @@ function validateAcceptedEvidence(evidence: Evidence, executionId: string, ticke
   return { evidence, kind, metadata };
 }
 
-function parseFinancialPath(path: string, item: GroundedEvidence): MetricDefinition & { value: number; periodLabel: string; currencyCode?: string } {
+function parseFinancialPath(path: string, item: GroundedEvidence): Pick<ChallengeCitedFigure, 'metric' | 'unitClass' | 'value' | 'periodLabel' | 'currencyCode'> {
   const { evidence, kind } = item;
-  let definition: MetricDefinition | undefined;
+  const meaning = resolveFinancialPathMeaning(kind, path, evidence.data);
   let periodLabel: string | undefined;
-  let currencyCode: string | undefined;
 
   if (kind === 'company_report') {
-    definition = COMPANY_REPORT_PATHS[path];
     const anchors = [item.metadata.dataAsOf, evidence.data.asOf].filter(value => value !== undefined && value !== null);
     if (anchors.length === 0 || anchors.some(value => typeof value !== 'string' || !value.trim()) || new Set(anchors).size !== 1) {
       invalidEvidence(`Company Report Evidence ${evidence.id} has no unambiguous reporting period`);
     }
     periodLabel = anchors[0] as string;
   } else {
-    const quarterMatch = /^quarters(?:\[(\d+)\]|\.(\d+))\.(revenue|netIncome|revenueGrowthYoy|netIncomeGrowthYoy)$/.exec(path);
-    const ytdMatch = /^cumulativeYtd\.(revenueGrowthYoy|netIncomeGrowthYoy)$/.exec(path);
+    const quarterMatch = /^quarters(?:\[(\d+)\]|\.(\d+))\./.exec(path);
+    const ytdMatch = /^cumulativeYtd\./.exec(path);
     if (quarterMatch) {
       const index = Number(quarterMatch[1] ?? quarterMatch[2]);
       const quarters = evidence.data.quarters;
@@ -283,28 +254,23 @@ function parseFinancialPath(path: string, item: GroundedEvidence): MetricDefinit
         invalidEvidence(`Quarterly Financials Evidence ${evidence.id} path ${path} is missing`);
       }
       const quarter = quarters[index] as Record<string, unknown>;
-      definition = QUARTERLY_FIELDS[quarterMatch[3]!];
       periodLabel = typeof quarter.period === 'string' ? quarter.period : undefined;
-      const currency = evidence.data.currency;
-      if (typeof currency === 'string' && /^[A-Z]{3}$/.test(currency)) currencyCode = currency;
     } else if (ytdMatch) {
       const ytd = evidence.data.cumulativeYtd;
       if (!isRecord(ytd)) invalidOutput(`Challenge cited unavailable Evidence path ${path}`);
-      definition = QUARTERLY_FIELDS[ytdMatch[1]!];
       periodLabel = typeof ytd.periodLabel === 'string' ? ytd.periodLabel : undefined;
     }
   }
 
-  if (!definition) invalidOutput(`Challenge cited unsupported Evidence path ${path}`);
+  if (!meaning) invalidOutput(`Challenge cited unsupported Evidence path ${path}`);
   const value = valueAtPath(item, path);
   if (!periodLabel || !periodLabel.trim()) invalidEvidence(`Evidence path ${path} has no verified reporting period`);
-  const finalUnit = definition.unitClass === 'currency' && !currencyCode ? 'nominal' : definition.unitClass;
   return {
-    metric: definition.metric,
-    unitClass: finalUnit,
+    metric: meaning.metric as ChallengeMetric,
+    unitClass: meaning.unitClass,
     value,
     periodLabel,
-    ...(finalUnit === 'currency' && currencyCode ? { currencyCode } : {}),
+    ...(meaning.currencyCode ? { currencyCode: meaning.currencyCode } : {}),
   };
 }
 
@@ -603,6 +569,11 @@ function validateStatement(statement: string, figures: ChallengeCitedFigure[]): 
       || (statedMetric === 'netIncome' && figure.metric === 'netIncomeGrowthYoy'));
     if (statedMetric !== figure.metric && !directGrowthMetric) invalidOutput('Challenge numeric assertion is linked to a different financial metric');
     assertFigureUnits(assertion, figure);
+    if (!financialAssertionMatches({
+      assertion: { ...assertion, metric: statedMetric },
+      figure,
+      statedMetric: figure.metric,
+    })) invalidOutput('Challenge numeric assertion has incompatible financial semantics');
   }
 
   validateDirectionalChanges(statement, figures);

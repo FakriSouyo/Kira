@@ -1,14 +1,24 @@
 const NUMERIC_TOLERANCE = 0.5;
 
 /** Supported literal assertions stay deliberately narrow: %, x, and bps. */
-export function numericAssertions(statement: string): number[] {
-  const values: number[] = [];
+export interface NumericAssertion {
+  value: number;
+  start: number;
+  end: number;
+}
+
+export function numericAssertionDetails(statement: string): NumericAssertion[] {
+  const assertions: NumericAssertion[] = [];
   const pattern = /(?<![\w.])-?\d+(?:\.\d+)?\s*(?:%|x|bps)(?![\w])/gi;
   for (const match of statement.matchAll(pattern)) {
     const value = Number.parseFloat(match[0]);
-    if (Number.isFinite(value)) values.push(value);
+    if (Number.isFinite(value)) assertions.push({ value, start: match.index!, end: match.index! + match[0].length });
   }
-  return values;
+  return assertions;
+}
+
+export function numericAssertions(statement: string): number[] {
+  return numericAssertionDetails(statement).map(assertion => assertion.value);
 }
 
 /** Resolve only simple property and numeric array-index paths used by CitedFigures. */

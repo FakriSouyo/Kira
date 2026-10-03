@@ -1,8 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { checkpointKindForNode, createJudgeWorkflow, createJudgeExecutionProfile, judgeWorkflowGraphFingerprint, type JudgeExecutionProfile, type JudgeNodeId } from '@harness/command-judge';
+import { checkpointKindForNode, createJudgeWorkflow, createJudgeExecutionProfile, judgeWorkflowGraphFingerprint, JUDGE_RELEASE_CONTRACT_V1, JUDGE_RELEASE_CONTRACT_V1_FINGERPRINT, type JudgeExecutionProfile, type JudgeNodeId } from '@harness/command-judge';
 import { createCapabilityPlan } from '@harness/capability';
-import { COUNTERPOINT_POLICY_FINGERPRINT, COUNTERPOINT_POLICY_ID } from '@harness/execution';
+import {
+  CLAIM_POLICY_FINGERPRINT,
+  CLAIM_POLICY_ID,
+  CLAIM_POLICY_V1_FINGERPRINT,
+  CLAIM_POLICY_V1_ID,
+  COUNTERPOINT_POLICY_FINGERPRINT,
+  COUNTERPOINT_POLICY_ID,
+  COUNTERPOINT_POLICY_V1_FINGERPRINT,
+  COUNTERPOINT_POLICY_V1_ID,
+} from '@harness/execution';
 import { createExecutionProfile, createWorkflowNodeOutput, type JsonValue, type ResearchExecution, type WorkflowNodeOutput } from '@harness/session-core';
 import { decodeJudgeCheckpoint, JudgeCheckpointWriter, planJudgeResume, workflowDependencyFingerprint, type JudgeCheckpointStores } from '@harness/engine';
 import { JUDGE_WORKFLOW_VERSION } from '@harness/command-judge';
@@ -388,6 +397,94 @@ describe('Judge checkpoint/resume engine core', () => {
     expect(restored.response.messageId).toBe('message-bull');
     expect(restored.claims).toEqual([validClaim]);
     expect(restored.result).toMatchObject({ subagent: 'bull', skills: [], value: response });
+  });
+
+  it('rejects interrupted current-format v1 Claim and Counterpoint policy state', async () => {
+    const bullNode = { ...definition.nodes.find(node => node.id === 'round-1-bull-thesis')!, dependsOn: [] };
+    const bearNode = { ...definition.nodes.find(node => node.id === 'round-1-bear-challenge')!, dependsOn: [] };
+    const v1Claim = {
+      ...validClaim,
+      evidenceLinks: [{ evidenceId, relation: 'supports', rationale: 'The current Claim cites this Evidence.' }],
+      policyId: CLAIM_POLICY_V1_ID,
+      policyFingerprint: CLAIM_POLICY_V1_FINGERPRINT,
+    };
+    const bullResponse = { reasoning: 'A sufficiently detailed reasoning summary.', claims: [validClaim], evidenceIds: [evidenceId], messageId: 'message-bull' };
+    const bullOutput = createOutput('round-1-bull-thesis', {
+      response: bullResponse, claims: [v1Claim], audit: { ...validAudit, contextSnapshotId: null },
+    } as unknown as JsonValue, { node: bullNode });
+    await expect(planJudgeResume(planOptions(createStores([bullOutput]).stores, createProfile(), { nodes: [bullNode] })))
+      .rejects.toMatchObject({ code: 'INCOMPATIBLE_CHECKPOINT' });
+
+    const proposal = { targetClaimId: 'claim_1', argument: 'This Evidence limits the conclusion.', strength: 'moderate', evidenceIds: [evidenceId],
+      evidenceLinks: [{ evidenceId, relation: 'qualifies', rationale: 'The report records a bounded figure.' }] };
+    const v1Counterpoint = {
+      ...proposal, counterpointId: 'counterpoint:round-1-bear-challenge:1', sourceNodeId: 'round-1-bear-challenge',
+      policyId: COUNTERPOINT_POLICY_V1_ID, policyFingerprint: COUNTERPOINT_POLICY_V1_FINGERPRINT,
+    };
+    const bearResponse = { reasoning: 'A sufficiently detailed Bear response.', counterpoints: [proposal], evidenceIds: [evidenceId], messageId: 'message-bear' };
+    const bearOutput = createOutput('round-1-bear-challenge', {
+      response: bearResponse, counterpoints: [v1Counterpoint], audit: validAudit,
+    } as unknown as JsonValue, { node: bearNode });
+    await expect(planJudgeResume(planOptions(createStores([bearOutput]).stores, createProfile(), { nodes: [bearNode] })))
+      .rejects.toMatchObject({ code: 'INCOMPATIBLE_CHECKPOINT' });
+  });
+
+  it('rejects an interrupted v1 release profile even when no grounded policy state exists', async () => {
+    const profile = createProfile();
+    const historicalProfile = withProfile(profile, {
+      payload: {
+        ...profile.payload,
+        releaseContract: JUDGE_RELEASE_CONTRACT_V1,
+        releaseContractFingerprint: JUDGE_RELEASE_CONTRACT_V1_FINGERPRINT,
+      } as unknown as JsonValue,
+    });
+    const { stores } = createStores();
+    await expect(planJudgeResume(planOptions(stores, historicalProfile)))
+      .rejects.toMatchObject({ code: 'INCOMPATIBLE_CHECKPOINT' });
+  });
+
+  it('resumes v2 policy state and rejects mixed or unknown Claim/Counterpoint identities', async () => {
+    const bullNode = { ...definition.nodes.find(node => node.id === 'round-1-bull-thesis')!, dependsOn: [] };
+    const bearNode = { ...definition.nodes.find(node => node.id === 'round-1-bear-challenge')!, dependsOn: [] };
+    const v2Claim = {
+      ...validClaim,
+      evidenceLinks: [{ evidenceId, relation: 'supports', rationale: 'The current Claim cites this Evidence.' }],
+      policyId: CLAIM_POLICY_ID,
+      policyFingerprint: CLAIM_POLICY_FINGERPRINT,
+    };
+    const bullResponse = { reasoning: 'A sufficiently detailed reasoning summary.', claims: [validClaim], evidenceIds: [evidenceId], messageId: 'message-bull' };
+    const v2Bull = createOutput('round-1-bull-thesis', {
+      response: bullResponse, claims: [v2Claim], audit: { ...validAudit, contextSnapshotId: null },
+    } as unknown as JsonValue, { node: bullNode });
+    await expect(planJudgeResume(planOptions(createStores([v2Bull]).stores, createProfile(), { nodes: [bullNode] })))
+      .resolves.toMatchObject({ policyVersion: 2, restored: [{ nodeId: 'round-1-bull-thesis' }] });
+
+    const proposal = { targetClaimId: 'claim_1', argument: 'This Evidence limits the conclusion.', strength: 'moderate', evidenceIds: [evidenceId],
+      evidenceLinks: [{ evidenceId, relation: 'qualifies', rationale: 'The report records a bounded figure.' }] };
+    const response = { reasoning: 'A sufficiently detailed Bear response.', counterpoints: [proposal], evidenceIds: [evidenceId], messageId: 'message-bear' };
+    const v2Counterpoint = {
+      ...proposal, counterpointId: 'counterpoint:round-1-bear-challenge:1', sourceNodeId: 'round-1-bear-challenge',
+      policyId: COUNTERPOINT_POLICY_ID, policyFingerprint: COUNTERPOINT_POLICY_FINGERPRINT,
+    };
+    const v2Bear = createOutput('round-1-bear-challenge', {
+      response, counterpoints: [v2Counterpoint], audit: validAudit,
+    } as unknown as JsonValue, { node: bearNode });
+    const v1Bull = createOutput('round-1-bull-thesis', {
+      response: bullResponse, claims: [{ ...v2Claim, policyId: CLAIM_POLICY_V1_ID, policyFingerprint: CLAIM_POLICY_V1_FINGERPRINT }],
+      audit: { ...validAudit, contextSnapshotId: null },
+    } as unknown as JsonValue, { node: bullNode });
+    const mixed = createStores([v1Bull, v2Bear]);
+    await expect(planJudgeResume(planOptions(mixed.stores, createProfile(), { nodes: [bullNode, bearNode] })))
+      .rejects.toMatchObject({ code: 'INCOMPATIBLE_CHECKPOINT' });
+    await expect(planJudgeResume(planOptions(createStores([v2Bull, v2Bear]).stores, createProfile(), { nodes: [bullNode, bearNode] })))
+      .resolves.toMatchObject({ policyVersion: 2, restored: [{ nodeId: 'round-1-bull-thesis' }, { nodeId: 'round-1-bear-challenge' }] });
+
+    const unknownClaim = { ...v2Claim, policyId: 'claim-policy-v99', policyFingerprint: 'a'.repeat(64) };
+    const unknown = createOutput('round-1-bull-thesis', {
+      response: bullResponse, claims: [unknownClaim], audit: { ...validAudit, contextSnapshotId: null },
+    } as unknown as JsonValue, { node: bullNode });
+    await expect(planJudgeResume(planOptions(createStores([unknown]).stores, createProfile(), { nodes: [bullNode] })))
+      .rejects.toMatchObject({ code: 'INCOMPATIBLE_CHECKPOINT' });
   });
 
   it('restores current grounded and historical Bear checkpoints, and rejects mixed representations', async () => {

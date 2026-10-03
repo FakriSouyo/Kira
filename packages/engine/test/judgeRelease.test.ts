@@ -6,6 +6,10 @@ import {
   createJudgeExecutionProfile,
   createJudgeWorkflow,
   judgeWorkflowGraphFingerprint,
+  JUDGE_RELEASE_CONTRACT_ID,
+  JUDGE_RELEASE_CONTRACT_FINGERPRINT,
+  JUDGE_RELEASE_CONTRACT_V1,
+  JUDGE_RELEASE_CONTRACT_V1_FINGERPRINT,
   type JudgeExecutionProfile,
   type JudgeNodeId,
 } from '@harness/command-judge';
@@ -13,8 +17,13 @@ import {
   buildClaimGraph,
   CLAIM_POLICY_FINGERPRINT,
   CLAIM_POLICY_ID,
+  CLAIM_POLICY_V1_FINGERPRINT,
+  CLAIM_POLICY_V1_ID,
   COUNTERPOINT_POLICY_FINGERPRINT,
   COUNTERPOINT_POLICY_ID,
+  COUNTERPOINT_POLICY_V1_FINGERPRINT,
+  COUNTERPOINT_POLICY_V1_ID,
+  createClaimGraphReleaseReceipt,
   type ClaimGraph,
   type ClaimGraphReleaseReceipt,
   type StoredClaim,
@@ -378,6 +387,63 @@ function prepare(harness: Harness) {
     execution: harness.execution,
     profile: harness.profile,
   });
+}
+
+function useHistoricalV1Policy(harness: Harness): void {
+  for (const claim of harness.storedClaims) {
+    claim.policyId = CLAIM_POLICY_V1_ID;
+    claim.policyFingerprint = CLAIM_POLICY_V1_FINGERPRINT;
+  }
+  for (const point of harness.storedCounterpoints) {
+    point.policyId = COUNTERPOINT_POLICY_V1_ID;
+    point.policyFingerprint = COUNTERPOINT_POLICY_V1_FINGERPRINT;
+  }
+  for (const output of harness.outputs) {
+    if (!output.payload || typeof output.payload !== 'object' || Array.isArray(output.payload)) continue;
+    const payload = output.payload as Record<string, unknown>;
+    if (Array.isArray(payload.claims)) {
+      payload.claims = payload.claims.map(claim => typeof claim === 'object' && claim !== null
+        ? { ...claim as Record<string, unknown>, policyId: CLAIM_POLICY_V1_ID, policyFingerprint: CLAIM_POLICY_V1_FINGERPRINT }
+        : claim);
+    }
+    if (Array.isArray(payload.counterpoints)) {
+      payload.counterpoints = payload.counterpoints.map(point => typeof point === 'object' && point !== null
+        ? { ...point as Record<string, unknown>, policyId: COUNTERPOINT_POLICY_V1_ID, policyFingerprint: COUNTERPOINT_POLICY_V1_FINGERPRINT }
+        : point);
+    }
+  }
+  harness.profile = createExecutionProfile({
+    executionId: harness.profile.executionId,
+    workflowId: harness.profile.workflowId,
+    workflowVersion: harness.profile.workflowVersion,
+    graphFingerprint: harness.profile.graphFingerprint,
+    command: harness.profile.command,
+    ticker: harness.profile.ticker,
+    payload: {
+      ...harness.profile.payload,
+      releaseContract: JUDGE_RELEASE_CONTRACT_V1,
+      releaseContractFingerprint: JUDGE_RELEASE_CONTRACT_V1_FINGERPRINT,
+    } as unknown as JsonValue,
+    createdAt: harness.profile.createdAt,
+  }) as JudgeExecutionProfile;
+  const fingerprints = new Map<string, string>();
+  for (const [index, old] of harness.outputs.entries()) {
+    const node = definition.nodes[index]!;
+    const output = createWorkflowNodeOutput({
+      executionId: old.executionId,
+      workflowId: old.workflowId,
+      workflowVersion: old.workflowVersion,
+      nodeId: old.nodeId,
+      status: old.status,
+      outputKind: old.outputKind,
+      dependencyFingerprint: workflowDependencyFingerprint(node, fingerprints, harness.profile.fingerprint),
+      payload: old.payload,
+      completionGeneration: old.completionGeneration,
+      createdAt: old.createdAt,
+    });
+    harness.outputs[index] = output;
+    fingerprints.set(output.nodeId, output.outputFingerprint);
+  }
 }
 
 function completionStores(releaseStores: JudgeReleaseStores) {
@@ -933,6 +999,85 @@ describe('host-neutral Judge completed release reconciliation', () => {
     await expect(reconcileCompletedJudgeReleases({ stores: state.stores, sessionId: harness.execution.sessionId })).resolves.toBe(0);
     expect(state.artifactWrites).toHaveBeenCalledOnce();
     expect(state.receiptWrites).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a complete historical v1 release intact without republishing it under v2', async () => {
+    const harness = createHarness();
+    useHistoricalV1Policy(harness);
+    const execution = completedExecution(harness);
+    const plan = await prepareJudgeReleasePlan({ stores: harness.stores, execution, profile: harness.profile });
+    expect(plan.policyVersion).toBe(1);
+    const canonical = await publishJudgeRelease({ stores: harness.stores, execution, profile: harness.profile, plan });
+    expect(canonical.receipt).toMatchObject({
+      releaseContractId: plan.releaseContractId,
+      releaseContractFingerprint: plan.releaseContractFingerprint,
+    });
+    const state = reconciliationStores(harness, { artifacts: canonical.artifacts, receipt: canonical.receipt });
+
+    await expect(reconcileCompletedJudgeReleases({ stores: state.stores, sessionId: execution.sessionId })).resolves.toBe(0);
+    expect(state.artifactWrites).not.toHaveBeenCalled();
+    expect(state.receiptWrites).not.toHaveBeenCalled();
+    expect(harness.storedClaims.every(claim => claim.policyId === CLAIM_POLICY_V1_ID)).toBe(true);
+    expect(harness.storedCounterpoints.every(point => point.policyId === COUNTERPOINT_POLICY_V1_ID)).toBe(true);
+  });
+
+  it('rejects a complete historical release whose self-consistent receipt pins another contract', async () => {
+    const harness = createHarness();
+    useHistoricalV1Policy(harness);
+    const execution = completedExecution(harness);
+    const plan = await prepareJudgeReleasePlan({ stores: harness.stores, execution, profile: harness.profile });
+    const canonical = await publishJudgeRelease({ stores: harness.stores, execution, profile: harness.profile, plan });
+    const { receiptId: _receiptId, schemaVersion: _schemaVersion, fingerprint: _fingerprint, ...receiptInput } = canonical.receipt;
+    const wrongContractReceipt = createClaimGraphReleaseReceipt({
+      ...receiptInput,
+      releaseContractId: JUDGE_RELEASE_CONTRACT_ID,
+      releaseContractFingerprint: JUDGE_RELEASE_CONTRACT_FINGERPRINT,
+    });
+    const state = reconciliationStores(harness, { artifacts: canonical.artifacts, receipt: wrongContractReceipt });
+
+    await expect(reconcileCompletedJudgeReleases({ stores: state.stores, sessionId: execution.sessionId }))
+      .rejects.toThrow(/release contract|receipt/i);
+    expect(state.artifactWrites).not.toHaveBeenCalled();
+    expect(state.receiptWrites).not.toHaveBeenCalled();
+  });
+
+  it('requires exact profile, policy, and release-contract parity in both directions', async () => {
+    const current = createHarness();
+    const currentExecution = completedExecution(current);
+    const currentPlan = await prepareJudgeReleasePlan({ stores: current.stores, execution: currentExecution, profile: current.profile });
+    await expect(publishJudgeRelease({
+      stores: current.stores, execution: currentExecution, profile: current.profile,
+      plan: { ...currentPlan, policyVersion: 1, releaseContractId: JUDGE_RELEASE_CONTRACT_V1.id, releaseContractFingerprint: JUDGE_RELEASE_CONTRACT_V1_FINGERPRINT },
+    })).rejects.toThrow(/identity or lifecycle/i);
+
+    const historical = createHarness();
+    useHistoricalV1Policy(historical);
+    const historicalExecution = completedExecution(historical);
+    const historicalPlan = await prepareJudgeReleasePlan({ stores: historical.stores, execution: historicalExecution, profile: historical.profile });
+    await expect(publishJudgeRelease({
+      stores: historical.stores, execution: historicalExecution, profile: historical.profile,
+      plan: { ...historicalPlan, policyVersion: 2, releaseContractId: JUDGE_RELEASE_CONTRACT_ID, releaseContractFingerprint: JUDGE_RELEASE_CONTRACT_FINGERPRINT },
+    })).rejects.toThrow(/identity or lifecycle/i);
+    expect(current.artifactWrites).not.toHaveBeenCalled();
+    expect(current.receiptWrites).not.toHaveBeenCalled();
+    expect(historical.artifactWrites).not.toHaveBeenCalled();
+    expect(historical.receiptWrites).not.toHaveBeenCalled();
+  });
+
+  it('repairs an incomplete completed v1 release with the exact historical policy identity', async () => {
+    const harness = createHarness();
+    useHistoricalV1Policy(harness);
+    const execution = completedExecution(harness);
+    const originalPlan = await prepareJudgeReleasePlan({ stores: harness.stores, execution, profile: harness.profile });
+    const canonical = await publishJudgeRelease({ stores: harness.stores, execution, profile: harness.profile, plan: originalPlan });
+    const state = reconciliationStores(harness, { artifacts: canonical.artifacts.slice(0, 2), receipt: null });
+
+    await expect(reconcileCompletedJudgeReleases({ stores: state.stores, sessionId: execution.sessionId })).resolves.toBe(1);
+    expect(state.artifactRows).toHaveLength(3);
+    const bull = state.artifactRows.find(artifact => artifact.kind === 'BULL_CASE')!;
+    const claims = (bull.payload as { thesis: { claims: Array<{ policyId: string }> } }).thesis.claims;
+    expect(claims.every(claim => claim.policyId === CLAIM_POLICY_V1_ID)).toBe(true);
+    expect(harness.storedClaims.every(claim => claim.policyId === CLAIM_POLICY_V1_ID)).toBe(true);
   });
 
   it.each([

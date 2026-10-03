@@ -3,8 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { BearProposalOutput } from '@harness/schemas';
+import type { EvidenceStore } from '@harness/evidence';
 import { openDb, type FinharnessDatabase } from '@harness/database';
 import { insertLegacyEvidenceFixture } from '../../database/test/helpers/legacyEvidenceFixture';
+import { acceptedFinancialEvidence } from './helpers/acceptedFinancialEvidence';
 import { CounterpointPolicy, COUNTERPOINT_POLICY_FINGERPRINT, COUNTERPOINT_POLICY_ID } from '../src/counterpointPolicy';
 
 let db: FinharnessDatabase;
@@ -47,8 +49,9 @@ function baseProposal(changes: Partial<BearProposalOutput['counterpoints'][numbe
 function ground(response = baseProposal(), options: {
   allowedEvidenceIds?: string[]; seenEvidenceIds?: string[]; allowedTargetClaimIds?: string[];
   sourceNodeId?: 'round-1-bear-challenge' | 'conditional-bear-rechallenge'; executionId?: string;
+  evidenceStore?: EvidenceStore;
 } = {}) {
-  return new CounterpointPolicy(db.evidence).ground({
+  return new CounterpointPolicy(options.evidenceStore ?? db.evidence).ground({
     executionId: options.executionId ?? runId,
     sourceNodeId: options.sourceNodeId ?? 'round-1-bear-challenge',
     response,
@@ -58,7 +61,7 @@ function ground(response = baseProposal(), options: {
   });
 }
 
-describe('Counterpoint Policy v1', () => {
+describe('Counterpoint Policy v2', () => {
   it('grounds Evidence, target, numeric assertions, source, and deterministic identity', async () => {
     const first = await ground();
     const retry = await ground();
@@ -73,6 +76,118 @@ describe('Counterpoint Policy v1', () => {
       evidenceLinks: [{ evidenceId, relation: 'qualifies' }],
       citedFigures: [{ evidenceId, path: 'multiple', value: 12.4 }],
     });
+  });
+
+  it('rejects a current financial Counterpoint that names a different metric with the same value', async () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const currentEvidence = acceptedFinancialEvidence({
+      id, runId, kind: 'company_report', data: {
+        ticker: 'BBCA', asOf: '2025-12-31',
+        financials: { roe: 23.1, roa: 5, netMargin: 10, grossMargin: 30, debtToEquity: 1, currentRatio: 1.5,
+          yoyQuarterRevenueGrowth: 8, yoyQuarterEarningsGrowth: 4 },
+        valuation: { price: 100, pe: 12, pb: 2, dividendYield: 3 },
+      },
+    });
+    const store = { getManyByIdsForRun: async (_runId: string, ids: string[]) => ids.includes(id) ? [currentEvidence] : [] } as unknown as EvidenceStore;
+    const response = baseProposal({
+      argument: 'Revenue growth reached 23.1%.',
+      evidenceIds: [id],
+      evidenceLinks: [{ evidenceId: id, relation: 'qualifies', rationale: 'The report gives ROE.' }],
+      citedFigures: [{ evidenceId: id, path: 'financials.roe', value: 23.1, periodLabel: '2025-12-31' }],
+    });
+    response.evidenceIds = [id];
+    await expect(ground(response, { allowedEvidenceIds: [id], seenEvidenceIds: [id], evidenceStore: store }))
+      .rejects.toThrow(/metric|financial|statement/i);
+  });
+
+  it('accepts a current financial Counterpoint when the metric, value, and unit match', async () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const currentEvidence = acceptedFinancialEvidence({
+      id, runId, kind: 'company_report', data: {
+        ticker: 'BBCA', asOf: '2025-12-31',
+        financials: { roe: 23.1, roa: 5, netMargin: 10, grossMargin: 30, debtToEquity: 1, currentRatio: 1.5,
+          yoyQuarterRevenueGrowth: 8, yoyQuarterEarningsGrowth: 4 },
+        valuation: { price: 100, pe: 12, pb: 2, dividendYield: 3 },
+      },
+    });
+    const store = { getManyByIdsForRun: async (_runId: string, ids: string[]) => ids.includes(id) ? [currentEvidence] : [] } as unknown as EvidenceStore;
+    const response = baseProposal({
+      argument: 'ROE reached 23.1%.',
+      evidenceIds: [id],
+      evidenceLinks: [{ evidenceId: id, relation: 'qualifies', rationale: 'The report gives ROE.' }],
+      citedFigures: [{ evidenceId: id, path: 'financials.roe', value: 23.1, periodLabel: '2025-12-31' }],
+    });
+    response.evidenceIds = [id];
+    await expect(ground(response, { allowedEvidenceIds: [id], seenEvidenceIds: [id], evidenceStore: store }))
+      .resolves.toHaveLength(1);
+  });
+
+  it('preserves numeric grounding for current financial Evidence outside semantic scope', async () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const currentEvidence = acceptedFinancialEvidence({ id, runId, kind: 'daily_transaction', data: { price: 23.1 } });
+    const store = { getManyByIdsForRun: async (_runId: string, ids: string[]) => ids.includes(id) ? [currentEvidence] : [] } as unknown as EvidenceStore;
+    const response = baseProposal({
+      argument: 'ROE reached 23.1%.',
+      evidenceIds: [id],
+      evidenceLinks: [{ evidenceId: id, relation: 'qualifies', rationale: 'The accepted observation has the value.' }],
+      citedFigures: [{ evidenceId: id, path: 'price', value: 23.1, periodLabel: '2025-12-31' }],
+    });
+    response.evidenceIds = [id];
+    await expect(ground(response, { allowedEvidenceIds: [id], seenEvidenceIds: [id], evidenceStore: store })).resolves.toHaveLength(1);
+  });
+
+  it('composes supported semantic and outside-scope numeric grounding in one Counterpoint', async () => {
+    const semanticId = '11111111-1111-4111-8111-111111111111';
+    const outsideId = '22222222-2222-4222-8222-222222222222';
+    const semanticEvidence = acceptedFinancialEvidence({
+      id: semanticId, runId, kind: 'company_report', data: {
+        ticker: 'BBCA', asOf: '2025-12-31', financials: { roe: 22.4 }, valuation: {},
+      },
+    });
+    const outsideEvidence = acceptedFinancialEvidence({ id: outsideId, runId, kind: 'daily_transaction', data: { upDaysPct: 60 } });
+    const store = { getManyByIdsForRun: async () => [semanticEvidence, outsideEvidence] } as unknown as EvidenceStore;
+    const response = baseProposal({
+      argument: 'ROE was 22.4%, while up days were 60%.',
+      evidenceIds: [semanticId, outsideId],
+      evidenceLinks: [
+        { evidenceId: semanticId, relation: 'qualifies', rationale: 'The report provides ROE.' },
+        { evidenceId: outsideId, relation: 'qualifies', rationale: 'The daily observation provides up days.' },
+      ],
+      citedFigures: [
+        { evidenceId: semanticId, path: 'financials.roe', value: 22.4, periodLabel: '2025-12-31' },
+        { evidenceId: outsideId, path: 'upDaysPct', value: 60, periodLabel: '2025-12-31' },
+      ],
+    });
+    response.evidenceIds = [semanticId, outsideId];
+    await expect(ground(response, { allowedEvidenceIds: [semanticId, outsideId], seenEvidenceIds: [semanticId, outsideId], evidenceStore: store }))
+      .resolves.toHaveLength(1);
+  });
+
+  it('does not let an outside-scope same-number figure rescue a semantic mismatch', async () => {
+    const semanticId = '11111111-1111-4111-8111-111111111111';
+    const outsideId = '22222222-2222-4222-8222-222222222222';
+    const semanticEvidence = acceptedFinancialEvidence({
+      id: semanticId, runId, kind: 'company_report', data: {
+        ticker: 'BBCA', asOf: '2025-12-31', financials: { roe: 22.4, yoyQuarterRevenueGrowth: 8 }, valuation: {},
+      },
+    });
+    const outsideEvidence = acceptedFinancialEvidence({ id: outsideId, runId, kind: 'daily_transaction', data: { upDaysPct: 22.4 } });
+    const store = { getManyByIdsForRun: async () => [semanticEvidence, outsideEvidence] } as unknown as EvidenceStore;
+    const response = baseProposal({
+      argument: 'Revenue growth was 22.4%, while up days were 22.4%.',
+      evidenceIds: [semanticId, outsideId],
+      evidenceLinks: [
+        { evidenceId: semanticId, relation: 'qualifies', rationale: 'The report provides ROE.' },
+        { evidenceId: outsideId, relation: 'qualifies', rationale: 'The daily observation provides up days.' },
+      ],
+      citedFigures: [
+        { evidenceId: semanticId, path: 'financials.roe', value: 22.4, periodLabel: '2025-12-31' },
+        { evidenceId: outsideId, path: 'upDaysPct', value: 22.4, periodLabel: '2025-12-31' },
+      ],
+    });
+    response.evidenceIds = [semanticId, outsideId];
+    await expect(ground(response, { allowedEvidenceIds: [semanticId, outsideId], seenEvidenceIds: [semanticId, outsideId], evidenceStore: store }))
+      .rejects.toThrow(/financial argument/i);
   });
 
   it('accepts supported bps and negative percentage figures', async () => {

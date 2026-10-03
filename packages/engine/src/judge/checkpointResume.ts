@@ -25,7 +25,10 @@ import type { WorkflowDefinition, WorkflowNode, WorkflowRestoreSeed } from '@har
 import { createWorkflowNodeOutput, type ExecutionProfile, type JsonValue, type ResearchExecution, type WorkflowNodeOutput } from '@harness/session-core';
 import type { Evidence } from '@harness/schemas';
 import { BearLLMOutputSchema, BearProposalResponseSchema, GroundedCounterpointSchema, HistoricalBearCounterpointSchema, BullLLMOutputSchema, ClaimSchema, JudgmentSchema, type BearCounterpoint, type BearCounterpointContext, type GroundedCounterpoint } from '@harness/schemas';
-import { COUNTERPOINT_POLICY_FINGERPRINT, COUNTERPOINT_POLICY_ID } from '@harness/execution';
+import {
+  claimPolicyVersionForIdentity,
+  counterpointPolicyVersionForIdentity,
+} from '@harness/execution';
 import { verifyFinancialObservation } from '@harness/financial-data';
 import type { SubagentResultLike, RestoredSubagentResult } from '@harness/subagent-core';
 import { validateCapabilityPlan, type CapabilityPlan } from '@harness/capability';
@@ -240,6 +243,7 @@ export interface JudgeResumePlan {
   reasoning: boolean;
   conditional: boolean;
   researchers: { market: boolean; news: boolean };
+  policyVersion?: 1 | 2;
   restored: WorkflowRestoreSeed[];
   outputs: WorkflowNodeOutput[];
 }
@@ -388,7 +392,7 @@ const CURRENT_COUNTERPOINT_MARKERS = [
 ] as const;
 
 export type ParsedCheckpointCounterpoints =
-  | { kind: 'current'; response: ReturnType<typeof BearProposalResponseSchema.parse>; counterpoints: GroundedCounterpoint[] }
+  | { kind: 'current'; version: 1 | 2; response: ReturnType<typeof BearProposalResponseSchema.parse>; counterpoints: GroundedCounterpoint[] }
   | { kind: 'historical'; response: unknown; counterpoints: BearCounterpoint[] };
 
 function containsCurrentCounterpointMarkers(value: unknown): boolean {
@@ -402,6 +406,7 @@ export function parseCheckpointCounterpoints(
   responseValue: unknown,
   counterpointsValue: unknown,
   label: string,
+  allowHistoricalPolicyV1 = false,
 ): ParsedCheckpointCounterpoints {
   if (!Array.isArray(counterpointsValue)) throw new Error(`Judge checkpoint ${label} has invalid Counterpoints`);
   const responseCounterpoints = typeof responseValue === 'object' && responseValue !== null
@@ -413,11 +418,15 @@ export function parseCheckpointCounterpoints(
   if (isCurrent) {
     const response = BearProposalResponseSchema.parse(responseValue);
     const counterpoints = GroundedCounterpointSchema.array().parse(counterpointsValue);
+    let version: 1 | 2 | undefined;
     counterpoints.forEach((point, index) => {
+      const pointVersion = counterpointPolicyVersionForIdentity(point.policyId, point.policyFingerprint);
       if (point.sourceNodeId !== nodeId || point.counterpointId !== `counterpoint:${nodeId}:${index + 1}`
-        || point.policyId !== COUNTERPOINT_POLICY_ID || point.policyFingerprint !== COUNTERPOINT_POLICY_FINGERPRINT) {
+        || pointVersion === undefined || (pointVersion === 1 && !allowHistoricalPolicyV1)
+        || (version !== undefined && version !== pointVersion)) {
         throw new Error(`Judge checkpoint ${label} has invalid Counterpoint identity or Policy metadata`);
       }
+      version = pointVersion;
     });
     const proposals = counterpoints.map(point => ({
       targetClaimId: point.targetClaimId,
@@ -428,7 +437,7 @@ export function parseCheckpointCounterpoints(
       ...(point.citedFigures !== undefined ? { citedFigures: point.citedFigures } : {}),
     }));
     assertSameSemanticParts(response.counterpoints, proposals, `${label} Counterpoints`);
-    return { kind: 'current', response, counterpoints };
+    return { kind: 'current', version: version ?? 2, response, counterpoints };
   }
 
   const historicalResponse = HistoricalBearCheckpointResponseSchema.parse(responseValue);
@@ -452,6 +461,47 @@ export interface JudgeCheckpointPlanningOptions {
   currentGraphFingerprint: string;
   runtime?: JudgeCheckpointRuntimeIdentity;
   requireCapabilityPlan: boolean;
+  allowHistoricalPolicyV1?: boolean;
+}
+
+function incompatibleFinancialPolicy(message: string): UserFriendlyError {
+  return new UserFriendlyError(
+    'INCOMPATIBLE_CHECKPOINT',
+    `${message} Start a new /judge.`,
+    `${message} Interrupted work cannot mix or resume under different Claim/Counterpoint acceptance semantics. Start a new /judge.`,
+  );
+}
+
+function checkpointPolicyVersion(outputs: readonly WorkflowNodeOutput[]): 1 | 2 | undefined {
+  const versions = new Set<1 | 2>();
+  const addClaim = (claim: unknown) => {
+    if (typeof claim !== 'object' || claim === null || Array.isArray(claim)) return;
+    const value = claim as Record<string, unknown>;
+    const hasPolicyState = Object.hasOwn(value, 'policyId') || Object.hasOwn(value, 'policyFingerprint')
+      || Object.hasOwn(value, 'evidenceLinks');
+    if (!hasPolicyState) return;
+    const version = claimPolicyVersionForIdentity(value.policyId, value.policyFingerprint);
+    if (version === undefined) throw incompatibleFinancialPolicy('A Judge checkpoint Claim has an unknown or incomplete policy identity.');
+    versions.add(version);
+  };
+  const addCounterpoint = (point: unknown) => {
+    if (typeof point !== 'object' || point === null || Array.isArray(point)) return;
+    const value = point as Record<string, unknown>;
+    const hasPolicyState = Object.hasOwn(value, 'policyId') || Object.hasOwn(value, 'policyFingerprint')
+      || Object.hasOwn(value, 'evidenceLinks') || Object.hasOwn(value, 'counterpointId') || Object.hasOwn(value, 'sourceNodeId');
+    if (!hasPolicyState) return;
+    const version = counterpointPolicyVersionForIdentity(value.policyId, value.policyFingerprint);
+    if (version === undefined) throw incompatibleFinancialPolicy('A Judge checkpoint Counterpoint has an unknown or incomplete policy identity.');
+    versions.add(version);
+  };
+  for (const output of outputs) {
+    if (!output.payload || typeof output.payload !== 'object' || Array.isArray(output.payload)) continue;
+    const payload = output.payload as Record<string, unknown>;
+    if (Array.isArray(payload.claims)) payload.claims.forEach(addClaim);
+    if (Array.isArray(payload.counterpoints)) payload.counterpoints.forEach(addCounterpoint);
+  }
+  if (versions.size > 1) throw incompatibleFinancialPolicy('A Judge checkpoint mixes Claim/Counterpoint policy versions.');
+  return versions.values().next().value as 1 | 2 | undefined;
 }
 
 /** Validates durable Judge outputs and derives the graph-order restore frontier. */
@@ -465,6 +515,9 @@ export async function planJudgeCheckpoint(params: JudgeCheckpointPlanningOptions
   }
   const payload = profilePayload(profile);
   const releaseKind = judgeReleaseKind(profile);
+  if (releaseKind === 'historical-v1' && execution.status !== 'completed') {
+    throw incompatibleFinancialPolicy('This interrupted Judge execution pins the historical v1 release contract.');
+  }
   const persistedCapabilityPlan = storedCapabilityPlan(payload, params.requireCapabilityPlan);
   if (profile.ticker !== execution.ticker) throw new Error('Judge execution profile ticker does not match the Execution');
   if (params.runtime?.capabilityPlanFingerprint !== undefined
@@ -483,6 +536,11 @@ export async function planJudgeCheckpoint(params: JudgeCheckpointPlanningOptions
   }
 
   const outputs = await stores.workflowNodeOutputs.listNodeOutputsForExecution(execution.id);
+  const allowHistoricalPolicyV1 = params.allowHistoricalPolicyV1 === true && execution.status === 'completed';
+  const policyVersion = checkpointPolicyVersion(outputs);
+  if (policyVersion === 1 && !allowHistoricalPolicyV1) {
+    throw incompatibleFinancialPolicy('This interrupted Judge checkpoint uses Claim/Counterpoint policy v1.');
+  }
   const byNode = new Map(outputs.map(output => [output.nodeId, output]));
   for (const output of outputs) {
     const node = definition.nodes.find(candidate => candidate.id === output.nodeId);
@@ -511,7 +569,7 @@ export async function planJudgeCheckpoint(params: JudgeCheckpointPlanningOptions
       continue;
     }
     if (!enabled) throw new Error(`Judge checkpoint ${execution.id}/${node.id} is completed but disabled by the original profile`);
-    const value = await decodeJudgeCheckpoint(node.id as JudgeNodeId, output, stores, execution);
+    const value = await decodeJudgeCheckpoint(node.id as JudgeNodeId, output, stores, execution, allowHistoricalPolicyV1);
     const audit = auditFromPayload(output.payload as Record<string, unknown>);
     if (audit?.contextSnapshotId) {
       const snapshot = await stores.contextSnapshots.getById(audit.contextSnapshotId);
@@ -532,6 +590,7 @@ export async function planJudgeCheckpoint(params: JudgeCheckpointPlanningOptions
     reasoning: payload.reasoningMode === 'reasoning',
     conditional: payload.conditional,
     researchers: payload.researchers,
+    ...(policyVersion !== undefined ? { policyVersion } : {}),
     restored,
     outputs: [...accepted.values()],
   };
@@ -580,6 +639,7 @@ export async function decodeJudgeCheckpoint(
   output: WorkflowNodeOutput,
   stores: Pick<JudgeCheckpointStores, 'financialSnapshots' | 'evidence'>,
   execution: ResearchExecution,
+  allowHistoricalPolicyV1 = false,
 ): Promise<unknown> {
   if (output.status === 'skipped') return undefined;
   if (!output.payload) throw new Error(`Judge checkpoint ${execution.id}/${nodeId} is completed without a payload`);
@@ -667,7 +727,7 @@ export async function decodeJudgeCheckpoint(
       const checkpoint = payload as unknown as JudgeBearCheckpoint;
       if (typeof (checkpoint.response as Record<string, unknown>).messageId !== 'string') throw new Error(`Judge checkpoint ${execution.id}/${nodeId} has no message identity`);
       const audit = assertModelAudit(checkpoint.audit);
-      const parsed = parseCheckpointCounterpoints(nodeId, checkpoint.response, checkpoint.counterpoints, `${execution.id}/${nodeId}`);
+      const parsed = parseCheckpointCounterpoints(nodeId, checkpoint.response, checkpoint.counterpoints, `${execution.id}/${nodeId}`, allowHistoricalPolicyV1);
       if (parsed.kind === 'current') {
         return { response: parsed.response, counterpoints: parsed.counterpoints, result: resultFromAudit(audit, checkpoint.response) } satisfies ChallengeTurn;
       }

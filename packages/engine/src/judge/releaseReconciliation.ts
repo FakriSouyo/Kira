@@ -39,7 +39,7 @@ export async function reconstructHistoricalJudgeArtifacts(params: {
     currentGraphFingerprint: judgeWorkflowGraphFingerprint(definition),
     requireCapabilityPlan: false,
   });
-  if (plan.releaseKind === 'current') {
+  if (plan.releaseKind !== 'legacy') {
     throw new Error(`Execution ${params.execution.id} has a current Judge release and cannot use historical artifact reconstruction`);
   }
   const outputs = new Map(plan.outputs.map(output => [output.nodeId, output]));
@@ -82,11 +82,18 @@ export async function reconcileCompletedJudgeReleases(params: {
     const profile = await params.stores.executionProfiles.getByExecutionId(execution.id);
     if (!profile || profile.workflowId !== 'judge' || profile.workflowVersion !== 2) continue;
     const existing = await params.stores.artifacts.getByExecution(execution.id);
-    if (judgeReleaseKind(profile) === 'current') {
+    if (judgeReleaseKind(profile) !== 'legacy') {
       const releasePlan = await prepareJudgeReleasePlan({ stores: params.stores, execution, profile });
       const receipt = existing.length === 3
         ? await params.stores.claimGraphReleases.getByExecution(execution.id)
         : null;
+      if (releasePlan.policyVersion === 1 && existing.length === 3 && receipt !== null) {
+        if (receipt.releaseContractId !== releasePlan.releaseContractId
+          || receipt.releaseContractFingerprint !== releasePlan.releaseContractFingerprint) {
+          throw new Error(`Execution ${execution.id} has a historical release receipt for a different release contract`);
+        }
+        continue;
+      }
       await publishJudgeRelease({ stores: params.stores, execution, profile, plan: releasePlan });
       if (existing.length !== 3 || receipt === null) repaired += 1;
       continue;

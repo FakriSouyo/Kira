@@ -11,8 +11,27 @@ import {
 import { canonicalJson, UserFriendlyError, ValidationError } from '@harness/shared';
 import type { EvidenceStore } from '@harness/evidence';
 import { matchesGroundedNumber, numericAssertions, numericValueAtPath } from './numericGrounding';
+import {
+  classifyFinancialEvidence,
+  financialStatementIsGroundedWithCompatibility,
+  resolveFinancialSemanticFigure,
+  type FinancialSemanticFigure,
+} from './financialSemanticGrounding';
 
-export const COUNTERPOINT_POLICY_VERSION = 1 as const;
+export const COUNTERPOINT_POLICY_V1_VERSION = 1 as const;
+export const COUNTERPOINT_POLICY_V1_ID = `counterpoint-policy-v${COUNTERPOINT_POLICY_V1_VERSION}` as const;
+export const COUNTERPOINT_POLICY_V1_FINGERPRINT = createHash('sha256')
+  .update(canonicalJson({
+    id: COUNTERPOINT_POLICY_V1_ID,
+    sourceNodeIds: ['round-1-bear-challenge', 'conditional-bear-rechallenge'],
+    targetClaims: 'explicit-allowed-claim-id-set',
+    evidence: 'unique-ids-links-set-parity-response-seen-allowed-execution-membership',
+    citedFigures: 'must-reference-counterpoint-linked-evidence',
+    numeric: 'literal-percent-multiple-bps-tolerance-0.5',
+  }), 'utf8')
+  .digest('hex');
+
+export const COUNTERPOINT_POLICY_VERSION = 2 as const;
 export const COUNTERPOINT_POLICY_ID = `counterpoint-policy-v${COUNTERPOINT_POLICY_VERSION}` as const;
 
 const COUNTERPOINT_POLICY_DESCRIPTOR = {
@@ -21,12 +40,23 @@ const COUNTERPOINT_POLICY_DESCRIPTOR = {
   targetClaims: 'explicit-allowed-claim-id-set',
   evidence: 'unique-ids-links-set-parity-response-seen-allowed-execution-membership',
   citedFigures: 'must-reference-counterpoint-linked-evidence',
-  numeric: 'literal-percent-multiple-bps-tolerance-0.5',
+  numeric: 'bounded-financial-semantic-grounding-v1',
+  semantics: 'metric-unit-currency-before-number-tolerance-0.5',
+  metricAliases: 'conservative-direct-terms-only',
+  quantitativeForms: 'unsupported-number-words-and-magnitude-modifiers-fail-closed',
+  currentEvidence: 'supported-company-report-and-quarterly-financials-fail-closed',
+  compatibilityEvidence: 'legacy-and-current-out-of-scope-numeric-grounding',
 } as const;
 
 export const COUNTERPOINT_POLICY_FINGERPRINT = createHash('sha256')
   .update(canonicalJson(COUNTERPOINT_POLICY_DESCRIPTOR), 'utf8')
   .digest('hex');
+
+export function counterpointPolicyVersionForIdentity(policyId: unknown, policyFingerprint: unknown): 1 | 2 | undefined {
+  if (policyId === COUNTERPOINT_POLICY_V1_ID && policyFingerprint === COUNTERPOINT_POLICY_V1_FINGERPRINT) return 1;
+  if (policyId === COUNTERPOINT_POLICY_ID && policyFingerprint === COUNTERPOINT_POLICY_FINGERPRINT) return 2;
+  return undefined;
+}
 
 export const COUNTERPOINT_SOURCE_NODE_IDS = ['round-1-bear-challenge', 'conditional-bear-rechallenge'] as const;
 export type CounterpointSourceNodeId = typeof COUNTERPOINT_SOURCE_NODE_IDS[number];
@@ -105,18 +135,45 @@ export class CounterpointPolicy {
 
     return response.counterpoints.map((proposal, index) => {
       const groundedFigures: Array<{ cited: number; actual: number }> = [];
+      const compatibilityFigures: Array<{ cited: number; actual: number }> = [];
+      const semanticFigures: FinancialSemanticFigure[] = [];
+      const citedSemanticFigures: FinancialSemanticFigure[] = [];
       for (const figure of proposal.citedFigures ?? []) {
-        const actual = numericValueAtPath(byId.get(figure.evidenceId)?.data, figure.path);
+        const citedEvidence = byId.get(figure.evidenceId)!;
+        const actual = numericValueAtPath(citedEvidence.data, figure.path);
         if (actual === undefined) throw new ValidationError(`Counterpoint Evidence path ${figure.path} is missing`);
         if (typeof actual !== 'number' || !matchesGroundedNumber(actual, figure.value)) {
           throw new ValidationError(`Counterpoint CitedFigure value mismatch at ${figure.path}`);
         }
+        const evidenceKind = classifyFinancialEvidence(citedEvidence);
+        if (evidenceKind.scope === 'invalid') throw new ValidationError('Counterpoint has invalid current financial Evidence semantics');
+        if (evidenceKind.scope === 'supported') {
+          const semanticFigure = resolveFinancialSemanticFigure({
+            kind: evidenceKind.kind, path: figure.path, data: citedEvidence.data, periodLabel: figure.periodLabel,
+          });
+          if (!semanticFigure) throw new ValidationError(`Counterpoint Evidence path ${figure.path} has no supported financial meaning`);
+          semanticFigures.push(semanticFigure);
+          citedSemanticFigures.push({ ...semanticFigure, value: figure.value });
+        } else {
+          compatibilityFigures.push({ cited: figure.value, actual });
+        }
         groundedFigures.push({ cited: figure.value, actual });
       }
-      for (const assertion of numericAssertions(proposal.argument)) {
-        if (!groundedFigures.some(figure => matchesGroundedNumber(assertion, figure.cited)
-          && matchesGroundedNumber(assertion, figure.actual))) {
-          throw new ValidationError(`Counterpoint numeric argument has no matching grounded CitedFigure`);
+      if (semanticFigures.length > 0 || citedSemanticFigures.length > 0) {
+        if (!financialStatementIsGroundedWithCompatibility({
+          statement: proposal.argument,
+          actualSemanticFigures: semanticFigures,
+          citedSemanticFigures,
+          compatibilityFigures,
+        })) {
+          throw new ValidationError('Counterpoint financial argument does not match its cited metric, unit, value, or currency');
+        }
+      } else {
+        for (const assertion of numericAssertions(proposal.argument)) {
+          if (!groundedFigures.some(figure => matchesGroundedNumber(assertion, figure.cited)
+            && matchesGroundedNumber(assertion, figure.actual))) {
+            throw new ValidationError(`Counterpoint numeric argument has no matching grounded CitedFigure`);
+          }
         }
       }
 

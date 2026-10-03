@@ -62,6 +62,7 @@ function companyReportEvidence(
       ticker: 'BBCA',
       ...(dataAsOf ? { asOf: dataAsOf } : {}),
       financials: { roe: 22.4 },
+      valuation: { pe: 12 },
     },
     metadata: {
       providerId: 'sectors',
@@ -174,6 +175,55 @@ describe('groundResearcherOutput', () => {
       gaps: ['No quarterly detail was supplied.'],
     });
     expect(store.getManyByIdsForRun).toHaveBeenCalledWith(executionId, [seenId]);
+  });
+
+  it.each([
+    'Revenue growth was 22.4%.',
+    'ROA was 22.4%.',
+    'P/E was 22.4x.',
+    'Revenue was IDR 22.4 billion.',
+  ])('rejects a current financial assertion for another metric: %s', async statement => {
+    const output = numericOutput();
+    output.findings[0]!.claim = statement;
+    await expect(ground(output)).rejects.toThrow(/metric|financial|statement/i);
+  });
+
+  it('rejects a current financial assertion with the wrong unit', async () => {
+    const output = numericOutput();
+    output.findings[0]!.claim = 'ROE was 22.4x.';
+    await expect(ground(output)).rejects.toThrow(/unit|metric|financial|statement/i);
+  });
+
+  it.each(['ROE was twenty-two point four percent.', 'ROE was twenty.'])('rejects unsupported Research number words: %s', async statement => {
+    const output = numericOutput();
+    output.findings[0]!.claim = statement;
+    await expect(ground(output)).rejects.toThrow(/metric|financial|statement/i);
+  });
+
+  it('accepts and rejects quarterly currency assertions according to the Evidence currency', async () => {
+    const output = numericOutput();
+    output.findings[0]!.claim = 'Revenue was IDR 100.';
+    output.findings[0]!.evidenceIds = [unseenId];
+    output.findings[0]!.citedFigures = [{ evidenceId: unseenId, path: 'quarters[0].revenue', value: 100, periodLabel: '2025-Q4' }];
+    output.sourceAssessments[0]!.evidenceId = unseenId;
+    const quarterly = quarterlyEvidence(unseenId);
+    await expect(ground(output, { seenEvidenceIds: [unseenId], evidenceStore: createEvidenceStore([quarterly]) })).resolves.toBeDefined();
+
+    output.findings[0]!.claim = 'Revenue was USD 100.';
+    await expect(ground(output, { seenEvidenceIds: [unseenId], evidenceStore: createEvidenceStore([quarterly]) })).rejects.toThrow(/currency|unit|financial|statement/i);
+
+    output.findings[0]!.claim = 'Revenue was IDR 100 billion.';
+    await expect(ground(output, { seenEvidenceIds: [unseenId], evidenceStore: createEvidenceStore([quarterly]) })).rejects.toThrow(/currency|unit|financial|statement/i);
+
+    output.findings[0]!.claim = 'Two sources report revenue of IDR 100.';
+    await expect(ground(output, { seenEvidenceIds: [unseenId], evidenceStore: createEvidenceStore([quarterly]) })).resolves.toBeDefined();
+  });
+
+  it('accepts the current metric, value, and unit for P/E', async () => {
+    const output = numericOutput();
+    output.findings[0]!.claim = 'P/E was 12x.';
+    output.findings[0]!.citedFigures = [{ evidenceId: seenId, path: 'valuation.pe', value: 12, periodLabel: '2024-12-31' }];
+    await expect(ground(output)).resolves.toMatchObject({ findings: [{ statement: 'P/E was 12x.' }] });
   });
 
   it('rejects invalid Researcher output through the producer schema', async () => {
@@ -311,7 +361,7 @@ describe('groundResearcherOutput', () => {
 
   it('grounds quarterly quarters[0] figures to the exact row period', async () => {
     const output = numericOutput();
-    output.findings[0]!.claim = 'Revenue grew 22.4%.';
+    output.findings[0]!.claim = 'Revenue growth was 22.4%.';
     output.findings[0]!.citedFigures![0]!.path = 'quarters[0].revenueGrowthYoy';
     output.findings[0]!.citedFigures![0]!.periodLabel = '2025-Q4';
 
@@ -322,7 +372,7 @@ describe('groundResearcherOutput', () => {
 
   it('rejects a quarterly quarters[0] label that differs from the row period', async () => {
     const output = numericOutput();
-    output.findings[0]!.claim = 'Revenue grew 22.4%.';
+    output.findings[0]!.claim = 'Revenue growth was 22.4%.';
     output.findings[0]!.citedFigures![0]!.path = 'quarters[0].revenueGrowthYoy';
     output.findings[0]!.citedFigures![0]!.periodLabel = '2025-Q3';
     await expect(ground(output, { evidenceStore: createEvidenceStore([quarterlyEvidence(seenId)]) }))
@@ -331,7 +381,7 @@ describe('groundResearcherOutput', () => {
 
   it('uses a historical quarterly row period instead of the latest metadata period', async () => {
     const output = numericOutput();
-    output.findings[0]!.claim = 'Revenue grew 20.4%.';
+    output.findings[0]!.claim = 'Revenue growth was 20.4%.';
     output.findings[0]!.citedFigures![0]!.path = 'quarters.1.revenueGrowthYoy';
     output.findings[0]!.citedFigures![0]!.value = 20.4;
     output.findings[0]!.citedFigures![0]!.periodLabel = '2025-Q3';
@@ -342,7 +392,7 @@ describe('groundResearcherOutput', () => {
 
   it('grounds quarterly cumulativeYtd figures to cumulativeYtd.periodLabel', async () => {
     const output = numericOutput();
-    output.findings[0]!.claim = 'Revenue grew 22.4% year over year.';
+    output.findings[0]!.claim = 'Revenue growth was 22.4% year over year.';
     output.findings[0]!.citedFigures![0]!.path = 'cumulativeYtd.revenueGrowthYoy';
     output.findings[0]!.citedFigures![0]!.periodLabel = '2025 FY vs 2024 FY';
     await expect(ground(output, { evidenceStore: createEvidenceStore([quarterlyEvidence(seenId)]) })).resolves.toMatchObject({
