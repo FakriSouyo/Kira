@@ -105,6 +105,11 @@ later slice is separately selected after source review.
 
 ## Repository rules
 
+`KIRA_TRANSACTION_AUTHORITY = HUMAN_ONLY`: the human owns every transaction
+decision. Kira does not own transaction authority. Do not add BUY/SELL/HOLD
+mappings, autonomous transaction recommendations, position-sizing advice, or
+broker/order execution authority.
+
 - Do not introduce abstractions, configuration layers, or fallback paths
   without a concrete current consumer and reviewed architectural need.
 - Keep the pnpm workspace strict: declare every imported workspace dependency

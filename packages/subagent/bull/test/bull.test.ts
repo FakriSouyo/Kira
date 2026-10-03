@@ -11,6 +11,7 @@ describe('BullAgent specialist', () => {
   it('owns only the evidence-backed-thesis skill and retains the mock marker', () => {
     expect(BULL_MANIFEST.skills).toEqual(['skills/evidence-backed-thesis/SKILL.md']);
     expect(BULL_MANIFEST.persona).toContain('Bull Agent');
+    expect(BULL_MANIFEST.persona).toContain('The human owns every transaction decision.');
   });
 
   it('builds a cited thesis and uses a distinct rebuttal prompt', async () => {

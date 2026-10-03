@@ -2,7 +2,7 @@ import type { EvidenceStore } from '@harness/evidence';
 import { canonicalHash, EVIDENCE_POLICY_FINGERPRINT, EVIDENCE_POLICY_ID } from '@harness/evidence';
 import { verifyFinancialObservation, type FinancialDataMetadata, type FinancialObservationKind } from '@harness/financial-data';
 import { numericValueAtPath } from '@harness/execution';
-import { canonicalJson } from '@harness/shared';
+import { canonicalJson, hasTransactionDirective } from '@harness/shared';
 import type { Evidence } from '@harness/schemas';
 import { ChallengeReportPayloadSchema, type ChallengeCitedFigure, type ChallengeMetric, type ChallengeReportPayload } from '@harness/schemas';
 import { ChallengeAnalystOutputSchema, type ChallengeAnalystOutput } from '@harness/subagent-challenger';
@@ -111,7 +111,8 @@ function hasUnavailableVerdict(text: string): boolean {
   return UNAVAILABLE_FINANCIAL_VERDICTS.test(text)
     || RECOMMENDATION_CONTEXT.test(text)
     || DIRECT_TICKER_RECOMMENDATION.test(text)
-    || STANDALONE_TRADE_INSTRUCTION.test(text);
+    || STANDALONE_TRADE_INSTRUCTION.test(text)
+    || hasTransactionDirective(text);
 }
 
 function changeDirection(verb: string): 1 | -1 | undefined {

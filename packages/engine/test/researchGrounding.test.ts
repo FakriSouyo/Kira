@@ -143,6 +143,21 @@ function ground(
 }
 
 describe('groundResearcherOutput', () => {
+  it.each(['summary', 'finding', 'source assessment rationale', 'gap'])(
+    'rejects transaction advice in Kira-authored %s prose', async (field) => {
+      const output = numericOutput();
+      const directive = 'I recommend selling BBCA.';
+      if (field === 'summary') output.summary = directive;
+      else if (field === 'finding') output.findings[0]!.claim = directive;
+      else if (field === 'source assessment rationale') output.sourceAssessments[0]!.rationale = directive;
+      else output.gaps[0] = directive;
+      const store = createEvidenceStore();
+
+      await expect(ground(output, { evidenceStore: store })).rejects.toThrow(/transaction/i);
+      expect(store.getManyByIdsForRun).not.toHaveBeenCalled();
+    },
+  );
+
   it('grounds a Company Report figure to its exact reference date', async () => {
     const store = createEvidenceStore();
     const result = await ground(numericOutput(), { evidenceStore: store });

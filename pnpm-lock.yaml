@@ -402,6 +402,9 @@ importers:
       '@harness/schemas':
         specifier: workspace:*
         version: link:../schemas
+      '@harness/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/routing:
     dependencies:

@@ -1,4 +1,4 @@
-import { canonicalJson } from '@harness/shared';
+import { canonicalJson, hasTransactionDirective, ValidationError } from '@harness/shared';
 import {
   createJudgeWorkflow,
   JUDGE_RELEASE_CONTRACT,
@@ -71,7 +71,31 @@ export interface JudgeArtifactContents {
   claimIds: string[];
 }
 
+function assertHumanTransactionAuthority(contents: JudgeArtifactContents): void {
+  const claims = [...contents.thesis.claims, ...contents.rebuttal.claims].flatMap(claim => [
+    claim.statement,
+    claim.reasoning,
+    ...(claim.evidenceLinks?.map(link => link.rationale) ?? []),
+  ]);
+  const counterpoints = contents.challenge.counterpoints.flatMap(counterpoint => [
+    counterpoint.argument,
+    ...('evidenceLinks' in counterpoint ? counterpoint.evidenceLinks.map(link => link.rationale) : []),
+  ]);
+  const text = [
+    contents.thesis.response.reasoning,
+    ...claims,
+    contents.rebuttal.response.reasoning,
+    contents.challenge.response.reasoning,
+    ...counterpoints,
+    contents.synthesis.judgment.summary,
+  ];
+  if (text.some(hasTransactionDirective)) {
+    throw new ValidationError('Judge artifacts contain a transaction directive; transaction decisions belong to the human.');
+  }
+}
+
 export function buildJudgeArtifactEnvelopes(execution: ResearchExecution, contents: JudgeArtifactContents, createdAt: string): ArtifactEnvelope[] {
+  assertHumanTransactionAuthority(contents);
   const base = {
     sessionId: execution.sessionId,
     turnId: execution.turnId,

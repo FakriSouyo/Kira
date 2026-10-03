@@ -9,7 +9,10 @@ layer. Its current product direction is IDX-oriented financial research:
 explicit workflows acquire and verify data, code enforces integrity, and
 durable state makes context, evidence, artifacts, and decisions inspectable.
 
-> LLMs propose. Data proves. Code verifies. Context persists. Kira decides.
+> LLMs propose. Data proves. Code verifies. Context persists. Humans decide.
+
+Kira is decision support, not transaction authority. The human owns each
+transaction decision.
 
 The CLI is Kira's first host adapter, not the engine boundary. The target is a
 shared host-neutral engine that future Desktop and Web surfaces can consume
@@ -1195,7 +1198,8 @@ Future direction: structured multi-dimensional risk assessment, not merely the
 Bear agent. Possible dimensions include financial, valuation, market, business,
 evidence, and freshness risk. Possible outputs include risk factors, severity,
 supporting evidence, contradictions, failure scenarios, and monitoring
-triggers. Specialist composition and schema are not locked.
+triggers. Risk Committee supports risk analysis and monitoring; it does not
+recommend a transaction. Specialist composition and schema are not locked.
 
 ## W — Research Graph
 
@@ -1226,9 +1230,11 @@ The database model is not locked.
 
 ## X — Decision Journal
 
-Future direction: explicit durable decisions and their reasoning context.
-Conceptual fields may include decision, date, research references, claim
-references, assumptions, conditions, and confidence.
+Future direction: durable records of decisions explicitly made by the human
+and their reasoning context. Conceptually this is a `HumanDecision`; Kira may
+attach research, assumptions, conditions, references, and confidence, but does
+not author BUY/SELL/HOLD decisions for the journal. The exact schema is not
+locked.
 
 ```text
 Decision:
@@ -1264,10 +1270,10 @@ comparison with original assumptions
 explicit reflection
 ```
 
-Reflection may ask which assumptions were correct, which evidence was missing,
-which signals mattered, and what changed after the decision. This is explicit
-durable research output/state, not self-training model weights, autonomous model
-modification, or uncontrolled long-term learning.
+Reflection evaluates assumptions, evidence, signals, and observed outcomes after
+the human's decision. It does not select the next transaction for the AI. This
+is explicit durable research output/state, not self-training model weights,
+autonomous model modification, or uncontrolled long-term learning.
 
 ## Z — Product Platform
 

@@ -12,6 +12,10 @@ import {
 const evidenceId = '11111111-1111-4111-8111-111111111111';
 
 describe('ResearcherAgent', () => {
+  it('keeps its prompt analytical and leaves transaction authority with the human', () => {
+    expect(RESEARCHER_MANIFEST.persona).toContain('The human owns every transaction decision.');
+  });
+
   it('owns only source-research and source-quality skills', () => {
     expect(RESEARCHER_MANIFEST).toMatchObject({
       id: 'researcher',

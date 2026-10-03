@@ -6,7 +6,7 @@
 
 **An evidence-backed financial research engine.**
 
-> LLMs propose. Data proves. Code verifies. Context persists. Kira decides.
+> LLMs propose. Data proves. Code verifies. Context persists. Humans decide.
 
 Kira combines explicit financial workflows, durable Session state, structured
 context, typed research artifacts, deterministic validation, and provider-backed
@@ -14,6 +14,9 @@ market data. Its current research focus is IDX-listed companies, using a
 provider-neutral financial-data boundary and Sectors as the current provider.
 
 ## Product boundary
+
+Kira is decision support, not transaction authority. The human owns every
+financial transaction decision.
 
 Kira is a reusable financial research engine. The CLI is its first host and
 remains a substantial host boundary; it is not a trivial adapter.

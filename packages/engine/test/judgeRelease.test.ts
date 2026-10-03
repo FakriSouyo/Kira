@@ -30,7 +30,9 @@ import {
   type WorkflowNodeOutput,
 } from '@harness/session-core';
 import type { ArtifactEnvelope } from '@harness/schemas';
+import { ValidationError } from '@harness/shared';
 import {
+  buildJudgeArtifactEnvelopes,
   completeJudgeExecution,
   JudgeExecutionCompletionError,
   prepareJudgeReleasePlan,
@@ -383,6 +385,24 @@ function completionStores(releaseStores: JudgeReleaseStores) {
 }
 
 describe('host-neutral Judge current release core', () => {
+  it('rejects transaction directives at the shared current and historical artifact boundary', async () => {
+    const harness = createHarness();
+    const plan = await prepare(harness);
+    const contents = {
+      ...plan.contents,
+      thesis: {
+        ...plan.contents.thesis,
+        response: { ...plan.contents.thesis.response, reasoning: 'You should buy BBCA.' },
+      },
+    };
+
+    expect(() => buildJudgeArtifactEnvelopes(harness.execution, contents, CREATED_AT)).toThrow(ValidationError);
+    const completedExecution: ResearchExecution = { ...harness.execution, status: 'completed', completedAt: COMPLETED_AT, executionTime: 60 };
+    await expect(publishJudgeRelease({ stores: harness.stores, execution: completedExecution, profile: harness.profile, plan: { ...plan, contents } }))
+      .rejects.toThrow(ValidationError);
+    expect(harness.artifactWrites).not.toHaveBeenCalled();
+  });
+
   it('prepares a complete current release and preserves the artifact graph projections', async () => {
     const harness = createHarness({ conditional: true });
     const plan = await prepare(harness);

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { JUDGE_NODE_IDS } from '@harness/command-judge';
 import { createJudgeNodeExecutors, type JudgeNodeRuntimeDependencies } from '@harness/engine';
 import { financialToolIds } from '@harness/engine';
+import { ValidationError } from '@harness/shared';
 import type { ToolRuntimeEvent } from '@harness/tool-runtime';
 
 const ticker = 'BBRI';
@@ -182,7 +183,177 @@ function createRuntime() {
   };
 }
 
+async function prepareSelection(runtime: ReturnType<typeof createRuntime>) {
+  const report = await runtime.executors['identify-company']({});
+  const financials = await runtime.executors['fetch-financials']({});
+  const sources = await runtime.executors['collect-sources']({
+    'identify-company': report,
+    'fetch-financials': financials,
+  });
+  return await runtime.executors['select-supporting-evidence']({ 'collect-sources': sources }) as { evidenceIds: string[] };
+}
+
+async function prepareDebate(runtime: ReturnType<typeof createRuntime>) {
+  const selection = await prepareSelection(runtime);
+  const thesis = await runtime.executors['round-1-bull-thesis']({ 'select-supporting-evidence': selection }) as { claims: Array<{ claimId: string }> };
+  const challenge = await runtime.executors['round-1-bear-challenge']({
+    'round-1-bull-thesis': thesis,
+    'select-supporting-evidence': selection,
+  });
+  const rebuttal = await runtime.executors['round-2-bull-rebuttal']({
+    'round-1-bear-challenge': challenge,
+    'select-supporting-evidence': selection,
+  });
+  return { selection, thesis, challenge, rebuttal };
+}
+
 describe('Judge node runtime', () => {
+  it.each(['reasoning', 'claim statement', 'claim reasoning', 'claim Evidence-link rationale'])(
+    'rejects a transaction directive in Bull %s before presentation or persistence', async (field) => {
+      const runtime = createRuntime();
+      const selection = await prepareSelection(runtime);
+      const evidenceId = selection.evidenceIds[0]!;
+      const response = {
+        reasoning: 'The verified financial evidence supports a durable operating thesis.',
+        evidenceIds: [evidenceId],
+        claims: [{
+          claimId: 'bull-claim-test',
+          statement: 'The company shows a durable financial profile.',
+          confidence: 'moderate',
+          reasoning: 'The verified source supports this claim within the reviewed period.',
+          evidenceIds: [evidenceId],
+          evidenceLinks: [{ evidenceId, relation: 'supports', rationale: 'The verified financial source supports the claim.' }],
+        }],
+      };
+      const directive = 'I recommend selling BBRI.';
+      if (field === 'reasoning') response.reasoning = directive;
+      else if (field === 'claim statement') response.claims[0]!.statement = directive;
+      else if (field === 'claim reasoning') response.claims[0]!.reasoning = directive;
+      else response.claims[0]!.evidenceLinks[0]!.rationale = directive;
+      runtime.bull.analyze.mockResolvedValueOnce({ value: response } as never);
+
+      await expect(runtime.executors['round-1-bull-thesis']({
+        'select-supporting-evidence': selection,
+      })).rejects.toThrow(ValidationError);
+      expect(runtime.emitted).not.toContainEqual(expect.objectContaining({ type: 'agent.text', agent: 'bull' }));
+      expect(runtime.claims.save).not.toHaveBeenCalled();
+      expect(runtime.conversation.addMessage).not.toHaveBeenCalledWith(expect.objectContaining({ agent: 'bull' }));
+      expect(runtime.checkpointNodes).not.toContain('round-1-bull-thesis');
+    },
+  );
+
+  it.each(['reasoning', 'counterpoint argument', 'counterpoint Evidence-link rationale'])(
+    'rejects a transaction directive in Bear %s before presentation or persistence', async (field) => {
+      const runtime = createRuntime();
+      const selection = await prepareSelection(runtime);
+      const thesis = await runtime.executors['round-1-bull-thesis']({ 'select-supporting-evidence': selection }) as { claims: Array<{ claimId: string }> };
+      const evidenceId = selection.evidenceIds[0]!;
+      const response = {
+        reasoning: 'A qualifying condition remains relevant to the bullish thesis.',
+        evidenceIds: [evidenceId],
+        counterpoints: [{
+          targetClaimId: thesis.claims[0]!.claimId,
+          argument: 'The available observation does not establish persistence.',
+          strength: 'moderate',
+          evidenceIds: [evidenceId],
+          evidenceLinks: [{ evidenceId, relation: 'qualifies', rationale: 'The observation has limited period coverage.' }],
+        }],
+      };
+      const directive = 'Risk remains elevated. Sell now.';
+      if (field === 'reasoning') response.reasoning = directive;
+      else if (field === 'counterpoint argument') response.counterpoints[0]!.argument = directive;
+      else response.counterpoints[0]!.evidenceLinks[0]!.rationale = directive;
+      runtime.bear.challenge.mockResolvedValueOnce({ value: response } as never);
+
+      await expect(runtime.executors['round-1-bear-challenge']({
+        'round-1-bull-thesis': thesis,
+        'select-supporting-evidence': selection,
+      })).rejects.toThrow(ValidationError);
+      expect(runtime.emitted).not.toContainEqual(expect.objectContaining({ type: 'agent.text', agent: 'bear' }));
+      expect(runtime.counterpoints.save).not.toHaveBeenCalled();
+      expect(runtime.conversation.addMessage).not.toHaveBeenCalledWith(expect.objectContaining({ agent: 'bear' }));
+      expect(runtime.checkpointNodes).not.toContain('round-1-bear-challenge');
+    },
+  );
+
+  it('rejects Judge transaction advice before emitting or persisting the summary', async () => {
+    const runtime = createRuntime();
+    const { selection, thesis, rebuttal } = await prepareDebate(runtime);
+    runtime.judge.evaluate.mockResolvedValueOnce({ value: {
+      ticker, score: 70, stance: 'bullish', confidence: 'moderate',
+      breakdown: { financialHealth: 70, growth: 70, valuation: 70, marketMomentum: null, risk: null },
+      summary: 'The evidence supports upside; you should buy BBRI.',
+    } } as never);
+
+    await expect(runtime.executors['evaluate-arguments']({
+      'round-1-bull-thesis': thesis,
+      'round-2-bull-rebuttal': rebuttal,
+      'select-supporting-evidence': selection,
+    })).rejects.toThrow(ValidationError);
+    expect(runtime.emitted).not.toContainEqual(expect.objectContaining({ type: 'agent.text', agent: 'judge' }));
+    expect(runtime.judgmentWrites).toHaveLength(0);
+    expect(runtime.conversation.addMessage).not.toHaveBeenCalledWith(expect.objectContaining({ agent: 'judge' }));
+    expect(runtime.checkpointNodes).not.toContain('evaluate-arguments');
+  });
+
+  it.each(['reasoning', 'claim statement', 'claim reasoning', 'claim Evidence-link rationale'])(
+    'rejects a transaction directive in conditional Bull %s before presentation or persistence', async (field) => {
+      const runtime = createRuntime();
+      const { selection, thesis, challenge, rebuttal } = await prepareDebate(runtime);
+      runtime.judge.evaluate.mockResolvedValueOnce({ value: {
+        ticker, score: 55, stance: 'neutral', confidence: 'moderate',
+        breakdown: { financialHealth: 55, growth: 55, valuation: 55, marketMomentum: null, risk: null },
+        summary: 'The evidence remains mixed and warrants another analytical round.',
+      } } as never);
+      await runtime.executors['evaluate-arguments']({
+        'round-1-bull-thesis': thesis,
+        'round-2-bull-rebuttal': rebuttal,
+        'select-supporting-evidence': selection,
+      });
+      const conditionalBear = await runtime.executors['conditional-bear-rechallenge']({
+        'round-1-bull-thesis': thesis,
+        'round-2-bull-rebuttal': rebuttal,
+        'select-supporting-evidence': selection,
+      });
+      const evidenceId = selection.evidenceIds[0]!;
+      const response = {
+        reasoning: 'The available evidence still has a material limitation.',
+        evidenceIds: [evidenceId],
+        claims: [{
+          claimId: 'conditional-bull-claim',
+          statement: 'The company shows a durable financial profile.',
+          confidence: 'moderate',
+          reasoning: 'The verified source supports this claim within the reviewed period.',
+          evidenceIds: [evidenceId],
+          evidenceLinks: [{ evidenceId, relation: 'supports', rationale: 'The verified financial source supports the claim.' }],
+        }],
+      };
+      const directive = 'You should buy BBRI.';
+      if (field === 'reasoning') response.reasoning = directive;
+      else if (field === 'claim statement') response.claims[0]!.statement = directive;
+      else if (field === 'claim reasoning') response.claims[0]!.reasoning = directive;
+      else response.claims[0]!.evidenceLinks[0]!.rationale = directive;
+      runtime.bull.rebuttal.mockResolvedValueOnce({ value: response } as never);
+      const textEventsBefore = runtime.emitted.filter(event => (event as { type?: string; agent?: string }).type === 'agent.text'
+        && (event as { agent?: string }).agent === 'bull').length;
+      const checkpointCountBefore = runtime.checkpointNodes.length;
+      const messageCountBefore = runtime.conversation.addMessage.mock.calls.length;
+      const claimCountBefore = runtime.claims.save.mock.calls.length;
+
+      await expect(runtime.executors['conditional-bull-rebuttal']({
+        'conditional-bear-rechallenge': conditionalBear,
+        'select-supporting-evidence': selection,
+      })).rejects.toThrow(ValidationError);
+      const textEventsAfter = runtime.emitted.filter(event => (event as { type?: string; agent?: string }).type === 'agent.text'
+        && (event as { agent?: string }).agent === 'bull').length;
+      expect(textEventsAfter).toBe(textEventsBefore);
+      expect(runtime.checkpointNodes).toHaveLength(checkpointCountBefore);
+      expect(runtime.conversation.addMessage).toHaveBeenCalledTimes(messageCountBefore);
+      expect(runtime.claims.save).toHaveBeenCalledTimes(claimCountBefore);
+      expect(runtime.checkpointNodes).not.toContain('conditional-bull-rebuttal');
+    },
+  );
+
   it('binds exactly every declared Judge node', () => {
     const { executors } = createRuntime();
     expect(Object.keys(executors).sort()).toEqual([...JUDGE_NODE_IDS].sort());

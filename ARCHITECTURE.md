@@ -110,6 +110,25 @@ and prompt identifiers; behavior and prompt bytes are unchanged. The @harness/* 
 and HarnessContext identifier remain unchanged. FinharnessConfig was renamed
 to CliConfig in KB1; no other internal identity migration occurred in KA or UA.
 
+## Human transaction authority
+
+```text
+KIRA_TRANSACTION_AUTHORITY = HUMAN_ONLY
+```
+
+Providers provide observations. LLMs propose analysis. Code verifies evidence
+and deterministic policy. Kira may analyze, compare, challenge, score, and
+explain; the human owns every transaction decision. An analytical `VERDICT`
+and its bullish, bearish, or neutral stance do not select BUY, SELL, or HOLD.
+
+Enforcement lives in the shared transaction-text policy, MainKiraAgent's
+explicit-request and generated-response boundaries, Research grounding before
+report publication, Judge node validation before text events or persistence,
+the Judge artifact builder used by current and historical release paths, and
+Challenge grounding (`INVALID_OUTPUT`). The matcher targets clear English and
+Indonesian directives while preserving factual market vocabulary and analytical
+stance outputs.
+
 ## Target direction — complete Kira engine
 
 The current packages/engine remains a partial host-neutral application
