@@ -45,6 +45,7 @@ describe('BearAgent specialist', () => {
   it('owns only the adversarial-challenge skill and retains the mock marker', () => {
     expect(BEAR_MANIFEST.skills).toEqual(['skills/adversarial-challenge/SKILL.md']);
     expect(BEAR_MANIFEST.persona).toContain('Bear Agent');
+    expect(BEAR_MANIFEST.persona).toContain('The human owns every transaction decision.');
   });
 
   it('challenges only claims supplied by Bull', async () => {

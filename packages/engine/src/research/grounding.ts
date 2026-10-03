@@ -2,7 +2,7 @@ import type { EvidenceStore } from '@harness/evidence';
 import { matchesGroundedNumber, numericAssertions, numericValueAtPath } from '@harness/execution';
 import type { ResearcherOutput } from '@harness/subagent-researcher';
 import { ResearcherOutputSchema } from '@harness/subagent-researcher';
-import { UserFriendlyError, ValidationError } from '@harness/shared';
+import { hasTransactionDirective, UserFriendlyError, ValidationError } from '@harness/shared';
 import { ResearchReportPayloadSchema, type Evidence, type ResearchReportPayload } from '@harness/schemas';
 
 export type GroundedResearchSynthesis = Pick<
@@ -90,6 +90,15 @@ export async function groundResearcherOutput(params: {
   if (!params.executionId.trim()) throw new ValidationError('Research grounding requires an Execution identity');
 
   const output = ResearcherOutputSchema.parse(params.output);
+  const prose = [
+    output.summary,
+    ...output.findings.map(finding => finding.claim),
+    ...output.sourceAssessments.map(assessment => assessment.rationale),
+    ...output.gaps,
+  ];
+  if (prose.some(hasTransactionDirective)) {
+    throw new ValidationError('Research output contains a transaction directive; transaction decisions belong to the human.');
+  }
   const seenEvidenceIds = new Set(params.seenEvidenceIds);
   const findingEvidenceIds = new Set<string>();
 

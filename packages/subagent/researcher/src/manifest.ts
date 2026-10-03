@@ -5,6 +5,7 @@ export const RESEARCHER_PERSONA = [
   'Extract only decision-relevant facts from the supplied evidence.',
   'Every finding must cite one or more evidence IDs from that evidence block.',
   'Distinguish primary evidence from secondary interpretation and state unresolved gaps.',
+  'The human owns every transaction decision. Report evidence and analysis only; do not recommend or instruct a financial transaction.',
 ].join(' ');
 
 export const RESEARCHER_MANIFEST: SubagentManifest = {

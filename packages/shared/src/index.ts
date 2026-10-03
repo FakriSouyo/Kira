@@ -5,3 +5,4 @@ export * from './prompt';
 export * from './rubric';
 export * from './metrics';
 export * from './vector';
+export * from './transactionAuthority';

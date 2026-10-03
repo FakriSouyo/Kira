@@ -24,7 +24,7 @@ import {
 } from '@harness/financial-data';
 import type { EvidenceStore } from '@harness/evidence';
 import type { ConversationStore } from '@harness/conversation';
-import { buildEvidenceZone, normalizeJudgmentScore, stanceForScore, UserFriendlyError, ValidationError } from '@harness/shared';
+import { buildEvidenceZone, hasTransactionDirective, normalizeJudgmentScore, stanceForScore, UserFriendlyError, ValidationError } from '@harness/shared';
 import type { CapabilityGateway, CapabilityPrincipal } from '@harness/capability';
 import type { ToolRuntimeEvent } from '@harness/tool-runtime';
 import type { BearAgent } from '@harness/subagent-bear';
@@ -150,6 +150,12 @@ export interface EvidenceAudit {
 }
 
 const ABORT_SUGGESTION = 'Run cancelled at phase boundary';
+
+function assertHumanTransactionAuthority(texts: readonly string[]): void {
+  if (texts.some(hasTransactionDirective)) {
+    throw new ValidationError('Judge output contains a transaction directive; transaction decisions belong to the human.');
+  }
+}
 
 /** Abort check at node boundaries — the same contract the manual pipeline enforced. */
 export function assertNotAborted(signal?: AbortSignal): void {
@@ -566,6 +572,14 @@ export function createJudgeNodeExecutors(deps: JudgeNodeRuntimeOptions): JudgeNo
       const context = specialistContext({ role: 'BULL', phase: 'THESIS', roundNumber: 1, evidence: selection.evidence });
       const result = await ctx.bull.analyze(context ? { context } : { ticker, evidenceZone: selection.evidenceZone });
       const response: BullAnalysisResponse = { ...result.value, messageId: `bull_${runId}` };
+      assertHumanTransactionAuthority([
+        response.reasoning,
+        ...response.claims.flatMap(claim => [
+          claim.statement,
+          claim.reasoning,
+          ...claim.evidenceLinks.map(link => link.rationale),
+        ]),
+      ]);
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
@@ -598,6 +612,13 @@ export function createJudgeNodeExecutors(deps: JudgeNodeRuntimeOptions): JudgeNo
       const context = specialistContext({ role: 'BEAR', phase: 'CHALLENGE', roundNumber: 1, evidence: selection.evidence, bullClaims: thesis.claims });
       const result = await ctx.bear.challenge(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bullClaims: thesis.claims });
       const response: BearChallengeResponse = { ...result.value, messageId: `bear_${runId}` };
+      assertHumanTransactionAuthority([
+        response.reasoning,
+        ...response.counterpoints.flatMap(counterpoint => [
+          counterpoint.argument,
+          ...('evidenceLinks' in counterpoint ? counterpoint.evidenceLinks.map(link => link.rationale) : []),
+        ]),
+      ]);
       events({ type: 'agent.text', agent: 'bear', text: response.reasoning });
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
@@ -637,6 +658,14 @@ export function createJudgeNodeExecutors(deps: JudgeNodeRuntimeOptions): JudgeNo
       const context = specialistContext({ role: 'BULL', phase: 'REBUTTAL', roundNumber: 1, evidence: selection.evidence, bullClaims, bearCounterpoints });
       const result = await ctx.bull.rebuttal(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bearCounterpoints });
       const response: BullAnalysisResponse = { ...result.value, messageId: `bull_rebuttal_${runId}` };
+      assertHumanTransactionAuthority([
+        response.reasoning,
+        ...response.claims.flatMap(claim => [
+          claim.statement,
+          claim.reasoning,
+          ...claim.evidenceLinks.map(link => link.rationale),
+        ]),
+      ]);
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
@@ -678,6 +707,7 @@ export function createJudgeNodeExecutors(deps: JudgeNodeRuntimeOptions): JudgeNo
         phase: 'EVALUATION', roundNumber: 1,
       });
       const judgment = result.value;
+      assertHumanTransactionAuthority([judgment.summary]);
       events({ type: 'agent.text', agent: 'judge', text: judgment.summary });
       assertNotAborted(signal);
       const turn = { judgment, allClaims, needsExtra: judgment.stance === 'neutral', result } satisfies JudgeTurn;
@@ -708,6 +738,13 @@ export function createJudgeNodeExecutors(deps: JudgeNodeRuntimeOptions): JudgeNo
       const context = specialistContext({ role: 'BEAR', phase: 'RECHALLENGE', roundNumber: 2, evidence: selection.evidence, bullClaims: allClaims });
       const result = await ctx.bear.challenge(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bullClaims: allClaims });
       const response: BearChallengeResponse = { ...result.value, messageId: `bear_${runId}_conditional` };
+      assertHumanTransactionAuthority([
+        response.reasoning,
+        ...response.counterpoints.flatMap(counterpoint => [
+          counterpoint.argument,
+          ...('evidenceLinks' in counterpoint ? counterpoint.evidenceLinks.map(link => link.rationale) : []),
+        ]),
+      ]);
       events({ type: 'agent.text', agent: 'bear', text: response.reasoning });
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
@@ -749,6 +786,14 @@ export function createJudgeNodeExecutors(deps: JudgeNodeRuntimeOptions): JudgeNo
       const context = specialistContext({ role: 'BULL', phase: 'REBUTTAL', roundNumber: 2, evidence: selection.evidence, bullClaims, bearCounterpoints });
       const result = await ctx.bull.rebuttal(context ? { context } : { ticker, evidenceZone: selection.evidenceZone, bearCounterpoints });
       const response: BullAnalysisResponse = { ...result.value, messageId: `bull_rebuttal_${runId}_conditional` };
+      assertHumanTransactionAuthority([
+        response.reasoning,
+        ...response.claims.flatMap(claim => [
+          claim.statement,
+          claim.reasoning,
+          ...claim.evidenceLinks.map(link => link.rationale),
+        ]),
+      ]);
       emitPublicText(events, 'bull', response.reasoning, 3);
       assertNotAborted(signal);
       ctx.validator.assertSeenEvidence(response.evidenceIds, selection.evidenceIds);
@@ -788,6 +833,7 @@ export function createJudgeNodeExecutors(deps: JudgeNodeRuntimeOptions): JudgeNo
         phase: 'RESOLUTION', roundNumber: 2,
       });
       const judgment = result.value;
+      assertHumanTransactionAuthority([judgment.summary]);
       events({ type: 'agent.text', agent: 'judge', text: judgment.summary });
       assertNotAborted(signal);
       const turn = { judgment, allClaims, needsExtra: true, result } satisfies JudgeTurn;

@@ -10,6 +10,10 @@ const evidenceId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const claim: Claim = { claimId: 'claim_1', statement: 'Profitability remains strong.', confidence: 'strong', reasoning: 'Reported profitability is positive and supported by primary evidence.', evidenceIds: [evidenceId] };
 
 describe('JudgeAgent specialist', () => {
+  it('keeps its prompt analytical and leaves transaction authority with the human', () => {
+    expect(JUDGE_MANIFEST.persona).toContain('The human owns every transaction decision.');
+  });
+
   it('owns evidence-weighing skill and retains the mock marker', () => {
     expect(JUDGE_MANIFEST.skills).toEqual(['skills/evidence-weighing/SKILL.md']);
     expect(JUDGE_MANIFEST.persona).toContain('Judge Agent');

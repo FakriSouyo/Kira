@@ -176,6 +176,17 @@ async function ground(params: {
 }
 
 describe('groundChallengeOutput', () => {
+  it.each([
+    'Evidence is mixed. Buy.',
+    'Risk remains elevated. Sell now.',
+    'The thesis remains uncertain. Hold it.',
+  ])('rejects an embedded standalone transaction directive: %s', async (summary) => {
+    const output = analystOutput({ statement: 'The report gives relevant context.', citedFigures: [] });
+    output.summary = summary;
+
+    await expect(ground({ output })).rejects.toMatchObject({ code: 'INVALID_OUTPUT' });
+  });
+
   it('validates current Evidence once in Execution scope and derives figure semantics from its path', async () => {
     const reportEvidence = report();
     const quarterlyEvidence = quarterly();
