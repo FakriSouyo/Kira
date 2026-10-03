@@ -1,5 +1,12 @@
 import type { EvidenceStore } from '@harness/evidence';
-import { matchesGroundedNumber, numericAssertions, numericValueAtPath } from '@harness/execution';
+import {
+  financialStatementIsGrounded,
+  matchesGroundedNumber,
+  numericAssertions,
+  numericValueAtPath,
+  resolveFinancialSemanticFigure,
+  type FinancialSemanticFigure,
+} from '@harness/execution';
 import type { ResearcherOutput } from '@harness/subagent-researcher';
 import { ResearcherOutputSchema } from '@harness/subagent-researcher';
 import { hasTransactionDirective, UserFriendlyError, ValidationError } from '@harness/shared';
@@ -170,8 +177,17 @@ export async function groundResearcherOutput(params: {
       if (figure.periodLabel !== periodLabel) {
         throw new ValidationError(`Research finding CitedFigure period label mismatch at ${figure.path}`);
       }
-      return { cited: figure.value, actual, figure: { ...figure, periodLabel } };
+      const semanticFigure = resolveFinancialSemanticFigure({
+        kind: observationKind(citedEvidence), path: figure.path, data: citedEvidence.data, periodLabel,
+      });
+      if (!semanticFigure) {
+        throw new ValidationError(`Research finding Evidence path ${figure.path} has no supported financial meaning`);
+      }
+      return { cited: figure.value, actual, semanticFigure, figure: { ...figure, periodLabel } };
     });
+    if (!financialStatementIsGrounded(finding.claim, groundedFigures.map(grounded => grounded.semanticFigure as FinancialSemanticFigure))) {
+          throw new ValidationError('Research numeric financial statement does not match its cited metric, unit, value, or currency');
+    }
     for (const assertion of numericAssertions(finding.claim)) {
       if (!groundedFigures.some(figure =>
         matchesGroundedNumber(assertion, figure.cited) && matchesGroundedNumber(assertion, figure.actual))) {

@@ -10,9 +10,10 @@ Interface siklus eksekusi + validasi klaim.
 | `counterpointStore.ts` | `CounterpointStore` + `StoredCounterpoint` |
 | `claimGraph.ts` | Typed execution-local Claim Graph projection and deterministic traversal helpers |
 | `claimValidator.ts` | `ClaimValidator` — 3 lapis validasi: (1) struktur Zod, (2) evidence ID ada di DB, (3) evidence anggota run ini |
-| `claimPolicy.ts` | `claim-policy-v1` — mengubah Bull `ClaimProposal` menjadi Claim kanonik dengan tautan Evidence eksplisit, grounding angka, dan anotasi `singleMetric` deterministik |
-| `counterpointPolicy.ts` | `counterpoint-policy-v1` — mengubah Bear proposal menjadi Counterpoint kanonik dengan target Claim, Evidence links, CitedFigures, dan identitas code-owned yang deterministik |
-| `numericGrounding.ts` | Helper sempit untuk literal angka `%`, `x`, dan `bps` yang dipakai Claim Policy dan Counterpoint Policy |
+| `claimPolicy.ts` | `claim-policy-v2` — mengubah Bull `ClaimProposal` menjadi Claim kanonik dengan tautan Evidence eksplisit, grounding finansial semantik, dan anotasi `singleMetric` deterministik |
+| `counterpointPolicy.ts` | `counterpoint-policy-v2` — mengubah Bear proposal menjadi Counterpoint kanonik dengan target Claim, Evidence links, CitedFigures, dan identitas code-owned yang deterministik |
+| `financialSemanticGrounding.ts` | Resolves accepted financial Evidence paths to a metric, unit, currency, and bounded statement assertions shared by Claim, Counterpoint, Research, and Challenge |
+| `numericGrounding.ts` | Helper untuk grounding numerik yang dipakai Claim Policy dan Counterpoint Policy |
 
 Catatan:
 - Implementasi store SQLite ada di `@harness/database`; paket ini bebas dependensi storage.

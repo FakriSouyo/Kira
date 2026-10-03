@@ -284,7 +284,7 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
       counterpointId: 'counterpoint:round-1-bear-challenge:1',
       evidenceIds: [expect.any(String)],
       evidenceLinks: [expect.objectContaining({ relation: 'qualifies' })],
-      policyId: 'counterpoint-policy-v1',
+      policyId: 'counterpoint-policy-v2',
     });
     expect((await db.counterpoints.getByRun(artifacts.run.id))).toHaveLength(artifacts.bear.counterpoints.length);
     const challengeMessage = (await db.conversation.getByRun(artifacts.run.id)).find((message) => message.messageType === 'challenge')!;
@@ -368,7 +368,7 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
         counterpointId: 'counterpoint:round-1-bear-challenge:1',
         evidenceIds: [expect.any(String)],
         evidenceLinks: [expect.objectContaining({ relation: 'qualifies' })],
-        policyId: 'counterpoint-policy-v1',
+        policyId: 'counterpoint-policy-v2',
       });
     }
 
@@ -414,7 +414,7 @@ describe('/judge runs through the workflow runtime (PR C)', () => {
         sourceNodeId: 'conditional-bear-rechallenge',
         evidenceIds: [expect.any(String)],
         evidenceLinks: [expect.objectContaining({ relation: 'qualifies' })],
-        policyId: 'counterpoint-policy-v1',
+        policyId: 'counterpoint-policy-v2',
       });
     }
     const storedCounterpoints = await db.counterpoints.getByRun(result.run.id);

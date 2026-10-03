@@ -614,7 +614,7 @@ describe('PR P final acceptance hardening', () => {
     const claims = (await fixture.db.claims.getByRun(fixture.executionId))
       .filter(claim => claim.claimId.startsWith('claim_')).map(storedClaimToClaim);
     expect(claims.some(claim => (claim.citedFigures?.length ?? 0) > 0)).toBe(true);
-    expect(claims.every(claim => claim.policyId === 'claim-policy-v1' && (claim.evidenceLinks?.length ?? 0) > 0)).toBe(true);
+    expect(claims.every(claim => claim.policyId === 'claim-policy-v2' && (claim.evidenceLinks?.length ?? 0) > 0)).toBe(true);
     const packets = fixture.db.raw.prepare('SELECT packet_json FROM context_snapshots WHERE session_id = ? AND turn_id = ?')
       .all(fixture.sessionId, fixture.turnId) as Array<{ packet_json: string }>;
     const rebuttal = packets.map(row => JSON.parse(row.packet_json) as { specialist?: { role?: string; phase?: string; bullClaims?: unknown[] } })
@@ -633,7 +633,7 @@ describe('PR P final acceptance hardening', () => {
     expect(payload.counterpoints[0]).toMatchObject({
       counterpointId: 'counterpoint:round-1-bear-challenge:1',
       sourceNodeId: 'round-1-bear-challenge',
-      policyId: 'counterpoint-policy-v1',
+      policyId: 'counterpoint-policy-v2',
       evidenceIds: [expect.any(String)],
       evidenceLinks: [expect.objectContaining({ relation: 'qualifies' })],
     });

@@ -114,7 +114,7 @@ describe('PR F /judge typed artifacts', () => {
     expect(bearCounterpoints.map(point => point.counterpointId).sort()).toEqual(roundOneCounterpoints.map(point => point.counterpointId).sort());
     expect(bearCounterpoints.every(point => point.sourceNodeId === 'round-1-bear-challenge')).toBe(true);
     expect(bearCounterpoints.every(point => Array.isArray(point.evidenceIds) && Array.isArray(point.evidenceLinks)
-      && point.policyId === 'counterpoint-policy-v1')).toBe(true);
+      && point.policyId === 'counterpoint-policy-v2')).toBe(true);
     const bullPayload = artifacts[0]!.payload as {
       thesis: { claims: Array<{ claimId: string }> };
       rebuttal: { claims: Array<{ claimId: string }> };

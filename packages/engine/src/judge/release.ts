@@ -5,6 +5,8 @@ import {
   judgeWorkflowGraphFingerprint,
   JUDGE_RELEASE_CONTRACT_ID,
   JUDGE_RELEASE_CONTRACT_FINGERPRINT,
+  JUDGE_RELEASE_CONTRACT_V1_ID,
+  JUDGE_RELEASE_CONTRACT_V1_FINGERPRINT,
   type JudgeNodeId,
 } from '@harness/command-judge';
 import type { WorkflowNodeOutput, ArtifactStore, ExecutionProfile, ResearchExecution } from '@harness/session-core';
@@ -12,13 +14,11 @@ import { ArtifactEnvelopeSchema, ClaimSchema, type ArtifactEnvelope, type Ground
 import {
   buildClaimGraph,
   claimGraphFingerprint,
+  claimPolicyVersionForIdentity,
   CLAIM_GRAPH_CONTRACT_FINGERPRINT,
   CLAIM_GRAPH_ID,
   CLAIM_GRAPH_VERSION,
-  CLAIM_POLICY_FINGERPRINT,
-  CLAIM_POLICY_ID,
-  COUNTERPOINT_POLICY_FINGERPRINT,
-  COUNTERPOINT_POLICY_ID,
+  counterpointPolicyVersionForIdentity,
   createClaimGraphReleaseReceipt,
   storedClaimToClaim,
   storedCounterpointToCounterpoint,
@@ -141,6 +141,7 @@ function restoredValue<T>(plan: JudgeResumePlan, nodeId: JudgeNodeId): T {
 
 function assertCurrentClaimParity(
   executionId: string,
+  policyVersion: 1 | 2,
   expectedByNode: readonly { nodeId: JudgeNodeId; messageId: string; claims: readonly unknown[] }[],
   stored: Awaited<ReturnType<JudgeReleaseStores['claims']['getByRun']>>,
 ): void {
@@ -148,7 +149,7 @@ function assertCurrentClaimParity(
   for (const group of expectedByNode) {
     for (const raw of group.claims) {
       const claim = ClaimSchema.parse(raw);
-      if (claim.policyId !== CLAIM_POLICY_ID || claim.policyFingerprint !== CLAIM_POLICY_FINGERPRINT) {
+      if (claimPolicyVersionForIdentity(claim.policyId, claim.policyFingerprint) !== policyVersion) {
         throw new Error(`Current Claim ${claim.claimId} in ${executionId}/${group.nodeId} has unsupported Policy metadata`);
       }
       if (expected.has(claim.claimId)) throw new Error(`Judge checkpoints contain duplicate Claim ${claim.claimId}`);
@@ -158,8 +159,8 @@ function assertCurrentClaimParity(
   if (stored.length !== expected.size) throw new Error(`Execution ${executionId} ClaimStore does not match the completed Claim checkpoints`);
   for (const row of stored) {
     const checkpoint = expected.get(row.claimId);
-    if (!checkpoint || row.messageId !== checkpoint.messageId || row.policyId !== CLAIM_POLICY_ID
-      || row.policyFingerprint !== CLAIM_POLICY_FINGERPRINT || row.reasoning === null) {
+    if (!checkpoint || row.messageId !== checkpoint.messageId
+      || claimPolicyVersionForIdentity(row.policyId, row.policyFingerprint) !== policyVersion || row.reasoning === null) {
       throw new Error(`Execution ${executionId} ClaimStore identity or Policy does not match Claim ${row.claimId}`);
     }
     const durable = ClaimSchema.parse(storedClaimToClaim(row));
@@ -171,13 +172,14 @@ function assertCurrentClaimParity(
 
 function assertCurrentCounterpointParity(
   executionId: string,
+  policyVersion: 1 | 2,
   expectedByNode: readonly { nodeId: JudgeNodeId; messageId: string; counterpoints: readonly GroundedCounterpoint[] }[],
   stored: Awaited<ReturnType<JudgeReleaseStores['counterpoints']['getByRun']>>,
 ): void {
   const expected = new Map<string, { messageId: string; value: GroundedCounterpoint }>();
   for (const group of expectedByNode) {
     for (const counterpoint of group.counterpoints) {
-      if (counterpoint.policyId !== COUNTERPOINT_POLICY_ID || counterpoint.policyFingerprint !== COUNTERPOINT_POLICY_FINGERPRINT) {
+      if (counterpointPolicyVersionForIdentity(counterpoint.policyId, counterpoint.policyFingerprint) !== policyVersion) {
         throw new Error(`Current Counterpoint ${counterpoint.counterpointId} in ${executionId}/${group.nodeId} has unsupported Policy metadata`);
       }
       if (expected.has(counterpoint.counterpointId)) throw new Error(`Judge checkpoints contain duplicate Counterpoint ${counterpoint.counterpointId}`);
@@ -187,8 +189,8 @@ function assertCurrentCounterpointParity(
   if (stored.length !== expected.size) throw new Error(`Execution ${executionId} CounterpointStore does not match the completed Counterpoint checkpoints`);
   for (const row of stored) {
     const checkpoint = expected.get(row.counterpointId);
-    if (!checkpoint || row.messageId !== checkpoint.messageId || row.policyId !== COUNTERPOINT_POLICY_ID
-      || row.policyFingerprint !== COUNTERPOINT_POLICY_FINGERPRINT) {
+    if (!checkpoint || row.messageId !== checkpoint.messageId
+      || counterpointPolicyVersionForIdentity(row.policyId, row.policyFingerprint) !== policyVersion) {
       throw new Error(`Execution ${executionId} CounterpointStore identity or Policy does not match Counterpoint ${row.counterpointId}`);
     }
     const durable = storedCounterpointToCounterpoint(row);
@@ -201,8 +203,9 @@ function assertCurrentCounterpointParity(
 export interface JudgeReleasePlan {
   readonly executionId: string;
   readonly profileFingerprint: string;
-  readonly releaseContractId: typeof JUDGE_RELEASE_CONTRACT_ID;
-  readonly releaseContractFingerprint: typeof JUDGE_RELEASE_CONTRACT_FINGERPRINT;
+  readonly policyVersion: 1 | 2;
+  readonly releaseContractId: typeof JUDGE_RELEASE_CONTRACT_ID | typeof JUDGE_RELEASE_CONTRACT_V1_ID;
+  readonly releaseContractFingerprint: typeof JUDGE_RELEASE_CONTRACT_FINGERPRINT | typeof JUDGE_RELEASE_CONTRACT_V1_FINGERPRINT;
   readonly graph: ClaimGraph;
   readonly graphFingerprint: string;
   readonly artifactProjections: readonly ClaimGraphArtifactProjection[];
@@ -241,8 +244,9 @@ export async function prepareJudgeReleasePlan(params: {
     definition,
     currentGraphFingerprint: judgeWorkflowGraphFingerprint(definition),
     requireCapabilityPlan: false,
+    allowHistoricalPolicyV1: params.execution.status === 'completed',
   });
-  if (plan.releaseKind !== 'current') throw new Error(`Execution ${params.execution.id} has a legacy Judge profile and cannot create a T5 release receipt`);
+  if (plan.releaseKind === 'legacy') throw new Error(`Execution ${params.execution.id} has a legacy Judge profile and cannot create a T5 release receipt`);
   const outputs = new Map(plan.outputs.map(output => [output.nodeId, output]));
   if (plan.outputs.length !== definition.nodes.length || definition.nodes.some(node => !outputs.has(node.id))) {
     throw new Error(`Execution ${params.execution.id} does not have a complete final Judge checkpoint set`);
@@ -266,13 +270,15 @@ export async function prepareJudgeReleasePlan(params: {
 
   const conditionalBull = conditionalEnabled ? restoredValue<ThesisTurn>(plan, 'conditional-bull-rebuttal') : undefined;
   const conditionalBear = conditionalEnabled ? restoredValue<ChallengeTurn>(plan, 'conditional-bear-rechallenge') : undefined;
-  const round1Parsed = parseCheckpointCounterpoints('round-1-bear-challenge', challenge.response, challenge.counterpoints, `${params.execution.id}/round-1-bear-challenge`);
+  const round1Parsed = parseCheckpointCounterpoints('round-1-bear-challenge', challenge.response, challenge.counterpoints,
+    `${params.execution.id}/round-1-bear-challenge`, plan.policyVersion === 1);
   if (round1Parsed.kind !== 'current') throw new Error('Current Judge release contains a historical Counterpoint checkpoint');
   const counterpointGroups: Array<{ nodeId: JudgeNodeId; messageId: string; counterpoints: readonly GroundedCounterpoint[] }> = [{
     nodeId: 'round-1-bear-challenge', messageId: challenge.response.messageId, counterpoints: round1Parsed.counterpoints,
   }];
   if (conditionalBear) {
-    const parsed = parseCheckpointCounterpoints('conditional-bear-rechallenge', conditionalBear.response, conditionalBear.counterpoints, `${params.execution.id}/conditional-bear-rechallenge`);
+    const parsed = parseCheckpointCounterpoints('conditional-bear-rechallenge', conditionalBear.response, conditionalBear.counterpoints,
+      `${params.execution.id}/conditional-bear-rechallenge`, plan.policyVersion === 1);
     if (parsed.kind !== 'current') throw new Error('Current Judge release contains a historical conditional Counterpoint checkpoint');
     counterpointGroups.push({ nodeId: 'conditional-bear-rechallenge', messageId: `${conditionalBear.response.messageId}_conditional`, counterpoints: parsed.counterpoints });
   }
@@ -284,8 +290,30 @@ export async function prepareJudgeReleasePlan(params: {
   if (conditionalBull) claimGroups.push({ nodeId: 'conditional-bull-rebuttal', messageId: `${conditionalBull.response.messageId}_conditional`, claims: conditionalBull.claims });
   const storedClaims = await params.stores.claims.getByRun(params.execution.id);
   const storedCounterpoints = await params.stores.counterpoints.getByRun(params.execution.id);
-  assertCurrentClaimParity(params.execution.id, claimGroups, storedClaims);
-  assertCurrentCounterpointParity(params.execution.id, counterpointGroups, storedCounterpoints);
+  const storedVersions = [
+    ...storedClaims.map(claim => claimPolicyVersionForIdentity(claim.policyId, claim.policyFingerprint)),
+    ...storedCounterpoints.map(point => counterpointPolicyVersionForIdentity(point.policyId, point.policyFingerprint)),
+  ];
+  if (storedVersions.some(version => version === undefined)) {
+    throw new Error(`Execution ${params.execution.id} has unknown stored Claim/Counterpoint policy metadata`);
+  }
+  const policyVersions = new Set<1 | 2>([
+    ...(plan.policyVersion !== undefined ? [plan.policyVersion] : []),
+    ...(storedVersions.filter((version): version is 1 | 2 => version !== undefined)),
+  ]);
+  if (policyVersions.size > 1) throw new Error(`Execution ${params.execution.id} mixes Claim/Counterpoint policy versions`);
+  const storedPolicyVersion = policyVersions.values().next().value;
+  if (plan.releaseKind === 'current' && storedPolicyVersion === 1) {
+    throw new Error(`Current Judge profile ${params.execution.id} cannot release historical v1 policy state`);
+  }
+  if (plan.releaseKind === 'historical-v1'
+    && (params.execution.status !== 'completed' || storedPolicyVersion === 2)) {
+    throw new Error(`Historical v1 Judge profile ${params.execution.id} cannot release non-v1 or interrupted state`);
+  }
+  const historicalV1Release = plan.releaseKind === 'historical-v1';
+  const policyVersion = storedPolicyVersion ?? (historicalV1Release ? 1 : 2);
+  assertCurrentClaimParity(params.execution.id, policyVersion, claimGroups, storedClaims);
+  assertCurrentCounterpointParity(params.execution.id, policyVersion, counterpointGroups, storedCounterpoints);
 
   const graph = await params.stores.claimGraph.getByExecution(params.execution.id);
   const rebuiltGraph = buildClaimGraph({ executionId: params.execution.id, claims: storedClaims, counterpoints: storedCounterpoints });
@@ -315,8 +343,9 @@ export async function prepareJudgeReleasePlan(params: {
   const releasePlan: JudgeReleasePlan = {
     executionId: params.execution.id,
     profileFingerprint: params.profile.fingerprint,
-    releaseContractId: JUDGE_RELEASE_CONTRACT_ID,
-    releaseContractFingerprint: JUDGE_RELEASE_CONTRACT_FINGERPRINT,
+    policyVersion,
+    releaseContractId: historicalV1Release ? JUDGE_RELEASE_CONTRACT_V1_ID : JUDGE_RELEASE_CONTRACT_ID,
+    releaseContractFingerprint: historicalV1Release ? JUDGE_RELEASE_CONTRACT_V1_FINGERPRINT : JUDGE_RELEASE_CONTRACT_FINGERPRINT,
     graph,
     graphFingerprint,
     artifactProjections,
@@ -335,9 +364,18 @@ export async function publishJudgeRelease(params: {
   plan: JudgeReleasePlan;
 }): Promise<{ artifacts: ArtifactEnvelope[]; receipt: ClaimGraphReleaseReceipt }> {
   const { execution, profile, plan } = params;
+  const releaseKind = judgeReleaseKind(profile);
+  const profileReleaseParity = releaseKind === 'current'
+    ? plan.policyVersion === 2 && plan.releaseContractId === JUDGE_RELEASE_CONTRACT_ID
+      && plan.releaseContractFingerprint === JUDGE_RELEASE_CONTRACT_FINGERPRINT
+    : releaseKind === 'historical-v1'
+      ? execution.status === 'completed' && plan.policyVersion === 1
+        && plan.releaseContractId === JUDGE_RELEASE_CONTRACT_V1_ID
+        && plan.releaseContractFingerprint === JUDGE_RELEASE_CONTRACT_V1_FINGERPRINT
+      : false;
   if (execution.status !== 'completed' || !execution.completedAt
     || execution.id !== plan.executionId || profile.executionId !== execution.id
-    || profile.fingerprint !== plan.profileFingerprint || judgeReleaseKind(profile) !== 'current') {
+    || profile.fingerprint !== plan.profileFingerprint || !profileReleaseParity) {
     throw new Error(`Judge release publication identity or lifecycle state is invalid for Execution ${execution.id}`);
   }
   const envelopes = buildJudgeArtifactEnvelopes(execution, plan.contents, execution.completedAt);

@@ -61,9 +61,9 @@ function result<T>(source: string, data: T, options: { dataAsOf?: string | null;
 
 function researcherOutput(evidenceId: string = ids.quarterly_financials): ResearcherOutput {
   return {
-    summary: 'Quarterly revenue reached 3,000,000 in Q2 2026.',
+    summary: 'Quarterly revenue reached IDR 3,000,000 in Q2 2026.',
     findings: [{
-      claim: 'Quarterly revenue reached 3,000,000.',
+      claim: 'Quarterly revenue reached IDR 3,000,000.',
       evidenceIds: [evidenceId],
       confidence: 'high',
       citedFigures: [{
@@ -195,7 +195,7 @@ describe('Research workflow runtime', () => {
       { source: 'sentiment', status: 'not_requested' },
     ]);
     expect(ResearchReportPayloadSchema.safeParse(result.report).success).toBe(true);
-    expect(result.report).toMatchObject<Partial<ResearchReportPayload>>({ question, summary: 'Quarterly revenue reached 3,000,000 in Q2 2026.' });
+    expect(result.report).toMatchObject<Partial<ResearchReportPayload>>({ question, summary: 'Quarterly revenue reached IDR 3,000,000 in Q2 2026.' });
     expect(result.grounded.findings[0]?.citedFigures?.[0]?.periodLabel).toBe('Q2 2026');
     expect(deps.research).toHaveBeenCalledTimes(1);
     expect(deps.research).toHaveBeenCalledWith({

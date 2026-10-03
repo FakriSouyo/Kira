@@ -2,7 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { canonicalJson } from '@harness/shared';
 import { CitedFigureSchema, ClaimEvidenceLinkSchema, ClaimSchema, type Claim } from '@harness/schemas';
-import { CLAIM_POLICY_FINGERPRINT, CLAIM_POLICY_ID, type ClaimStore, type GroundedClaim, type StoredClaim } from '@harness/execution';
+import {
+  CLAIM_POLICY_FINGERPRINT,
+  CLAIM_POLICY_ID,
+  CLAIM_POLICY_V1_FINGERPRINT,
+  CLAIM_POLICY_V1_ID,
+  type ClaimStore,
+  type GroundedClaim,
+  type StoredClaim,
+} from '@harness/execution';
 import type { Orm } from './client';
 import { claims, runEvidence } from './schema';
 
@@ -35,7 +43,8 @@ export function toStoredClaim(row: ClaimRow): StoredClaim {
     if (row.policyFingerprint !== null || row.evidenceLinks !== null) {
       throw new Error(`Claim ${row.runId}/${row.claimId} has partial grounding metadata`);
     }
-  } else if (row.policyId !== CLAIM_POLICY_ID || row.policyFingerprint !== CLAIM_POLICY_FINGERPRINT || !evidenceLinks) {
+  } else if (!((row.policyId === CLAIM_POLICY_ID && row.policyFingerprint === CLAIM_POLICY_FINGERPRINT)
+    || (row.policyId === CLAIM_POLICY_V1_ID && row.policyFingerprint === CLAIM_POLICY_V1_FINGERPRINT)) || !evidenceLinks) {
     throw new Error(`Claim ${row.runId}/${row.claimId} has corrupt grounding metadata`);
   }
   const result: StoredClaim = {

@@ -7,6 +7,8 @@ import {
   CounterpointPolicy,
   COUNTERPOINT_POLICY_FINGERPRINT,
   COUNTERPOINT_POLICY_ID,
+  COUNTERPOINT_POLICY_V1_FINGERPRINT,
+  COUNTERPOINT_POLICY_V1_ID,
   ClaimPolicy,
 } from '@harness/execution';
 import type { BearProposalOutput, GroundedCounterpoint } from '@harness/schemas';
@@ -96,6 +98,18 @@ describe('canonical Counterpoint persistence', () => {
     expect((await db.execution.getExecutionWithArtifacts(runId)).counterpoints).toEqual(await db.counterpoints.getByRun(runId));
   });
 
+  it('reads exact historical v1 Counterpoint identity without changing it to v2', async () => {
+    const counterpoint = await grounded();
+    await db.counterpoints.save({ runId, messageId: 'bear_1', counterpoint });
+    db.raw.prepare('UPDATE counterpoints SET policy_id = ?, policy_fingerprint = ? WHERE run_id = ? AND counterpoint_id = ?')
+      .run(COUNTERPOINT_POLICY_V1_ID, COUNTERPOINT_POLICY_V1_FINGERPRINT, runId, counterpoint.counterpointId);
+
+    const stored = (await db.counterpoints.getByRun(runId))[0]!;
+    expect(stored.policyId).toBe(COUNTERPOINT_POLICY_V1_ID);
+    expect(stored.policyFingerprint).toBe(COUNTERPOINT_POLICY_V1_FINGERPRINT);
+    expect((await db.execution.getExecutionWithArtifacts(runId)).counterpoints[0]!.policyId).toBe(COUNTERPOINT_POLICY_V1_ID);
+  });
+
   it('is idempotent for an identical grounded retry and rejects semantic conflicts', async () => {
     const counterpoint = await grounded();
     const first = await db.counterpoints.save({ runId, messageId: 'bear_1', counterpoint });
@@ -143,8 +157,11 @@ describe('canonical Counterpoint persistence', () => {
 
   it('rejects wrong or missing current Policy identity', async () => {
     const counterpoint = await grounded();
-    await expect(db.counterpoints.save({ runId, messageId: 'bear_1', counterpoint: { ...counterpoint, policyId: 'counterpoint-policy-v2' } }))
+    await expect(db.counterpoints.save({ runId, messageId: 'bear_1', counterpoint: { ...counterpoint, policyId: 'counterpoint-policy-v3' } }))
       .rejects.toThrow(/policy/i);
+    await expect(db.counterpoints.save({ runId, messageId: 'bear_1', counterpoint: {
+      ...counterpoint, policyId: COUNTERPOINT_POLICY_V1_ID, policyFingerprint: COUNTERPOINT_POLICY_V1_FINGERPRINT,
+    } })).rejects.toThrow(/policy/i);
     await expect(db.counterpoints.save({ runId, messageId: 'bear_1', counterpoint: { ...counterpoint, policyFingerprint: `${COUNTERPOINT_POLICY_FINGERPRINT}x` } }))
       .rejects.toThrow(/policy/i);
     await expect(db.counterpoints.save({ runId, messageId: 'bear_1', counterpoint: { ...counterpoint, policyId: undefined } as never }))
